@@ -508,6 +508,7 @@ class WazuhConnector:
             return "No hits found"
 
         sighter = self.siem_system
+        sightings = []
         bundle = [self.author]
         agents = {}
         for hit in hits:
@@ -526,6 +527,7 @@ class WazuhConnector:
                 self.helper.connector_logger.debug(
                     f"Creating sighting in system {sighter.name} for alert at {sighted_at}"
                 )
+                sightings.append(sighting)
                 bundle += [sighting]
                 if self.alerts_as_notes:
                     bundle += [
@@ -564,7 +566,9 @@ class WazuhConnector:
         if self.create_obs_note:
             bundle += [
                 self.create_summary_note(
-                    result=result, observable_id=entity["standard_id"]
+                    result=result,
+                    observable_id=entity["standard_id"],
+                    sightings=sightings,
                 )
             ]
 
@@ -640,7 +644,9 @@ class WazuhConnector:
             object_refs=sighting_id,
         )
 
-    def create_summary_note(self, *, result: dict, observable_id: str):
+    def create_summary_note(
+        self, *, result: dict, observable_id: str, sightings: list[stix2.Sighting]
+    ):
         run_time = datetime.now()
         run_time_string = run_time.isoformat() + "Z"
         abstract = f"Wazuh enrichment ran at {run_time_string}"
@@ -658,8 +664,8 @@ class WazuhConnector:
             f"|Max hits|{self.hits_limit}|\n"
             f"|Dropped|{total_hits - hits_returned}|\n"
             f"|Search since|{self.search_after.isoformat() + 'Z' if self.search_after else '–'}|\n"
-            f"|Include filter|{json.dumps(self.client.include_match)}|\n"
-            f"|Exclude filter|{json.dumps(self.client.exclude_match)}|\n"
+            f"|Include filter|{json.dumps(self.client.include_match) if self.client.include_match else ''}|\n"
+            f"|Exclude filter|{json.dumps(self.client.exclude_match) if self.client.exclude_match else ''}|\n"
             f"|Connector v.|{self.CONNECTOR_VERSION}|\n"
         )
         return stix2.Note(
@@ -669,8 +675,7 @@ class WazuhConnector:
             confidence=self.confidence,
             abstract=abstract,
             content=content,
-            # TODO: add sightings too?
-            object_refs=observable_id,
+            object_refs=[observable_id] + list(map(lambda s: s.id, sightings)),
         )
 
     def start(self):
