@@ -29,6 +29,8 @@ from hashlib import sha256
 # Populate agents using agent metadata?
 # Helper functions for building stix objects
 # SETTING: search_from limit search back in time
+# SETTING: agent_labels: comma-separated list of labels to attach to agents
+# SETTING: siem_labels: comma-separated list of labels to attach to wazuh identity
 
 
 def has(obj, spec, value=None):
@@ -128,7 +130,7 @@ class OpenSearchClient:
             self.helper.connector_logger.error(f"[Wazuh] Query: Unknown error: {e}")
             self.helper.metric.inc("client_error_count")
 
-    def _search(self, query: dict):
+    def search(self, query: dict):
         query = {
             "query": query,
             "size": self.limit,
@@ -160,6 +162,7 @@ class OpenSearchClient:
 
             return [hit for hit in r["hits"]["hits"]]
 
+        # TODO: How to propagate errors to gui. Just exceptions? Look up connector doc.
         except (IndexError, KeyError):
             self.helper.connector_logger.error(
                 "[Wazuh]: Failed to parse result: Unexpected JSON structure"
@@ -167,7 +170,7 @@ class OpenSearchClient:
             self.helper.metric.inc("client_error_count")
 
     def search_must(self, terms: dict):
-        return self._search(
+        return self.search(
             {
                 "bool": {
                     "must": [{"match": {key: value}} for key, value in terms.items()]
@@ -181,7 +184,7 @@ class OpenSearchClient:
         fields: list[str],
         value: str,
     ):
-        return self._search(
+        return self.search(
             {
                 "multi_match": {
                     "query": value,
@@ -229,6 +232,12 @@ class WazuhConnector:
             config,
             default=True,
         )
+        self.search_agent_ip = get_config_variable(
+            "WAZUH_SEARCH_AGENT_IP",
+            ["wazuh", "search_agent_ip"],
+            config,
+            default=False,
+        )
         self.author = stix2.Identity(
             id=Identity.generate_id("Wazuh", "organization"),
             confidence=self.confidence,
@@ -264,6 +273,135 @@ class WazuhConnector:
             ),
         )
 
+    def _query_alerts(self, entity, stix_entity):
+        match entity["entity_type"]:
+            # TODO: Indicators: look up addresses, domain names and hashes
+            # case "Indicator":
+            case "StixFile" | "Artifact":
+                return self.client.search_multi(
+                    fields=["*sha256*"], value=stix_entity["hashes"]["SHA-256"]
+                )
+            # TODO: add a setting WAZUH_SEARCH_AGENT_IP (should search agent.ip or not?
+            case "IPv4-Addr" | "IPv6-Addr":
+                fields = [
+                    "*.ip",
+                    "*.dest_ip",
+                    "*.dstip",
+                    "*.src_ip",
+                    "*.srcip",
+                    "*.ClientIP",
+                    "*.ActorIpAddress",
+                    "*.remote_ip",
+                    "*.remote_ip_address",
+                    "*.sourceIPAddress",
+                    "*.callerIp",
+                    "*.ipAddress",
+                    "data.win.eventdata.queryName",
+                ]
+                address = entity["observable_value"]
+                if self.search_agent_ip:
+                    return self.client.search_multi(
+                        fields=fields,
+                        value=address,
+                    )
+                else:
+                    return self.client.search(
+                        query={
+                            "bool": {
+                                "must": [
+                                    {
+                                        "multi_match": {
+                                            "query": address,
+                                            "fields": fields,
+                                        }
+                                    },
+                                    {
+                                        "range": {
+                                            "@timestamp": {
+                                                "gte": "2024-02-04T07:02:12.811Z"
+                                            }
+                                        }
+                                    },
+                                ],
+                                "must_not": [{"match": {"agent.ip": address}}],
+                            }
+                        }
+                    )
+            case "Domain-Name" | "Hostname":
+                return self.client.search_multi(
+                    fields=["data.win.eventdata.queryName", "*.hostname"],
+                    value=entity["observable_value"],
+                )
+            case "Url":
+                return self.client.search_multi(
+                    fields=["*.url"],
+                    value=entity["observable_value"],
+                )
+            case "Directory":
+                return self.client.search_multi(
+                    fields=["*.path"],
+                    value=stix_entity["path"],
+                )
+            case "Windows-Registry-Key":
+                return self.client.search_multi(
+                    fields=["data.win.eventdata.targetObject", "syscheck.path"],
+                    value=stix_entity["key"],
+                )
+            case "Windows-Registry-Value-Type":
+                hash = None
+                match stix_entity["data_type"]:
+                    case "REG_SZ" | "REG_EXPAND_SZ":
+                        hash = sha256(stix_entity["data"].encode("utf-8")).hexdigest()
+                    case "REG_BINARY":
+                        # The STIX standard says that binary data can be in any form, but in order to be able to use this type of observable at all, support only hex strings:
+                        try:
+                            hash = sha256(
+                                bytes.fromhex(stix_entity["data"])
+                            ).hexdigest()
+                        except ValueError:
+                            self.helper.connector_logger.warning(
+                                f"Windows-Registry-Value-Type binary string could not be parsed as a hex string: {stix_entity['data']}"
+                            )
+                    case _:
+                        self.helper.connector_logger.info(
+                            f"Windos-Registry-Value-Type of type {stix_entity['data_type']} is not supported"
+                        )
+                        return []
+
+                return (
+                    self.client.search_multi(
+                        fields=["syscheck.sha256_after"], value=hash
+                    )
+                    if hash
+                    else []
+                )
+            # TODO: use wazuh API?:
+            # case "Process":
+            # case "Software":
+            case "Vulnerability":
+                return self.client.search_must(
+                    {
+                        "data.vulnerability.cve": stix_entity["name"],
+                        "data.vulnerability.status": "Active",
+                    }
+                )
+            case "User-Account":
+                return self.client.search_multi(
+                    fields=[
+                        "*.dstuser",
+                        "*.srcuser",
+                        "*.user",
+                    ],
+                    value=stix_entity["account_login"],
+                )
+            case _:
+                raise ValueError(
+                    f'{entity["entity_type"]} is not a supported entity type'
+                )
+
+        # This is an error. exception instead?
+        return None
+
     def _process_message(self, data):
         self.helper.metric.inc("run_count")
         self.helper.metric.state("running")
@@ -283,93 +421,18 @@ class WazuhConnector:
         enrichment = self.helper.get_data_from_enrichment(data, entity)
         stix_entity = enrichment["stix_entity"]
 
-        # TODO: Loop the matching below for each observable in indicator:
-        # if entity['entity_type'] == 'Indicator' and 'observables' in entity and entity['observables']:
+        # Use inference rules for indicators instead (looking up patterns isn't going to be very useful):
+        # hits = []
+        # if (
+        #    entity["entity_type"] == "Indicator"
+        #    and "observables" in entity
+        #    and entity["observables"]
+        # ):
+        #    for obs in entity["observables"]:
+        # else:
+        hits = self._query_alerts(entity, stix_entity)
 
-        hits = []
-        match entity["entity_type"]:
-            # TODO: Indicators: look up addresses, domain names and hashes
-            case "Indicator":
-                self.helper.log_debug(f"Indicator: {entity}")
-            case "StixFile" | "Artifact":
-                hits = self.client.search_multi(
-                    fields=["*sha256*"], value=stix_entity["hashes"]["SHA-256"]
-                )
-            # TODO: add a setting WAZUH_SEARCH_AGENT_IP (should search agent.ip or not?
-            case "IPv4-Addr" | "IPv6-Addr":
-                hits = self.client.search_multi(
-                    fields=[
-                        "*.ip",
-                        "*.dest_ip",
-                        "*.dstip",
-                        "*.src_ip",
-                        "*.srcip",
-                        "*.ClientIP",
-                        "*.ActorIpAddress",
-                        "*.remote_ip",
-                        "*.remote_ip_address",
-                        "*.sourceIPAddress",
-                        "*.callerIp",
-                        "*.ipAddress",
-                        "data.win.eventdata.queryName",
-                    ],
-                    value=entity["observable_value"],
-                )
-            case "Domain-Name" | "Hostname":
-                hits = self.client.search_multi(
-                    fields=["data.win.eventdata.queryName", "*.hostname"],
-                    value=entity["observable_value"],
-                )
-            case "Url":
-                hits = self.client.search_multi(
-                    fields=["*.url"],
-                    value=entity["observable_value"],
-                )
-            case "Directory":
-                hits = self.client.search_multi(
-                    fields=["*.path"],
-                    value=stix_entity["path"],
-                )
-            case "Windows-Registry-Key":
-                self.helper.log_debug(stix_entity)
-                hits = self.client.search_multi(
-                    fields=["data.win.eventdata.targetObject", "syscheck.path"],
-                    value=stix_entity["key"],
-                )
-            case "Windows-Registry-Value-Type":
-                if stix_entity["data_type"] == "REG_SZ":
-                    hits = self.client.search_multi(
-                        fields=["syscheck.sha256_after"],
-                        value=sha256(stix_entity["data"].encode("utf-8")).hexdigest(),
-                    )
-                else:
-                    self.helper.connector_logger.info(
-                        f'''Ignoring unsupported registry value type "{stix_entity['data_type']}"'''
-                    )
-            # TODO: use wazuh API?:
-            # case "Process":
-            # case "Software":
-            case "Vulnerability":
-                hits = self.client.search_must(
-                    {
-                        "data.vulnerability.cve": stix_entity["name"],
-                        "data.vulnerability.status": "Active",
-                    }
-                )
-            case "User-Account":
-                hits = self.client.search_multi(
-                    fields=[
-                        "*.dstuser",
-                        "*.srcuser",
-                        "*.user",
-                    ],
-                    value=stix_entity["account_login"],
-                )
-            case _:
-                raise ValueError(
-                    f'{entity["entity_type"]} is not a supported entity type'
-                )
-
+        # TODO: exception instead of returning None:
         if hits is None:
             self.helper.metric.state("idle")
             return "Failed to query Wazuh API"
@@ -440,14 +503,16 @@ class WazuhConnector:
 
     def create_agent_stix(self, alert):
         s = alert["_source"]
+        id = s["agent"]["id"]
         name = s["agent"]["name"]
         return stix2.Identity(
-            id=Identity.generate_id(name, "system"),
+            # id=Identity.generate_id(name, "system"),
+            id=Identity.generate_id(id, "system"),
             created_by_ref=self.author["id"],
             confidence=self.confidence,
             name=name,
             identity_class="system",
-            description=f"Wazuh agent ID {s['agent']['id']}",
+            description=f"Wazuh agent ID {id}",
         )
 
     def create_sighting_stix(self, *, sighter_id, observable_id, alert):
@@ -460,6 +525,8 @@ class WazuhConnector:
                 sighted_at,
                 sighted_at,
             ),
+            # TODO: use this created date or real date?:
+            created=sighted_at,
             created_by_ref=self.author["id"],
             confidence=self.confidence,
             first_seen=sighted_at,
@@ -489,6 +556,8 @@ class WazuhConnector:
                 created=sighted_at,
                 content=alert_json,
             ),
+            # TODO: use this created date or real date?:
+            created=sighted_at,
             created_by_ref=self.author["id"],
             confidence=self.confidence,
             abstract=f"""Wazuh alert "{s['rule']['description']}" (index {alert["_index"]}) for sighting at {sighted_at}""",
