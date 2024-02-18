@@ -5,6 +5,7 @@ import stix2
 import yaml
 import urllib3
 import requests
+import dateparser
 from pathlib import Path
 from pycti import (
     Identity,
@@ -21,6 +22,7 @@ from urllib3.util import Retry
 from urllib.parse import urljoin
 from typing import Final
 from hashlib import sha256
+from datetime import datetime
 
 # TODO:
 #  metrics: run_coiunt, bundle_send, record_send, error_count, client_error_count
@@ -43,10 +45,24 @@ def has(obj, spec, value=None):
         return False
 
 
+# TODO: add to query:
 def filter_alerts(alerts):
     return [
         alert for alert in alerts if not has(alert, ["data", "integration"], "opencti")
     ]
+
+
+def parse_config_datetime(value, setting_name):
+    if value is None:
+        return None
+
+    timestamp = dateparser.parse(value)
+    if not timestamp:
+        raise ValueError(
+            f'The config variable "{setting_name}" datetime expression cannot be parsed: "{value}"'
+        )
+
+    return timestamp
 
 
 class OpenSearchClient:
@@ -59,6 +75,7 @@ class OpenSearchClient:
         password: str,
         limit: int,
         index: str,
+        search_after: datetime | None,
     ) -> None:
         self.url = url
         self.username = username
@@ -66,6 +83,7 @@ class OpenSearchClient:
         self.index = index
         self.limit = limit
         self.helper = helper
+        self.search_after = search_after
 
         self.helper.connector_logger.info(f"[Wazuh] URL: {self.url}")
 
@@ -130,12 +148,13 @@ class OpenSearchClient:
             self.helper.connector_logger.error(f"[Wazuh] Query: Unknown error: {e}")
             self.helper.metric.inc("client_error_count")
 
-    def search(self, query: dict):
+    def _search(self, query: dict):
         query = {
             "query": query,
             "size": self.limit,
             "sort": [{"timestamp": {"order": "desc"}}],
         }
+        self.helper.connector_logger.debug(f'Sending query "{query}"')
 
         r = self._query(f"{self.index}/_search", query=query)
         if not r:
@@ -153,6 +172,8 @@ class OpenSearchClient:
                         r["_shards"]["failed"],
                     )
                 )
+            # TODO: print if shards has failed?
+            # TODO: pagination?
             if r["hits"]["total"]["value"] > self.limit:
                 self.helper.connector_logger.warning(
                     "[Wazuh] Processing only {} of {} hits (hint: increase 'max_hits')".format(
@@ -169,14 +190,23 @@ class OpenSearchClient:
             )
             self.helper.metric.inc("client_error_count")
 
-    def search_must(self, terms: dict):
-        return self.search(
-            {
-                "bool": {
-                    "must": [{"match": {key: value}} for key, value in terms.items()]
-                }
-            }
-        )
+    def search(
+        self, query: dict | list[dict], exclude: dict | list[dict] | None = None
+    ):
+        full_query = {"bool": {"must": query if isinstance(query, list) else [query]}}
+        if exclude:
+            full_query["bool"]["must_not"] = (
+                exclude if isinstance(exclude, list) else [exclude]
+            )
+        if self.search_after:
+            full_query["bool"]["must"].append(
+                {"range": {"@timestamp": {"gte": self.search_after.isoformat() + "Z"}}}
+            )
+
+        return self._search(full_query)
+
+    def search_match(self, terms: dict):
+        return self.search([{"match": {key: value}} for key, value in terms.items()])
 
     def search_multi(
         self,
@@ -232,12 +262,25 @@ class WazuhConnector:
             config,
             default=True,
         )
+        self.create_obs_note = get_config_variable(
+            "WAZUH_CREATE_OBSERVABLE_NOTE",
+            ["wazuh", "create_observable_note"],
+            config,
+            default=True,
+        )
         self.search_agent_ip = get_config_variable(
             "WAZUH_SEARCH_AGENT_IP",
             ["wazuh", "search_agent_ip"],
             config,
             default=False,
         )
+        self.search_after = parse_config_datetime(
+            value=get_config_variable(
+                "WAZUH_SEARCH_ONLY_AFTER", ["wazuh", "search_only_after"], config
+            ),
+            setting_name="search_only_after",
+        )
+        # Add moe useful meta to author?
         self.author = stix2.Identity(
             id=Identity.generate_id("Wazuh", "organization"),
             confidence=self.confidence,
@@ -271,6 +314,7 @@ class WazuhConnector:
             index=get_config_variable(
                 "WAZUH_INDEX", ["wazuh", "index"], config, default="wazuh-alerts-*"
             ),
+            search_after=self.search_after,
         )
 
     def _query_alerts(self, entity, stix_entity):
@@ -278,6 +322,7 @@ class WazuhConnector:
             # TODO: Indicators: look up addresses, domain names and hashes
             # case "Indicator":
             case "StixFile" | "Artifact":
+                # TODO: search name if defined and sha is not?
                 return self.client.search_multi(
                     fields=["*sha256*"], value=stix_entity["hashes"]["SHA-256"]
                 )
@@ -307,27 +352,15 @@ class WazuhConnector:
                 else:
                     return self.client.search(
                         query={
-                            "bool": {
-                                "must": [
-                                    {
-                                        "multi_match": {
-                                            "query": address,
-                                            "fields": fields,
-                                        }
-                                    },
-                                    {
-                                        "range": {
-                                            "@timestamp": {
-                                                "gte": "2024-02-04T07:02:12.811Z"
-                                            }
-                                        }
-                                    },
-                                ],
-                                "must_not": [{"match": {"agent.ip": address}}],
+                            "multi_match": {
+                                "query": address,
+                                "fields": fields,
                             }
-                        }
+                        },
+                        exclude={"match": {"agent.ip": address}},
                     )
             case "Domain-Name" | "Hostname":
+                # TODO: hostname is probably present many places
                 return self.client.search_multi(
                     fields=["data.win.eventdata.queryName", "*.hostname"],
                     value=entity["observable_value"],
@@ -379,7 +412,7 @@ class WazuhConnector:
             # case "Process":
             # case "Software":
             case "Vulnerability":
-                return self.client.search_must(
+                return self.client.search_match(
                     {
                         "data.vulnerability.cve": stix_entity["name"],
                         "data.vulnerability.status": "Active",
@@ -432,6 +465,7 @@ class WazuhConnector:
         # else:
         hits = self._query_alerts(entity, stix_entity)
 
+        # TODO: add filter to query, keep main object (hits) before extracting hits from hits:
         # TODO: exception instead of returning None:
         if hits is None:
             self.helper.metric.state("idle")
@@ -489,9 +523,18 @@ class WazuhConnector:
                 )
                 self.helper.metric.inc("client_error_count")
 
+        # TODO: if setting says so, create a note on the observable about the sightings created (timestamp, limited by search_after, search_limit, etc.
+        # TODO: enrichment: create tool, like ssh, used in events like ssh logons
+
         # Only add Wazyh SIEM system if it is referenced:
-        if not agents:
-            bundle += [self.siem_system]
+        if not agents or self.create_obs_note:
+            bundle.append(self.siem_system)
+
+        # TODO: Add note also for no hits:
+        if self.create_obs_note:
+            bundle += [
+                self.create_summary_note(hits=hits, observable_id=entity["standard_id"])
+            ]
 
         bundle += list(agents.values())
         sent_count = len(
@@ -563,6 +606,33 @@ class WazuhConnector:
             abstract=f"""Wazuh alert "{s['rule']['description']}" (index {alert["_index"]}) for sighting at {sighted_at}""",
             content=f"```\n{alert_json}\n" "",
             object_refs=sighting_id,
+        )
+
+    def create_summary_note(self, *, hits: list[dict], observable_id: str):
+        run_time = datetime.now()
+        run_time_string = run_time.isoformat() + "Z"
+        abstract = f"Wazuh enrichment run at {run_time_string}"
+        content = (
+            "## Wazuh enrichment summary\n"
+            "\n\n"
+            "|Key|Value|\n"
+            "|---|---|\n"
+            f"|Time|{run_time_string}|\n"
+            f"|Hits returned|{len(hits)}|\n"
+            # f"|Total hits|{hits[}|\n"
+            f"|Max hits|{self.hits_limit}|\n"
+            # f"|Dropped|
+            f"|Search since|{self.search_after.isoformat() + 'Z' if self.search_after else '–'}|\n"
+        )
+        return stix2.Note(
+            id=Note.generate_id(created=run_time_string, content=content),
+            created=run_time_string,
+            created_by_ref=self.author["id"],
+            confidence=self.confidence,
+            abstract=abstract,
+            content=content,
+            # TODO: add sightings too?
+            object_refs=observable_id,
         )
 
     def start(self):
