@@ -29,10 +29,10 @@ from datetime import datetime
 #  state: idle, running, stopped
 #
 # Populate agents using agent metadata?
-# Helper functions for building stix objects
-# SETTING: search_from limit search back in time
 # SETTING: agent_labels: comma-separated list of labels to attach to agents
 # SETTING: siem_labels: comma-separated list of labels to attach to wazuh identity
+# Search include/exclue in setting level (add wazuh-opencti as default)
+# tlp marking
 
 
 def has(obj, spec, value=None):
@@ -43,13 +43,6 @@ def has(obj, spec, value=None):
         return has(obj[key], rest, value=value)
     except (KeyError, TypeError):
         return False
-
-
-# TODO: add to query:
-def filter_alerts(alerts):
-    return [
-        alert for alert in alerts if not has(alert, ["data", "integration"], "opencti")
-    ]
 
 
 def parse_config_datetime(value, setting_name):
@@ -65,6 +58,17 @@ def parse_config_datetime(value, setting_name):
     return timestamp
 
 
+def parse_match_patterns(patterns):
+    if patterns is None:
+        return None
+
+    pairs = [pattern.split("=") for pattern in patterns.split(",")]
+    if any(len(pair) != 2 for pair in pairs):
+        raise ValueError(f'The match patterns "{patterns}" is invalid')
+
+    return [{"match": {pair[0]: pair[1]}} for pair in pairs]
+
+
 class OpenSearchClient:
     def __init__(
         self,
@@ -76,6 +80,8 @@ class OpenSearchClient:
         limit: int,
         index: str,
         search_after: datetime | None,
+        include_match: list[dict] | None,
+        exclude_match: list[dict] | None,
     ) -> None:
         self.url = url
         self.username = username
@@ -84,6 +90,8 @@ class OpenSearchClient:
         self.limit = limit
         self.helper = helper
         self.search_after = search_after
+        self.include_match = include_match
+        self.exclude_match = exclude_match
 
         self.helper.connector_logger.info(f"[Wazuh] URL: {self.url}")
 
@@ -181,7 +189,8 @@ class OpenSearchClient:
                     )
                 )
 
-            return [hit for hit in r["hits"]["hits"]]
+            return r
+            # return [hit for hit in r["hits"]["hits"]]
 
         # TODO: How to propagate errors to gui. Just exceptions? Look up connector doc.
         except (IndexError, KeyError):
@@ -193,11 +202,20 @@ class OpenSearchClient:
     def search(
         self, query: dict | list[dict], exclude: dict | list[dict] | None = None
     ):
-        full_query = {"bool": {"must": query if isinstance(query, list) else [query]}}
-        if exclude:
-            full_query["bool"]["must_not"] = (
-                exclude if isinstance(exclude, list) else [exclude]
-            )
+        if not query and not exclude:
+            raise ValueError("Both query and exclude cannot be empty")
+
+        query = query if isinstance(query, list) else [query] if query else []
+        exclude = exclude if isinstance(exclude, list) else [exclude] if exclude else []
+
+        musts = query + (self.include_match or [])
+        mustnts = exclude + (self.exclude_match or [])
+
+        full_query = {"bool": {}}
+        if musts:
+            full_query["bool"]["must"] = musts
+        if mustnts:
+            full_query["bool"]["must_not"] = mustnts
         if self.search_after:
             full_query["bool"]["must"].append(
                 {"range": {"@timestamp": {"gte": self.search_after.isoformat() + "Z"}}}
@@ -226,15 +244,18 @@ class OpenSearchClient:
 
 class WazuhConnector:
     def __init__(self):
+        self.CONNECTOR_VERSION: Final[str] = "0.0.1"
+        self.DUMMY_INDICATOR_ID: Final[
+            str
+        ] = "indicator--220d5816-3786-5421-a6d3-fb149a0df54e"  # "indicator--c1034564-a9fb-429b-a1c1-c80116cc8e1e"
+
         config_file_path = Path(__file__).parent.parent.resolve() / "config.yml"
         config = (
             yaml.load(open(config_file_path, encoding="utf-8"), Loader=yaml.FullLoader)
             if config_file_path.is_file()
             else {}
         )
-        self.DUMMY_INDICATOR_ID: Final[
-            str
-        ] = "indicator--220d5816-3786-5421-a6d3-fb149a0df54e"  # "indicator--c1034564-a9fb-429b-a1c1-c80116cc8e1e"
+
         self.helper = OpenCTIConnectorHelper(config, True)
         self.confidence = (
             int(self.helper.connect_confidence_level)
@@ -280,6 +301,15 @@ class WazuhConnector:
             ),
             setting_name="search_only_after",
         )
+        self.search_include = get_config_variable(
+            "WAZUH_SEARCH_INCLUDE_MATCH", ["wazuh", "search_include_match"], config
+        )
+        self.search_exclude = get_config_variable(
+            "WAZUH_SEARCH_EXCLUDE_MATCH",
+            ["wazuh", "search_exclude_match"],
+            config,
+            default="data.integration=opencti",
+        )
         # Add moe useful meta to author?
         self.author = stix2.Identity(
             id=Identity.generate_id("Wazuh", "organization"),
@@ -315,9 +345,11 @@ class WazuhConnector:
                 "WAZUH_INDEX", ["wazuh", "index"], config, default="wazuh-alerts-*"
             ),
             search_after=self.search_after,
+            include_match=parse_match_patterns(self.search_include),
+            exclude_match=parse_match_patterns(self.search_exclude),
         )
 
-    def _query_alerts(self, entity, stix_entity):
+    def _query_alerts(self, entity, stix_entity) -> dict | None:
         match entity["entity_type"]:
             # TODO: Indicators: look up addresses, domain names and hashes
             # case "Indicator":
@@ -399,14 +431,14 @@ class WazuhConnector:
                         self.helper.connector_logger.info(
                             f"Windos-Registry-Value-Type of type {stix_entity['data_type']} is not supported"
                         )
-                        return []
+                        return {}
 
                 return (
                     self.client.search_multi(
                         fields=["syscheck.sha256_after"], value=hash
                     )
                     if hash
-                    else []
+                    else {}
                 )
             # TODO: use wazuh API?:
             # case "Process":
@@ -463,15 +495,13 @@ class WazuhConnector:
         # ):
         #    for obs in entity["observables"]:
         # else:
-        hits = self._query_alerts(entity, stix_entity)
-
-        # TODO: add filter to query, keep main object (hits) before extracting hits from hits:
+        result = self._query_alerts(entity, stix_entity)
         # TODO: exception instead of returning None:
-        if hits is None:
+        if result is None:
             self.helper.metric.state("idle")
             return "Failed to query Wazuh API"
 
-        hits = filter_alerts(hits)
+        hits = result["hits"]["hits"]
         if not hits:
             self.helper.metric.state("idle")
             # FIXME: make show up as error in connector view:
@@ -533,7 +563,9 @@ class WazuhConnector:
         # TODO: Add note also for no hits:
         if self.create_obs_note:
             bundle += [
-                self.create_summary_note(hits=hits, observable_id=entity["standard_id"])
+                self.create_summary_note(
+                    result=result, observable_id=entity["standard_id"]
+                )
             ]
 
         bundle += list(agents.values())
@@ -608,21 +640,27 @@ class WazuhConnector:
             object_refs=sighting_id,
         )
 
-    def create_summary_note(self, *, hits: list[dict], observable_id: str):
+    def create_summary_note(self, *, result: dict, observable_id: str):
         run_time = datetime.now()
         run_time_string = run_time.isoformat() + "Z"
-        abstract = f"Wazuh enrichment run at {run_time_string}"
+        abstract = f"Wazuh enrichment ran at {run_time_string}"
+        hits_returned = len(result["hits"]["hits"])
+        total_hits = result["hits"]["total"]["value"]
+        # TODO: shards info
         content = (
             "## Wazuh enrichment summary\n"
             "\n\n"
             "|Key|Value|\n"
             "|---|---|\n"
             f"|Time|{run_time_string}|\n"
-            f"|Hits returned|{len(hits)}|\n"
-            # f"|Total hits|{hits[}|\n"
+            f"|Hits returned|{hits_returned}|\n"
+            f"|Total hits|{total_hits}|\n"
             f"|Max hits|{self.hits_limit}|\n"
-            # f"|Dropped|
+            f"|Dropped|{total_hits - hits_returned}|\n"
             f"|Search since|{self.search_after.isoformat() + 'Z' if self.search_after else '–'}|\n"
+            f"|Include filter|{json.dumps(self.client.include_match)}|\n"
+            f"|Exclude filter|{json.dumps(self.client.exclude_match)}|\n"
+            f"|Connector v.|{self.CONNECTOR_VERSION}|\n"
         )
         return stix2.Note(
             id=Note.generate_id(created=run_time_string, content=content),
