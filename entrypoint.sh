@@ -1,5 +1,4 @@
 #!/bin/sh
 
 cd /opt/opencti-connector-wazuh
-
-python3 test.py
+python3 main.py
