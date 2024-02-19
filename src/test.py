@@ -44,6 +44,25 @@ def has(obj, spec, value=None):
     except (KeyError, TypeError):
         return False
 
+    # def has_any(obj, spec, values:list|None = None):
+    #    if not spec:
+    #        return any(obj == value for value in values) if values is not None else True
+    #    try:
+    #        key, *rest = spec
+    #        return has_any(obj[key], rest, values=values)
+    #    except (KeyError, TypeError):
+    #        return False
+
+
+def has_any(obj: dict, spec1: list[str], spec2: list[str]):
+    if not spec1:
+        return any(key in obj for key in spec2)
+    try:
+        key, *rest = spec1
+        return has_any(obj[key], rest, spec2)
+    except (KeyError, TypeError):
+        return False
+
 
 def parse_config_datetime(value, setting_name):
     if value is None:
@@ -200,26 +219,35 @@ class OpenSearchClient:
             self.helper.metric.inc("client_error_count")
 
     def search(
-        self, query: dict | list[dict], exclude: dict | list[dict] | None = None
+        self,
+        must: dict | list[dict] | None = None,
+        must_not: dict | list[dict] | None = None,
+        should: dict | list[dict] | None = None,
     ):
-        if not query and not exclude:
-            raise ValueError("Both query and exclude cannot be empty")
+        if not must and not must_not and not should:
+            raise ValueError("One of must, must_not and should must be non-empty")
 
-        query = query if isinstance(query, list) else [query] if query else []
-        exclude = exclude if isinstance(exclude, list) else [exclude] if exclude else []
+        must = must if isinstance(must, list) else [must] if must else []
+        should = should if isinstance(should, list) else [should] if should else []
+        must_not = (
+            must_not if isinstance(must_not, list) else [must_not] if must_not else []
+        )
 
-        musts = query + (self.include_match or [])
-        mustnts = exclude + (self.exclude_match or [])
+        must = must + (self.include_match or [])
+        must_not = must_not + (self.exclude_match or [])
 
         full_query = {"bool": {}}
-        if musts:
-            full_query["bool"]["must"] = musts
-        if mustnts:
-            full_query["bool"]["must_not"] = mustnts
+        if must:
+            full_query["bool"]["must"] = must
+        if should:
+            full_query["bool"]["should"] = should
+            full_query["bool"]["minimum_should_match"] = 1
+        if must_not:
+            full_query["bool"]["must_not"] = must_not
         if self.search_after:
-            full_query["bool"]["must"].append(
+            full_query["bool"]["filter"] = [
                 {"range": {"@timestamp": {"gte": self.search_after.isoformat() + "Z"}}}
-            )
+            ]
 
         return self._search(full_query)
 
@@ -240,6 +268,10 @@ class OpenSearchClient:
                 }
             }
         )
+
+    # TODO: raise if any fields contains globs(?):
+    def search_multi_glob(self, *, fields: list[str], value: str):
+        return self.search(should=[{"wildcard": {field: value}} for field in fields])
 
 
 class WazuhConnector:
@@ -292,6 +324,12 @@ class WazuhConnector:
         self.search_agent_ip = get_config_variable(
             "WAZUH_SEARCH_AGENT_IP",
             ["wazuh", "search_agent_ip"],
+            config,
+            default=False,
+        )
+        self.search_agent_name = get_config_variable(
+            "WAZUH_SEARCH_AGENT_NAME",
+            ["wazuh", "search_agent_name"],
             config,
             default=False,
         )
@@ -353,12 +391,32 @@ class WazuhConnector:
         match entity["entity_type"]:
             # TODO: Indicators: look up addresses, domain names and hashes
             # case "Indicator":
+            # TODO: What's in an Artifact?
             case "StixFile" | "Artifact":
-                # TODO: search name if defined and sha is not?
-                return self.client.search_multi(
-                    fields=["*sha256*"], value=stix_entity["hashes"]["SHA-256"]
-                )
-            # TODO: add a setting WAZUH_SEARCH_AGENT_IP (should search agent.ip or not?
+                self.helper.log_debug(f"FILE: {stix_entity}")
+                if (
+                    entity["entity_type"] == "StixFile"
+                    and "name" in stix_entity
+                    and not has_any(
+                        stix_entity, ["hashes"], ["SHA-256", "SHA-1", "MD5"]
+                    )
+                ):
+                    return self.client.search_multi_glob(
+                        # TODO: worthwhile? Add all permutations of slash types and fields? Not sure if regex is the way to go
+                        # remember, fields here cannot have globs: raise if they do?
+                        fields=["syscheck.path"],
+                        value="*/" + stix_entity["name"],
+                    )
+                elif has(stix_entity, ["hashes", "SHA-256"]):
+                    return self.client.search_multi(
+                        fields=["*sha256*"], value=stix_entity["hashes"]["SHA-256"]
+                    )
+                elif has(stix_entity, ["hashes", "SHA-1"]):
+                    return self.client.search_multi(
+                        fields=["*sha1*"], value=stix_entity["hashes"]["SHA-1"]
+                    )
+                else:
+                    return {}
             case "IPv4-Addr" | "IPv6-Addr":
                 fields = [
                     "*.ip",
@@ -371,6 +429,7 @@ class WazuhConnector:
                     "*.remote_ip",
                     "*.remote_ip_address",
                     "*.sourceIPAddress",
+                    "*.source_ip_address",
                     "*.callerIp",
                     "*.ipAddress",
                     "data.win.eventdata.queryName",
@@ -383,20 +442,42 @@ class WazuhConnector:
                     )
                 else:
                     return self.client.search(
-                        query={
+                        must={
                             "multi_match": {
                                 "query": address,
                                 "fields": fields,
                             }
                         },
-                        exclude={"match": {"agent.ip": address}},
+                        must_not={"match": {"agent.ip": address}},
                     )
-            case "Domain-Name" | "Hostname":
-                # TODO: hostname is probably present many places
+            case "Mac-Addr":
                 return self.client.search_multi(
-                    fields=["data.win.eventdata.queryName", "*.hostname"],
+                    fields=["*.src_mac", "*.srcmac", "*.dst_mac", "*.dstmac", "*.mac"],
                     value=entity["observable_value"],
                 )
+            # case "Network-Traffic"
+            case "Domain-Name" | "Hostname":
+                fields = [
+                    "data.win.eventdata.queryName",
+                    "data.dns.question.name",
+                    "*.hostname",
+                ]
+                hostname = entity["observable_value"]
+                if self.search_agent_name:
+                    return self.client.search_multi(
+                        fields=fields,
+                        value=hostname,
+                    )
+                else:
+                    return self.client.search(
+                        must={
+                            "multi_match": {
+                                "query": hostname,
+                                "fields": fields,
+                            }
+                        },
+                        must_not={"match": {"agent.name": hostname}},
+                    )
             case "Url":
                 return self.client.search_multi(
                     fields=["*.url"],
@@ -456,6 +537,10 @@ class WazuhConnector:
                         "*.dstuser",
                         "*.srcuser",
                         "*.user",
+                        "*.userName",  # add username, or is this case insensitive?
+                        "*.username",  # add username, or is this case insensitive?
+                        "data.gcp.protoPayload.authenticationInfo.principalEmail",
+                        "data.office365.UserId",
                     ],
                     value=stix_entity["account_login"],
                 )
@@ -509,13 +594,18 @@ class WazuhConnector:
 
         sighter = self.siem_system
         sightings = []
-        bundle = [self.author]
         agents = {}
+        bundle = [self.author, self.siem_system]
         for hit in hits:
             try:
                 s = hit["_source"]
-                if has(s, ["agent", "name"]) and self.agents_as_systems:
-                    agents[s["agent"]["name"]] = sighter = self.create_agent_stix(hit)
+                if (
+                    has(s, ["agent", "id"])
+                    and self.agents_as_systems
+                    # Do not create systems for master/worker, use the Wazuh system instead:
+                    and int(s["agent"]["id"])
+                ):
+                    agents[s["agent"]["id"]] = sighter = self.create_agent_stix(hit)
 
                 sighted_at = s["@timestamp"]
                 sighting = self.create_sighting_stix(
@@ -555,12 +645,7 @@ class WazuhConnector:
                 )
                 self.helper.metric.inc("client_error_count")
 
-        # TODO: if setting says so, create a note on the observable about the sightings created (timestamp, limited by search_after, search_limit, etc.
         # TODO: enrichment: create tool, like ssh, used in events like ssh logons
-
-        # Only add Wazyh SIEM system if it is referenced:
-        if not agents or self.create_obs_note:
-            bundle.append(self.siem_system)
 
         # TODO: Add note also for no hits:
         if self.create_obs_note:
@@ -649,7 +734,7 @@ class WazuhConnector:
     ):
         run_time = datetime.now()
         run_time_string = run_time.isoformat() + "Z"
-        abstract = f"Wazuh enrichment ran at {run_time_string}"
+        abstract = f"Wazuh enrichment at {run_time_string}"
         hits_returned = len(result["hits"]["hits"])
         total_hits = result["hits"]["total"]["value"]
         # TODO: shards info
