@@ -301,7 +301,7 @@ class WazuhConnector:
             "WAZUH_MAX_HITS", ["wazuh", "max_hits"], config, isNumber=True, default=10
         )
         self.system_name = get_config_variable(
-            "WAZUH_SYSTEM_NAME", ["wazuh", "system_name"], config, default="Wazuh"
+            "WAZUH_SYSTEM_NAME", ["wazuh", "system_name"], config, default="Wazuh SIEM"
         )
         self.agents_as_systems = get_config_variable(
             "WAZUH_AGENTS_AS_SYSTEMS",
@@ -390,9 +390,6 @@ class WazuhConnector:
     def _query_alerts(self, entity, stix_entity) -> dict | None:
         # FIXME: those returning {} must return a valid "hits" object, otherwise go for a "raise" alternative
         match entity["entity_type"]:
-            # TODO: Indicators: look up addresses, domain names and hashes
-            # case "Indicator":
-            # TODO: What's in an Artifact?
             case "StixFile" | "Artifact":
                 if (
                     entity["entity_type"] == "StixFile"
@@ -452,7 +449,14 @@ class WazuhConnector:
                     )
             case "Mac-Addr":
                 return self.client.search_multi(
-                    fields=["*.src_mac", "*.srcmac", "*.dst_mac", "*.dstmac", "*.mac"],
+                    fields=[
+                        "*.src_mac",
+                        "*.srcmac",
+                        "*.dst_mac",
+                        "*.dstmac",
+                        "*.mac",
+                        "data.osquery.columns.interface",
+                    ],
                     value=entity["observable_value"],
                 )
             case "Network-Traffic":
@@ -609,7 +613,6 @@ class WazuhConnector:
         entity = None
         if data["entity_id"].startswith("vulnerability--"):
             entity = self.helper.api.vulnerability.read(id=data["entity_id"])
-
         elif data["entity_id"].startswith("indicator--"):
             entity = self.helper.api.indicator.read(id=data["entity_id"])
         else:
@@ -621,15 +624,6 @@ class WazuhConnector:
         enrichment = self.helper.get_data_from_enrichment(data, entity)
         stix_entity = enrichment["stix_entity"]
 
-        # Use inference rules for indicators instead (looking up patterns isn't going to be very useful):
-        # hits = []
-        # if (
-        #    entity["entity_type"] == "Indicator"
-        #    and "observables" in entity
-        #    and entity["observables"]
-        # ):
-        #    for obs in entity["observables"]:
-        # else:
         result = self._query_alerts(entity, stix_entity)
         # TODO: exception instead of returning None:
         if result is None:
