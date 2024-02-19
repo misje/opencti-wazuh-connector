@@ -426,8 +426,8 @@ class WazuhConnector:
                         "*.dstuser",
                         "*.srcuser",
                         "*.user",
-                        "*.userName",  # add username, or is this case insensitive?
-                        "*.username",  # add username, or is this case insensitive?
+                        "*.userName",
+                        "*.username",
                         "data.gcp.protoPayload.authenticationInfo.principalEmail",
                         "data.office365.UserId",
                     ],
