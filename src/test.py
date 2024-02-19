@@ -388,12 +388,12 @@ class WazuhConnector:
         )
 
     def _query_alerts(self, entity, stix_entity) -> dict | None:
+        # FIXME: those returning {} must return a valid "hits" object, otherwise go for a "raise" alternative
         match entity["entity_type"]:
             # TODO: Indicators: look up addresses, domain names and hashes
             # case "Indicator":
             # TODO: What's in an Artifact?
             case "StixFile" | "Artifact":
-                self.helper.log_debug(f"FILE: {stix_entity}")
                 if (
                     entity["entity_type"] == "StixFile"
                     and "name" in stix_entity
@@ -455,7 +455,57 @@ class WazuhConnector:
                     fields=["*.src_mac", "*.srcmac", "*.dst_mac", "*.dstmac", "*.mac"],
                     value=entity["observable_value"],
                 )
-            # case "Network-Traffic"
+            case "Network-Traffic":
+                query = []
+                if "src_ref" in stix_entity:
+                    src_ip = self.helper.api.stix_cyber_observable.read(
+                        id=stix_entity["src_ref"]
+                    )
+                    if src_ip and "value" in src_ip:
+                        query.append(
+                            {
+                                "multi_match": {
+                                    "query": src_ip["value"],
+                                    "fields": ["*.src_ip", "*.srcip"],
+                                }
+                            }
+                        )
+                if "src_port" in stix_entity:
+                    query.append(
+                        {
+                            "multi_match": {
+                                "query": stix_entity["src_port"],
+                                "fields": ["*.src_port", "*.srcport"],
+                            }
+                        }
+                    )
+                if "dst_ref" in stix_entity:
+                    dest_ip = self.helper.api.stix_cyber_observable.read(
+                        id=stix_entity["dst_ref"]
+                    )
+                    if dest_ip and "value" in dest_ip:
+                        query.append(
+                            {
+                                "multi_match": {
+                                    "query": dest_ip["value"],
+                                    "fields": ["*.dest_ip", "*.dstip"],
+                                }
+                            }
+                        )
+                if "dst_port" in stix_entity:
+                    query.append(
+                        {
+                            "multi_match": {
+                                "query": stix_entity["dst_port"],
+                                "fields": ["*.dest_port", "*.dstport"],
+                            }
+                        }
+                    )
+
+                if query:
+                    return self.client.search(query)
+                else:
+                    return {}
             case "Domain-Name" | "Hostname":
                 fields = [
                     "data.win.eventdata.queryName",
@@ -643,6 +693,7 @@ class WazuhConnector:
                 self.helper.connector_logger.error(
                     "[Wazuh]: Failed to parse result: Unexpected JSON structure"
                 )
+                # TODO: use elsewhere too:
                 self.helper.metric.inc("client_error_count")
 
         # TODO: enrichment: create tool, like ssh, used in events like ssh logons
@@ -752,6 +803,7 @@ class WazuhConnector:
             f"|Include filter|{json.dumps(self.client.include_match) if self.client.include_match else ''}|\n"
             f"|Exclude filter|{json.dumps(self.client.exclude_match) if self.client.exclude_match else ''}|\n"
             f"|Connector v.|{self.CONNECTOR_VERSION}|\n"
+            # Text about what was searched and how
         )
         return stix2.Note(
             id=Note.generate_id(created=run_time_string, content=content),
