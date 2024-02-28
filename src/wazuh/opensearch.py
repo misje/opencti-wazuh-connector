@@ -175,6 +175,8 @@ class OpenSearchClient:
 
         return self._search(full_query)
 
+    # term-levl queries are only for fields mapped as keywords.
+    # TODO: use filter context instead of query for exact-match queries (this way full-text search (at least when searching mulitple fields) shouldn't be an issue)
     def search_match(self, terms: dict):
         return self.search([{"match": {key: value}} for key, value in terms.items()])
 
