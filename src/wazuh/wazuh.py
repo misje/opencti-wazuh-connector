@@ -327,19 +327,22 @@ class WazuhConnector:
             config,
             default=True,
         )
+        self.stix_common_attrs = {
+            "object_marking_refs": self.tlps,
+            "confidence": self.confidence,
+        }
         # Add moe useful meta to author?
         self.author = stix2.Identity(
             id=Identity.generate_id("Wazuh", "organization"),
-            confidence=self.confidence,
+            **self.stix_common_attrs,
             name="Wazuh",
             identity_class="organization",
             description="Wazuh",
         )
+        self.stix_common_attrs["created_by_ref"] = self.author["id"]
         self.siem_system = stix2.Identity(
             id=Identity.generate_id(self.system_name, "system"),
-            created_by_ref=self.author["id"],
-            object_marking_refs=self.tlps,
-            confidence=self.confidence,
+            **self.stix_common_attrs,
             name=self.system_name,
             identity_class="system",
         )
@@ -503,11 +506,10 @@ class WazuhConnector:
                 iname, sightings_collector.last_sighting_timestamp()
             ),
             created=sightings_collector.last_sighting_timestamp(),
-            created_by_ref=self.author["id"],
-            object_marking_refs=self.tlps,
-            confidence=self.confidence,
+            **self.stix_common_attrs,
             name=iname,
             description="Beskrivelsen",
+            # first_seen, last_seen, type, severity, objective
         )
         bundle += [
             incident,
@@ -516,9 +518,7 @@ class WazuhConnector:
                     "related-to", incident.id, entity["standard_id"]
                 ),
                 created=sightings_collector.last_sighting_timestamp(),
-                created_by_ref=self.author["id"],
-                object_marking_refs=self.tlps,
-                confidence=self.confidence,
+                **self.stix_common_attrs,
                 relationship_type="related-to",
                 source_ref=incident.id,
                 target_ref=entity["standard_id"],
@@ -530,9 +530,7 @@ class WazuhConnector:
                     sighter.id,
                 ),
                 created=sightings_collector.last_sighting_timestamp(),
-                created_by_ref=self.author["id"],
-                object_marking_refs=self.tlps,
-                confidence=self.confidence,
+                **self.stix_common_attrs,
                 relationship_type="targets",
                 source_ref=incident.id,
                 target_ref=sighter.id,
@@ -546,9 +544,7 @@ class WazuhConnector:
                     incident.id,
                 ),
                 created=sightings_collector.last_sighting_timestamp(),
-                created_by_ref=self.author["id"],
-                object_marking_refs=self.tlps,
-                confidence=self.confidence,
+                **self.stix_common_attrs,
                 relationship_type="indicates",
                 source_ref=ind["standard_id"],  # type: ignore
                 target_ref=incident.id,
@@ -860,9 +856,7 @@ class WazuhConnector:
         return stix2.Identity(
             # id=Identity.generate_id(name, "system"),
             id=Identity.generate_id(id, "system"),
-            created_by_ref=self.author["id"],
-            object_marking_refs=self.tlps,
-            confidence=self.confidence,
+            **self.stix_common_attrs,
             name=name,
             identity_class="system",
             description=f"Wazuh agent ID {id}",
@@ -880,9 +874,7 @@ class WazuhConnector:
             # created=sighted_at,
             # TODO: put modified to created to avoid default NOW? Also elsewhere, in that case
             # modified=sighted_at,
-            created_by_ref=self.author["id"],
-            object_marking_refs=self.tlps,
-            confidence=self.confidence,
+            **self.stix_common_attrs,
             first_seen=metadata["first_seen"],
             last_seen=metadata["last_seen"],
             count=metadata["count"],
@@ -917,9 +909,7 @@ class WazuhConnector:
             ),
             # TODO: use this created date or real date?:
             created=sighted_at,
-            created_by_ref=self.author["id"],
-            object_marking_refs=self.tlps,
-            confidence=self.confidence,
+            **self.stix_common_attrs,
             abstract=f"""Wazuh alert "{s['rule']['description']}" (index {alert["_index"]}) for sighting at {sighted_at}""",
             content=f"```\n{alert_json}\n" "",
             object_refs=sighting_id,
@@ -953,9 +943,7 @@ class WazuhConnector:
         return stix2.Note(
             id=Note.generate_id(created=run_time_string, content=content),
             created=run_time_string,
-            created_by_ref=self.author["id"],
-            object_marking_refs=self.tlps,
-            confidence=self.confidence,
+            **self.stix_common_attrs,
             abstract=abstract,
             content=content,
             object_refs=[observable_id] + list(map(lambda s: s.id, sightings)),
