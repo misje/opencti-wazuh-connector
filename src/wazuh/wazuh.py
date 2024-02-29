@@ -185,16 +185,17 @@ def parse_match_patterns(patterns: str):
 
 class WazuhConnector:
     class MetricHelper:
-        def __enter__(self, metric: OpenCTIMetricHandler):
+        def __init__(self, metric: OpenCTIMetricHandler):
             self.metric = metric
-            metric.inc("run_count")
-            metric.state("running")
+
+        def __enter__(self):
+            self.metric.inc("run_count")
+            self.metric.state("running")
             return self
 
-        def __exit__(self, exc_type):
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.metric.state("idle")
             if exc_type is not None:
-                self.metric.state("idle")
-            else:
                 self.metric.inc("client_error_count")
 
     def __init__(self):
@@ -205,7 +206,7 @@ class WazuhConnector:
 
         config_file_path = Path(__file__).parent.parent.resolve() / "config.yml"
         config = (
-            yaml.load(open(config_file_path, encoding="utf-8"), Loader=yaml.FullLoader)
+            yaml.load(open(config_file_path, encoding="utf-8"), Loader=yaml.SafeLoader)
             if config_file_path.is_file()
             else {}
         )
@@ -578,9 +579,6 @@ class WazuhConnector:
                 )
 
     def _process_message(self, data):
-        self.helper.metric.inc("run_count")
-        self.helper.metric.state("running")
-
         entity = None
         if data["entity_id"].startswith("vulnerability--"):
             entity = self.helper.api.vulnerability.read(id=data["entity_id"])
@@ -599,7 +597,6 @@ class WazuhConnector:
         self.helper.log_debug(f"INDS: {obs_indicators}")
 
         if not obs_indicators or self.create_obs_sightings:
-            self.helper.metric.state("idle")
             self.helper.connector_logger.info(
                 "Observable has no indicators and WAZUH_CREATE_OBSERVABLE_SIGHTINGS is false"
             )
@@ -610,13 +607,11 @@ class WazuhConnector:
 
         result = self._query_alerts(entity, stix_entity)
         if result is None:
-            self.helper.metric.state("idle")
             # This is not true. Revisit. Use exceptions?
             return "Failed to query Wazuh API"
 
         hits = result["hits"]["hits"]
         if not hits:
-            self.helper.metric.state("idle")
             return "No hits found"
 
         sighter = self.siem_system
@@ -641,11 +636,9 @@ class WazuhConnector:
                 )
 
             except (IndexError, KeyError):
-                self.helper.connector_logger.error(
-                    "[Wazuh]: Failed to parse result: Unexpected JSON structure"
+                raise OpenSearchClient.ParseError(
+                    "Failed to parse _source: Unexpected JSON structure"
                 )
-                # TODO: use elsewhere too:
-                self.helper.metric.inc("client_error_count")
 
         # TODO: enrichment: create tool, like ssh, used in events like ssh logons
 
@@ -670,6 +663,7 @@ class WazuhConnector:
         # Setting: max_ext_ref per rule_id, per search?. same for note
         # Setting for limiting notes per sighting (0 disables notes for sightings)
         # Setting for limiting ext.refs. per sighting (0 disables)
+        # Setting for adhering to detection, valid_until, min score(?)
         #
         # Create external reference to wazuh with the query that was ran (discover? custom columns?)
         # Look into how playbooks can be used
@@ -769,6 +763,11 @@ class WazuhConnector:
             )
         )
         return f"Sent {sent_count} STIX bundle(s) for worker import"
+
+    def process_message(self, data):
+        # Use a helper class that ensures to always updates the running state of the connector, as well as incrementing the error count on uncaught exceptions:
+        with self.MetricHelper(self.helper.metric):
+            return self._process_message(data)
 
     def create_agent_stix(self, alert):
         s = alert["_source"]
@@ -884,17 +883,4 @@ class WazuhConnector:
 
     def start(self):
         self.helper.metric.state("idle")
-        self.helper.listen(self._process_message)
-
-
-import sys
-import time
-
-if __name__ == "__main__":
-    try:
-        wazuh = WazuhConnector()
-        wazuh.start()
-    except Exception as e:
-        print(e)
-        time.sleep(2)
-        sys.exit(0)
+        self.helper.listen(self.process_message)

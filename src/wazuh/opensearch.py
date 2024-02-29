@@ -13,6 +13,18 @@ class OpenSearchClient:
     Simple OpenSearch search SDK
     """
 
+    class ConnectionError(Exception):
+        def __init__(self, message):
+            super().__init__(message)
+
+    class ParseError(Exception):
+        def __init__(self, message):
+            super().__init__(message)
+
+    class QueryError(Exception):
+        def __init__(self, message):
+            super().__init__(message)
+
     def __init__(
         self,
         *,
@@ -35,8 +47,6 @@ class OpenSearchClient:
         self.search_after = search_after
         self.include_match = include_match
         self.exclude_match = exclude_match
-
-        self.helper.connector_logger.info(f"[Wazuh] URL: {self.url}")
 
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -65,39 +75,12 @@ class OpenSearchClient:
             )
             response.raise_for_status()
 
-            try:
-                # TODO: reponse now guaranteed to be 200?
-                self.helper.connector_logger.debug(
-                    f"[Wazuh] Query response status: {response.status_code}"
-                )
-                # self.helper.connector_logger.debug(
-                #    f"[Wazuh] Query response: {response.json()}"
-                # )
-                return response.json()
-            except json.JSONDecodeError as e:
-                self.helper.connector_logger.error(
-                    f"[Wazuh] Query: Failed to parse response: {response.text}: {e}"
-                )
-                self.helper.metric.inc("client_error_count")
-                return None
+            return response.json()
 
-        except requests.exceptions.HTTPError as e:
-            self.helper.connector_logger.error(f"[Wazuh] Query: HTTP error: {e}")
-            self.helper.metric.inc("client_error_count")
-        except requests.exceptions.ConnectionError as e:
-            self.helper.connector_logger.error(f"[Wazuh] Query: Connection error: {e}")
-            self.helper.metric.inc("client_error_count")
-        except requests.exceptions.Timeout as e:
-            self.helper.connector_logger.error(f"[Wazuh] Query: Timed out: {e}")
-            self.helper.metric.inc("client_error_count")
-        except requests.exceptions.URLRequired:
-            self.helper.connector_logger.error(
-                "f[Wazuh] Query: URL not set or invalid: {self.url}"
-            )
-            self.helper.metric.inc("client_error_count")
-        except Exception as e:
-            self.helper.connector_logger.error(f"[Wazuh] Query: Unknown error: {e}")
-            self.helper.metric.inc("client_error_count")
+        except requests.JSONDecodeError as e:
+            raise self.ParseError(f"Failed to parse JSON response: {e}")
+        except requests.exceptions.RequestException as e:
+            raise self.ConnectionError(f"Failed to connect to {self.url}: {e}")
 
     def _search(self, query: dict):
         query = {
@@ -112,35 +95,27 @@ class OpenSearchClient:
             return None
         try:
             if r["timed_out"]:
-                self.helper.connector_logger.warning(
-                    "[Wazuh] OpenSearch: Query timed out"
-                )
+                self.helper.connector_logger.warning("OpenSearch: Query timed out")
                 self.helper.connector_logger.debug(
-                    "[Wazuh] OpenSearh: Searched {}/{} shards, {} skipped, {} failed".format(
+                    "OpenSearh: Searched {}/{} shards, {} skipped, {} failed".format(
                         r["_shards"]["successful"],
                         r["_shards"]["total"],
                         r["_shards"]["skipped"],
                         r["_shards"]["failed"],
                     )
                 )
-            # TODO: print if shards has failed?
             # TODO: pagination?
             if r["hits"]["total"]["value"] > self.limit:
                 self.helper.connector_logger.warning(
-                    "[Wazuh] Processing only {} of {} hits (hint: increase 'max_hits')".format(
+                    "Processing only {} of {} hits (hint: increase 'max_hits')".format(
                         self.limit, r["hits"]["total"]["value"]
                     )
                 )
 
             return r
-            # return [hit for hit in r["hits"]["hits"]]
 
-        # TODO: How to propagate errors to gui. Just exceptions? Look up connector doc.
         except (IndexError, KeyError):
-            self.helper.connector_logger.error(
-                "[Wazuh]: Failed to parse result: Unexpected JSON structure"
-            )
-            self.helper.metric.inc("client_error_count")
+            raise self.ParseError("Failed to parse result: Unexpected JSON structure")
 
     def search(
         self,
@@ -149,14 +124,16 @@ class OpenSearchClient:
         should: dict | list[dict] | None = None,
     ):
         if not must and not must_not and not should:
-            raise ValueError("One of must, must_not and should must be non-empty")
+            raise self.QueryError("One of must, must_not and should must be non-empty")
 
+        # For convenience, allow caller to specify either an object or a list:
         must = must if isinstance(must, list) else [must] if must else []
         should = should if isinstance(should, list) else [should] if should else []
         must_not = (
             must_not if isinstance(must_not, list) else [must_not] if must_not else []
         )
 
+        # include the convenience global filters :
         must = must + (self.include_match or [])
         must_not = must_not + (self.exclude_match or [])
 
@@ -175,9 +152,16 @@ class OpenSearchClient:
 
         return self._search(full_query)
 
-    # term-levl queries are only for fields mapped as keywords.
-    # TODO: use filter context instead of query for exact-match queries (this way full-text search (at least when searching mulitple fields) shouldn't be an issue)
-    def search_match(self, terms: dict):
+    def search_match(self, terms: dict[str, str]):
+        """
+        Convenience function for searching for matches using key–values in a dict
+
+        Each key–value pairs will be expanded into individual "must" "match" objects. Example:
+        `search_match({"foo": "bar", "baz": "qux"})`
+        will generate
+        `[{"match": {"foo": "bar"}}, {"match": {"baz": "qux"}}]`
+        that will be used as the argument "must" in search().
+        """
         return self.search([{"match": {key: value}} for key, value in terms.items()])
 
     def search_multi(
