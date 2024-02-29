@@ -29,7 +29,6 @@ from os.path import basename
 # SETTING: agent_labels: comma-separated list of labels to attach to agents
 # SETTING: siem_labels: comma-separated list of labels to attach to wazuh identity
 # Search include/exclue in setting level (add wazuh-opencti as default)
-# tlp marking (config)
 # Create wazuh integration that creates incidents in opencti
 # get_config_variable with required doesn't throw if not set
 
@@ -183,6 +182,37 @@ def parse_match_patterns(patterns: str):
     return [{"match": {pair[0]: pair[1]}} for pair in pairs]
 
 
+def to_tlp(tlp_string):
+    if tlp_string is None:
+        return None
+
+    match re.sub(r"^[^:]+:", "", tlp_string).lower():
+        case "clear" | "white":
+            return stix2.TLP_WHITE.id
+        case "green":
+            return stix2.TLP_GREEN.id
+        case "amber":
+            return stix2.TLP_AMBER.id
+        case "amber+strict":
+            return "marking-definition--826578e1-40ad-459f-bc73-ede076f81f37"
+        case "red":
+            return stix2.TLP_RED
+        case "":
+            return None
+        case _:
+            raise ValueError(f"{tlp_string} is not a valid marking definition")
+
+
+def tlp_allowed(entity, max_tlp):
+    # Not sure what the correct logic is if the entity has several TLP markings. I asumme all have to be within max:
+    return all(
+        OpenCTIConnectorHelper.check_max_tlp(tlp, max_tlp)
+        for mdef in entity["objectMarking"]
+        for tlp in (mdef["standard_id"],)
+        if mdef["definition_type"] == "TLP"
+    )
+
+
 class WazuhConnector:
     class MetricHelper:
         def __init__(self, metric: OpenCTIMetricHandler):
@@ -217,8 +247,28 @@ class WazuhConnector:
             if isinstance(self.helper.connect_confidence_level, int)
             else None
         )
-        self.max_tlp = get_config_variable(
-            "WAZUH_MAX_TLP", ["wazuh", "max_tlp"], config, required=True
+        # TODO: for config, consider using pydanic and BaseSettings. Look at https://github.com/OpenCTI-Platform/connectors/blob/abf07fb6bd423c104a10207626520c2836d7e586/internal-enrichment/shodan-internetdb/src/shodan_internetdb/config.py#L26. If not, ensure empty values in required throws
+        self.max_tlp = (
+            re.sub(r"^(tlp:)?", "TLP:", tlp, flags=re.IGNORECASE).upper()
+            if isinstance(
+                tlp := get_config_variable(
+                    "WAZUH_MAX_TLP", ["wazuh", "max_tlp"], config, required=True
+                ),
+                str,
+            )
+            else None
+        )
+        self.tlps = (
+            [tlp]
+            if (
+                tlp := to_tlp(
+                    get_config_variable(
+                        "WAZUH_TLP", ["wazuh", "tlp"], config, required=True
+                    )
+                )
+            )
+            is not None
+            else []
         )
         self.hits_limit = get_config_variable(
             "WAZUH_MAX_HITS", ["wazuh", "max_hits"], config, isNumber=True, default=10
@@ -288,6 +338,7 @@ class WazuhConnector:
         self.siem_system = stix2.Identity(
             id=Identity.generate_id(self.system_name, "system"),
             created_by_ref=self.author["id"],
+            object_marking_refs=self.tlps,
             confidence=self.confidence,
             name=self.system_name,
             identity_class="system",
@@ -337,35 +388,48 @@ class WazuhConnector:
             entity = self.helper.api.stix_cyber_observable.read(id=data["entity_id"])
 
         if entity is None:
-            raise ValueError("Observable not found")
+            raise ValueError("Entity/observable not found")
+
+        if not tlp_allowed(entity, self.max_tlp):
+            raise ValueError("Entity ignored because TLP not allowed")
 
         # Figure out exactly what this does:
         enrichment = self.helper.get_data_from_enrichment(data, entity)
         stix_entity = enrichment["stix_entity"]
         obs_indicators = self.entity_indicators(entity)
+        # Remove:
         self.helper.log_debug(f"INDS: {obs_indicators}")
 
-        if not obs_indicators or self.create_obs_sightings:
+        if not obs_indicators and not self.create_obs_sightings:
             self.helper.connector_logger.info(
                 "Observable has no indicators and WAZUH_CREATE_OBSERVABLE_SIGHTINGS is false"
             )
             return "Observable has no indicators"
 
+        # Remove:
         self.helper.log_debug(f"ENTITY: {entity}")
         self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
 
         result = self._query_alerts(entity, stix_entity)
         if result is None:
-            # This is not true. Revisit. Use exceptions?
-            return "Failed to query Wazuh API"
+            # Even though the entity is supported (an exception is throuwn
+            # otherwise), not all entities contains information that is
+            # searchable in Wazuh. There may also not be enough information to
+            # perform a search that is targeted enough. This is not an error:
+            return "Entity has no queryable data"
 
         hits = result["hits"]["hits"]
         if not hits:
             return "No hits found"
 
+        # The sigher is the Wazuh SIEM identity unless later overriden by
+        # agents_as_systems:
         sighter = self.siem_system
+        # Use a helper module to create as few sighting objects as possible,
+        # and modify their first_seen, last_seen and count instead:
         sightings_collector = SightingsCollector(observable_id=entity["standard_id"])
         agents = {}
+        # The complete STIX bundle to send:
         bundle = [self.author, self.siem_system]
         for hit in hits:
             try:
@@ -374,7 +438,7 @@ class WazuhConnector:
                     has(s, ["agent", "id"])
                     and self.agents_as_systems
                     # Do not create systems for master/worker, use the Wazuh system instead:
-                    and int(s["agent"]["id"])
+                    and int(s["agent"]["id"]) > 0
                 ):
                     agents[s["agent"]["id"]] = sighter = self.create_agent_stix(hit)
 
@@ -421,13 +485,17 @@ class WazuhConnector:
         ###############
 
         # Group alerts by ID and see how many are unique. Setting: inncident per rule id?
-        # Add an enrichment function that creates mitre, tools etc for either when relevant fields are present or per rule id/group. Add a setting for each one (yaml only?)?
+        # Add an enrichment function that creates mitre, tools etc for either
+        # when relevant fields are present or per rule id/group. Add a setting
+        # for each one (yaml only?)?
         # tool:
         #   uses → attack pattern
 
         alerts_by_rule_id = sightings_collector.alerts_by_rule_id()
         counts = {rule_id: len(alerts) for rule_id, alerts in alerts_by_rule_id.items()}
         self.helper.log_debug(f"COUNTS: {counts}")
+
+        # Incident per sighting, per system, per rule_id etc. …?
 
         iname = f"Wazuh alert: something sighted in {sighter.name}"
         incident = stix2.Incident(
@@ -436,6 +504,7 @@ class WazuhConnector:
             ),
             created=sightings_collector.last_sighting_timestamp(),
             created_by_ref=self.author["id"],
+            object_marking_refs=self.tlps,
             confidence=self.confidence,
             name=iname,
             description="Beskrivelsen",
@@ -448,6 +517,7 @@ class WazuhConnector:
                 ),
                 created=sightings_collector.last_sighting_timestamp(),
                 created_by_ref=self.author["id"],
+                object_marking_refs=self.tlps,
                 confidence=self.confidence,
                 relationship_type="related-to",
                 source_ref=incident.id,
@@ -461,6 +531,7 @@ class WazuhConnector:
                 ),
                 created=sightings_collector.last_sighting_timestamp(),
                 created_by_ref=self.author["id"],
+                object_marking_refs=self.tlps,
                 confidence=self.confidence,
                 relationship_type="targets",
                 source_ref=incident.id,
@@ -476,6 +547,7 @@ class WazuhConnector:
                 ),
                 created=sightings_collector.last_sighting_timestamp(),
                 created_by_ref=self.author["id"],
+                object_marking_refs=self.tlps,
                 confidence=self.confidence,
                 relationship_type="indicates",
                 source_ref=ind["standard_id"],  # type: ignore
@@ -727,7 +799,7 @@ class WazuhConnector:
                         r"""("[^"]*"|'[^']*'|\S+)""", stix_entity["command_line"]
                     )
                     if len(tokens) < 1:
-                        return {}
+                        return None
 
                     self.helper.log_debug(tokens)
                     command = basename(tokens[0])
@@ -789,6 +861,7 @@ class WazuhConnector:
             # id=Identity.generate_id(name, "system"),
             id=Identity.generate_id(id, "system"),
             created_by_ref=self.author["id"],
+            object_marking_refs=self.tlps,
             confidence=self.confidence,
             name=name,
             identity_class="system",
@@ -808,6 +881,7 @@ class WazuhConnector:
             # TODO: put modified to created to avoid default NOW? Also elsewhere, in that case
             # modified=sighted_at,
             created_by_ref=self.author["id"],
+            object_marking_refs=self.tlps,
             confidence=self.confidence,
             first_seen=metadata["first_seen"],
             last_seen=metadata["last_seen"],
@@ -844,6 +918,7 @@ class WazuhConnector:
             # TODO: use this created date or real date?:
             created=sighted_at,
             created_by_ref=self.author["id"],
+            object_marking_refs=self.tlps,
             confidence=self.confidence,
             abstract=f"""Wazuh alert "{s['rule']['description']}" (index {alert["_index"]}) for sighting at {sighted_at}""",
             content=f"```\n{alert_json}\n" "",
@@ -879,6 +954,7 @@ class WazuhConnector:
             id=Note.generate_id(created=run_time_string, content=content),
             created=run_time_string,
             created_by_ref=self.author["id"],
+            object_marking_refs=self.tlps,
             confidence=self.confidence,
             abstract=abstract,
             content=content,
