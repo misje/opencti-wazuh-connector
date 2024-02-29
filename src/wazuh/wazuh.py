@@ -318,6 +318,209 @@ class WazuhConnector:
             exclude_match=parse_match_patterns(self.search_exclude),  # type: ignore
         )
 
+    def start(self):
+        self.helper.metric.state("idle")
+        self.helper.listen(self.process_message)
+
+    def process_message(self, data):
+        # Use a helper class that ensures to always updates the running state of the connector, as well as incrementing the error count on uncaught exceptions:
+        with self.MetricHelper(self.helper.metric):
+            return self._process_message(data)
+
+    def _process_message(self, data):
+        entity = None
+        if data["entity_id"].startswith("vulnerability--"):
+            entity = self.helper.api.vulnerability.read(id=data["entity_id"])
+        elif data["entity_id"].startswith("indicator--"):
+            entity = self.helper.api.indicator.read(id=data["entity_id"])
+        else:
+            entity = self.helper.api.stix_cyber_observable.read(id=data["entity_id"])
+
+        if entity is None:
+            raise ValueError("Observable not found")
+
+        # Figure out exactly what this does:
+        enrichment = self.helper.get_data_from_enrichment(data, entity)
+        stix_entity = enrichment["stix_entity"]
+        obs_indicators = self.entity_indicators(entity)
+        self.helper.log_debug(f"INDS: {obs_indicators}")
+
+        if not obs_indicators or self.create_obs_sightings:
+            self.helper.connector_logger.info(
+                "Observable has no indicators and WAZUH_CREATE_OBSERVABLE_SIGHTINGS is false"
+            )
+            return "Observable has no indicators"
+
+        self.helper.log_debug(f"ENTITY: {entity}")
+        self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
+
+        result = self._query_alerts(entity, stix_entity)
+        if result is None:
+            # This is not true. Revisit. Use exceptions?
+            return "Failed to query Wazuh API"
+
+        hits = result["hits"]["hits"]
+        if not hits:
+            return "No hits found"
+
+        sighter = self.siem_system
+        sightings_collector = SightingsCollector(observable_id=entity["standard_id"])
+        agents = {}
+        bundle = [self.author, self.siem_system]
+        for hit in hits:
+            try:
+                s = hit["_source"]
+                if (
+                    has(s, ["agent", "id"])
+                    and self.agents_as_systems
+                    # Do not create systems for master/worker, use the Wazuh system instead:
+                    and int(s["agent"]["id"])
+                ):
+                    agents[s["agent"]["id"]] = sighter = self.create_agent_stix(hit)
+
+                sightings_collector.add(
+                    timestamp=s["@timestamp"],
+                    sighter_id=sighter.id,
+                    alert=hit,
+                )
+
+            except (IndexError, KeyError):
+                raise OpenSearchClient.ParseError(
+                    "Failed to parse _source: Unexpected JSON structure"
+                )
+
+        # TODO: enrichment: create tool, like ssh, used in events like ssh logons
+
+        sightings = sightings_collector.collated()
+        for sighter_id, meta in sightings.items():
+            bundle += [self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)]
+            # FIXME: create notes for every alert
+
+        ###############
+        # hostname seems to be the target, not a system
+        # relation "uses" on attack pattern (mitre)
+        #
+        # Issues:
+        #   When creating alerts, double alerts is an issue when rule engine is enabled
+        #   The indicator is not available yet when working with the observable (timing issue)
+        # Setting: incident for sightings in obs
+        # Setting: Incident for sightings in obs with indicator
+        # Setting: One incident per alert rule.id
+        # Setting: Include rule ids, exclude rule ids
+        # Setting: Agents as hostnames
+        # Setting: Agent IP as observable
+        # Setting: max_ext_ref per rule_id, per search?. same for note
+        # Setting for limiting notes per sighting (0 disables notes for sightings)
+        # Setting for limiting ext.refs. per sighting (0 disables)
+        # Setting for adhering to detection, valid_until, min score(?)
+        #
+        # Create external reference to wazuh with the query that was ran (discover? custom columns?)
+        # Look into how playbooks can be used
+        # Add mitre connector and import tactics etc.
+        # Look through wazuh rules to find occurances of usernames, addresses etc.
+        ###############
+
+        # Group alerts by ID and see how many are unique. Setting: inncident per rule id?
+        # Add an enrichment function that creates mitre, tools etc for either when relevant fields are present or per rule id/group. Add a setting for each one (yaml only?)?
+        # tool:
+        #   uses → attack pattern
+
+        alerts_by_rule_id = sightings_collector.alerts_by_rule_id()
+        counts = {rule_id: len(alerts) for rule_id, alerts in alerts_by_rule_id.items()}
+        self.helper.log_debug(f"COUNTS: {counts}")
+
+        iname = f"Wazuh alert: something sighted in {sighter.name}"
+        incident = stix2.Incident(
+            id=Incident.generate_id(
+                iname, sightings_collector.last_sighting_timestamp()
+            ),
+            created=sightings_collector.last_sighting_timestamp(),
+            created_by_ref=self.author["id"],
+            confidence=self.confidence,
+            name=iname,
+            description="Beskrivelsen",
+        )
+        bundle += [
+            incident,
+            stix2.Relationship(
+                id=StixCoreRelationship.generate_id(
+                    "related-to", incident.id, entity["standard_id"]
+                ),
+                created=sightings_collector.last_sighting_timestamp(),
+                created_by_ref=self.author["id"],
+                confidence=self.confidence,
+                relationship_type="related-to",
+                source_ref=incident.id,
+                target_ref=entity["standard_id"],
+            ),
+            stix2.Relationship(
+                id=StixCoreRelationship.generate_id(
+                    "targets",
+                    incident.id,
+                    sighter.id,
+                ),
+                created=sightings_collector.last_sighting_timestamp(),
+                created_by_ref=self.author["id"],
+                confidence=self.confidence,
+                relationship_type="targets",
+                source_ref=incident.id,
+                target_ref=sighter.id,
+            ),
+        ]
+        bundle += [
+            stix2.Relationship(
+                id=StixCoreRelationship.generate_id(
+                    "indicates",
+                    ind["standard_id"],  # type: ignore
+                    incident.id,
+                ),
+                created=sightings_collector.last_sighting_timestamp(),
+                created_by_ref=self.author["id"],
+                confidence=self.confidence,
+                relationship_type="indicates",
+                source_ref=ind["standard_id"],  # type: ignore
+                target_ref=incident.id,
+            )
+            for ind in obs_indicators
+        ]
+
+        # if self.alerts_as_notes:
+        #    bundle += [
+        #        self.create_note_stix(
+        #            sighting_id=sighting.id,
+        #            alert=hit,
+        #        ),
+        #    ]
+
+        self.helper.log_debug(f"Sightings end count: {len(sightings)}")
+        # TODO: Add note also for no hits:
+        # FIXME: update to use metadata?
+        #
+        # if self.create_obs_note:
+        #    bundle += [
+        #        self.create_summary_note(
+        #            result=result,
+        #            observable_id=entity["standard_id"],
+        #            sightings=sightings.values(),
+        #        )
+        #    ]
+
+        bundle += list(agents.values())
+        sent_count = len(
+            self.helper.send_stix2_bundle(
+                self.helper.stix2_create_bundle(bundle), update=True
+            )
+        )
+        return f"Sent {sent_count} STIX bundle(s) for worker import"
+
+    def entity_indicators(self, entity: dict) -> list[dict]:
+        return [
+            ind
+            for obj in entity["indicators"]
+            if (ind := self.helper.api.indicator.read(id=obj["id"])) is not None
+            if ind is not None
+        ]
+
     # TODO: when name is used, look for alias too?
     def _query_alerts(self, entity, stix_entity) -> dict | None:
         match entity["entity_type"]:
@@ -578,197 +781,6 @@ class WazuhConnector:
                     f'{entity["entity_type"]} is not a supported entity type'
                 )
 
-    def _process_message(self, data):
-        entity = None
-        if data["entity_id"].startswith("vulnerability--"):
-            entity = self.helper.api.vulnerability.read(id=data["entity_id"])
-        elif data["entity_id"].startswith("indicator--"):
-            entity = self.helper.api.indicator.read(id=data["entity_id"])
-        else:
-            entity = self.helper.api.stix_cyber_observable.read(id=data["entity_id"])
-
-        if entity is None:
-            raise ValueError("Observable not found")
-
-        # Figure out exactly what this does:
-        enrichment = self.helper.get_data_from_enrichment(data, entity)
-        stix_entity = enrichment["stix_entity"]
-        obs_indicators = self.entity_indicators(entity)
-        self.helper.log_debug(f"INDS: {obs_indicators}")
-
-        if not obs_indicators or self.create_obs_sightings:
-            self.helper.connector_logger.info(
-                "Observable has no indicators and WAZUH_CREATE_OBSERVABLE_SIGHTINGS is false"
-            )
-            return "Observable has no indicators"
-
-        self.helper.log_debug(f"ENTITY: {entity}")
-        self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
-
-        result = self._query_alerts(entity, stix_entity)
-        if result is None:
-            # This is not true. Revisit. Use exceptions?
-            return "Failed to query Wazuh API"
-
-        hits = result["hits"]["hits"]
-        if not hits:
-            return "No hits found"
-
-        sighter = self.siem_system
-        sightings_collector = SightingsCollector(observable_id=entity["standard_id"])
-        agents = {}
-        bundle = [self.author, self.siem_system]
-        for hit in hits:
-            try:
-                s = hit["_source"]
-                if (
-                    has(s, ["agent", "id"])
-                    and self.agents_as_systems
-                    # Do not create systems for master/worker, use the Wazuh system instead:
-                    and int(s["agent"]["id"])
-                ):
-                    agents[s["agent"]["id"]] = sighter = self.create_agent_stix(hit)
-
-                sightings_collector.add(
-                    timestamp=s["@timestamp"],
-                    sighter_id=sighter.id,
-                    alert=hit,
-                )
-
-            except (IndexError, KeyError):
-                raise OpenSearchClient.ParseError(
-                    "Failed to parse _source: Unexpected JSON structure"
-                )
-
-        # TODO: enrichment: create tool, like ssh, used in events like ssh logons
-
-        sightings = sightings_collector.collated()
-        for sighter_id, meta in sightings.items():
-            bundle += [self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)]
-            # FIXME: create notes for every alert
-
-        ###############
-        # hostname seems to be the target, not a system
-        # relation "uses" on attack pattern (mitre)
-        #
-        # Issues:
-        #   When creating alerts, double alerts is an issue when rule engine is enabled
-        #   The indicator is not available yet when working with the observable (timing issue)
-        # Setting: incident for sightings in obs
-        # Setting: Incident for sightings in obs with indicator
-        # Setting: One incident per alert rule.id
-        # Setting: Include rule ids, exclude rule ids
-        # Setting: Agents as hostnames
-        # Setting: Agent IP as observable
-        # Setting: max_ext_ref per rule_id, per search?. same for note
-        # Setting for limiting notes per sighting (0 disables notes for sightings)
-        # Setting for limiting ext.refs. per sighting (0 disables)
-        # Setting for adhering to detection, valid_until, min score(?)
-        #
-        # Create external reference to wazuh with the query that was ran (discover? custom columns?)
-        # Look into how playbooks can be used
-        # Add mitre connector and import tactics etc.
-        # Look through wazuh rules to find occurances of usernames, addresses etc.
-        ###############
-
-        # Group alerts by ID and see how many are unique. Setting: inncident per rule id?
-        # Add an enrichment function that creates mitre, tools etc for either when relevant fields are present or per rule id/group. Add a setting for each one (yaml only?)?
-        # tool:
-        #   uses → attack pattern
-
-        alerts_by_rule_id = sightings_collector.alerts_by_rule_id()
-        counts = {rule_id: len(alerts) for rule_id, alerts in alerts_by_rule_id.items()}
-        self.helper.log_debug(f"COUNTS: {counts}")
-
-        iname = f"Wazuh alert: something sighted in {sighter.name}"
-        incident = stix2.Incident(
-            id=Incident.generate_id(
-                iname, sightings_collector.last_sighting_timestamp()
-            ),
-            created=sightings_collector.last_sighting_timestamp(),
-            created_by_ref=self.author["id"],
-            confidence=self.confidence,
-            name=iname,
-            description="Beskrivelsen",
-        )
-        bundle += [
-            incident,
-            stix2.Relationship(
-                id=StixCoreRelationship.generate_id(
-                    "related-to", incident.id, entity["standard_id"]
-                ),
-                created=sightings_collector.last_sighting_timestamp(),
-                created_by_ref=self.author["id"],
-                confidence=self.confidence,
-                relationship_type="related-to",
-                source_ref=incident.id,
-                target_ref=entity["standard_id"],
-            ),
-            stix2.Relationship(
-                id=StixCoreRelationship.generate_id(
-                    "targets",
-                    incident.id,
-                    sighter.id,
-                ),
-                created=sightings_collector.last_sighting_timestamp(),
-                created_by_ref=self.author["id"],
-                confidence=self.confidence,
-                relationship_type="targets",
-                source_ref=incident.id,
-                target_ref=sighter.id,
-            ),
-        ]
-        bundle += [
-            stix2.Relationship(
-                id=StixCoreRelationship.generate_id(
-                    "indicates",
-                    ind["standard_id"],  # type: ignore
-                    incident.id,
-                ),
-                created=sightings_collector.last_sighting_timestamp(),
-                created_by_ref=self.author["id"],
-                confidence=self.confidence,
-                relationship_type="indicates",
-                source_ref=ind["standard_id"],  # type: ignore
-                target_ref=incident.id,
-            )
-            for ind in obs_indicators
-        ]
-
-        # if self.alerts_as_notes:
-        #    bundle += [
-        #        self.create_note_stix(
-        #            sighting_id=sighting.id,
-        #            alert=hit,
-        #        ),
-        #    ]
-
-        self.helper.log_debug(f"Sightings end count: {len(sightings)}")
-        # TODO: Add note also for no hits:
-        # FIXME: update to use metadata?
-        #
-        # if self.create_obs_note:
-        #    bundle += [
-        #        self.create_summary_note(
-        #            result=result,
-        #            observable_id=entity["standard_id"],
-        #            sightings=sightings.values(),
-        #        )
-        #    ]
-
-        bundle += list(agents.values())
-        sent_count = len(
-            self.helper.send_stix2_bundle(
-                self.helper.stix2_create_bundle(bundle), update=True
-            )
-        )
-        return f"Sent {sent_count} STIX bundle(s) for worker import"
-
-    def process_message(self, data):
-        # Use a helper class that ensures to always updates the running state of the connector, as well as incrementing the error count on uncaught exceptions:
-        with self.MetricHelper(self.helper.metric):
-            return self._process_message(data)
-
     def create_agent_stix(self, alert):
         s = alert["_source"]
         id = s["agent"]["id"]
@@ -872,15 +884,3 @@ class WazuhConnector:
             content=content,
             object_refs=[observable_id] + list(map(lambda s: s.id, sightings)),
         )
-
-    def entity_indicators(self, entity: dict) -> list[dict]:
-        return [
-            ind
-            for obj in entity["indicators"]
-            if (ind := self.helper.api.indicator.read(id=obj["id"])) is not None
-            if ind is not None
-        ]
-
-    def start(self):
-        self.helper.metric.state("idle")
-        self.helper.listen(self.process_message)
