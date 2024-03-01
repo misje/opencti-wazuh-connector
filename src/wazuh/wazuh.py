@@ -392,36 +392,45 @@ class WazuhConnector:
 
     def _process_message(self, data):
         entity = None
+        entity_type = "observable"
         if data["entity_id"].startswith("vulnerability--"):
             entity = self.helper.api.vulnerability.read(id=data["entity_id"])
-        elif data["entity_id"].startswith("indicator--"):
-            entity = self.helper.api.indicator.read(id=data["entity_id"])
+            entity_type = "vulnerability"
+            # It doesn't make sense to support indicators, having to parse all sorts of patterns:
+            # elif data["entity_id"].startswith("indicator--"):
+            #    entity = self.helper.api.indicator.read(id=data["entity_id"])
         else:
             entity = self.helper.api.stix_cyber_observable.read(id=data["entity_id"])
 
         if entity is None:
             raise ValueError("Entity/observable not found")
 
+        # Remove:
+        self.helper.log_debug(f"ENTITY: {entity}")
+
         # FIXME: buggy if amber <= red?
         if not tlp_allowed(entity, self.max_tlp):
             raise ValueError("Entity ignored because TLP not allowed")
 
-        # Figure out exactly what this does:
+        # Figure out exactly what this does (change id format?);
         enrichment = self.helper.get_data_from_enrichment(data, entity)
         stix_entity = enrichment["stix_entity"]
+        # Remove:
+        self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
+
         obs_indicators = self.entity_indicators(entity)
         # Remove:
         self.helper.log_debug(f"INDS: {obs_indicators}")
 
-        if not obs_indicators and not self.create_obs_sightings:
+        if (
+            entity_type == "observable"
+            and not obs_indicators
+            and not self.create_obs_sightings
+        ):
             self.helper.connector_logger.info(
                 "Observable has no indicators and WAZUH_CREATE_OBSERVABLE_SIGHTINGS is false"
             )
             return "Observable has no indicators"
-
-        # Remove:
-        self.helper.log_debug(f"ENTITY: {entity}")
-        self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
 
         result = self._query_alerts(entity, stix_entity)
         if result is None:
@@ -594,6 +603,8 @@ class WazuhConnector:
         return f"Sent {sent_count} STIX bundle(s) for worker import"
 
     def entity_indicators(self, entity: dict) -> list[dict]:
+        if "indicators" not in entity:
+            return []
         return [
             ind
             for obj in entity["indicators"]
