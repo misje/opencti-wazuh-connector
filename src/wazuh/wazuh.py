@@ -6,6 +6,7 @@ import re
 from .opensearch import OpenSearchClient
 from pathlib import Path
 from pycti import (
+    AttackPattern,
     Identity,
     Incident,
     Note,
@@ -92,6 +93,22 @@ class SightingsCollector:
 
     def last_sighting_timestamp(self):
         return self._latest
+
+    def highest_rule_level(self):
+        return max(
+            [
+                alert["_source"]["rule"]["level"]
+                for sighting in self._sightings.values()
+                for alerts in sighting["alerts"].values()
+                for alert in alerts
+            ]
+        )
+
+    def first_seen(self):
+        return min([sighting["first_seen"] for sighting in self._sightings.values()])
+
+    def last_seen(self):
+        return max([sighting["last_seen"] for sighting in self._sightings.values()])
 
     def alerts_by_rule_id(self):
         """
@@ -220,6 +237,18 @@ def tlp_allowed(entity, max_tlp):
         for tlp in (mdef["standard_id"],)
         if mdef["definition_type"] == "TLP"
     )
+
+
+def rule_level_to_severity(level: int):
+    match level:
+        case level if level in range(7, 10):
+            return "medium"
+        case level if level in range(11, 13):
+            return "high"
+        case level if level in range(14, 15):
+            return "critical"
+        case _:
+            return "low"
 
 
 class WazuhConnector:
@@ -528,10 +557,16 @@ class WazuhConnector:
             ),
             created=sightings_collector.last_sighting_timestamp(),
             **self.stix_common_attrs,
+            incident_type="alert",
             name=iname,
             description="Beskrivelsen",
-            # first_seen, last_seen, type, severity, objective
+            allow_custom=True,
+            # The following are extensions:
+            severity=rule_level_to_severity(sightings_collector.highest_rule_level()),
+            first_seen=sightings_collector.first_seen(),
+            last_seen=sightings_collector.last_seen(),
         )
+        # TODO: add summary note, and note for each rule_id (include level, rule_id, description) all from latest
         bundle += [
             incident,
             stix2.Relationship(
@@ -572,6 +607,38 @@ class WazuhConnector:
             )
             for ind in obs_indicators
         ]
+
+        # TEST: extract mitre info:
+        for alerts in alerts_by_rule_id.values():
+            mitre_ids = [
+                id
+                for alert in alerts[0:1]
+                for rule in (alert["_source"]["rule"],)
+                if "mitre" in rule
+                for id in rule["mitre"]["id"]
+            ]
+            self.helper.log_debug(f"MITRE IDS: {mitre_ids}")
+            for mitre_id in mitre_ids:
+                pattern = stix2.AttackPattern(
+                    id=AttackPattern.generate_id(mitre_id, mitre_id),
+                    name=mitre_id,
+                    # custom_properties={"x_mitre_id": mitre_id},
+                    allow_custom=True,
+                    x_mitre_id=mitre_id,
+                )
+                bundle += [
+                    pattern,
+                    stix2.Relationship(
+                        id=StixCoreRelationship.generate_id(
+                            "uses", incident.id, pattern.id
+                        ),
+                        created=alerts[0]["_source"]["@timestamp"],
+                        **self.stix_common_attrs,
+                        relationship_type="uses",
+                        source_ref=incident.id,
+                        target_ref=pattern.id,
+                    ),
+                ]
 
         # if self.alerts_as_notes:
         #    bundle += [
