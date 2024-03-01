@@ -20,6 +20,7 @@ from hashlib import sha256
 from datetime import datetime
 from urllib.parse import urljoin
 from os.path import basename
+import bisect
 
 # TODO:
 #  metrics: run_coiunt, bundle_send, record_send, error_count, client_error_count
@@ -56,6 +57,7 @@ class SightingsCollector:
         """
         Add or update metadata for sightings of an observable in sighter_id
         """
+        rule_id = alert["_source"]["rule"]["id"]
         if sighter_id in self._sightings:
             self._sightings[sighter_id]["first_seen"] = min(
                 self._sightings[sighter_id]["first_seen"], timestamp
@@ -64,7 +66,15 @@ class SightingsCollector:
                 self._sightings[sighter_id]["last_seen"], timestamp
             )
             self._sightings[sighter_id]["count"] += 1
-            self._sightings[sighter_id]["alerts"][timestamp] = alert
+            if rule_id in self._sightings[sighter_id]["alerts"]:
+                bisect.insort(
+                    self._sightings[sighter_id]["alerts"][rule_id],
+                    alert,
+                    key=lambda a: a["_source"]["@timestamp"],
+                )
+            else:
+                self._sightings[sighter_id]["alerts"][rule_id] = [alert]
+
             if timestamp > self._latest:
                 self._latest = timestamp
         else:
@@ -73,7 +83,7 @@ class SightingsCollector:
                 "last_seen": timestamp,
                 "count": 1,
                 "observable_id": self._observable_id,
-                "alerts": {timestamp: alert},
+                "alerts": {rule_id: [alert]},
             }
             self._latest = timestamp
 
@@ -91,13 +101,12 @@ class SightingsCollector:
         Example: { "1234": [{…}, {…}] "1235": […] }
         """
         return {
-            rule_id: [
-                alert for alert in alerts if alert["_source"]["rule"]["id"] == rule_id
-            ]
+            rule_id: sorted(
+                alerts,
+                key=lambda a: a["_source"]["@timestamp"],
+            )
             for sighting in self._sightings.values()
-            for alerts in (sighting["alerts"].values(),)
-            for alert in alerts
-            for rule_id in (alert["_source"]["rule"]["id"],)
+            for rule_id, alerts in sighting["alerts"].items()
         }
 
 
@@ -393,6 +402,7 @@ class WazuhConnector:
         if entity is None:
             raise ValueError("Entity/observable not found")
 
+        # FIXME: buggy if amber <= red?
         if not tlp_allowed(entity, self.max_tlp):
             raise ValueError("Entity ignored because TLP not allowed")
 
@@ -458,6 +468,8 @@ class WazuhConnector:
 
         # TODO: enrichment: create tool, like ssh, used in events like ssh logons
 
+        # Up to N ext refs. per rule.id per sighting
+        # Up to N notes per rule.id per sighting
         sightings = sightings_collector.collated()
         for sighter_id, meta in sightings.items():
             bundle += [self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)]
@@ -600,7 +612,7 @@ class WazuhConnector:
                         stix_entity, ["hashes"], ["SHA-256", "SHA-1", "MD5"]
                     )
                 ):
-                    # Filanem: smbd.filename = name, smbd.operation = pwrite_send? etc.
+                    # Filename: smbd.filename = name, smbd.operation = pwrite_send? etc.
                     return self.client.search_multi_glob(
                         # TODO: worthwhile? Add all permutations of slash types and fields? Not sure if regex is the way to go
                         # remember, fields here cannot have globs: raise if they do?
@@ -743,7 +755,10 @@ class WazuhConnector:
                                 "fields": fields,
                             }
                         },
-                        must_not={"match": {"agent.name": hostname}},
+                        # TODO: configurable?:
+                        # data.audit.exe /usr/bin/ssh
+                        # data.audit.execve.a* = hostname
+                        # must_not={"match": {"predecoder.hostname": hostname}},
                     )
             case "Url":
                 return self.client.search_multi(
@@ -863,6 +878,7 @@ class WazuhConnector:
         )
 
     def create_sighting_stix(self, *, sighter_id: str, metadata: dict):
+        ext_ref_count = 0
         return stix2.Sighting(
             id=StixSightingRelationship.generate_id(
                 metadata["observable_id"],
@@ -870,10 +886,6 @@ class WazuhConnector:
                 metadata["first_seen"],
                 metadata["last_seen"],
             ),
-            # TODO: use this created date or real date?:
-            # created=sighted_at,
-            # TODO: put modified to created to avoid default NOW? Also elsewhere, in that case
-            # modified=sighted_at,
             **self.stix_common_attrs,
             first_seen=metadata["first_seen"],
             last_seen=metadata["last_seen"],
@@ -882,19 +894,22 @@ class WazuhConnector:
             # Use a dummy indicator since this field is required:
             sighting_of_ref=self.DUMMY_INDICATOR_ID,
             custom_properties={"x_opencti_sighting_of_ref": metadata["observable_id"]},
-            # TODO: create once and
             external_references=[
-                # TODO: timestamp and ordering? the key in 'alerts' is a timestamp:
                 stix2.ExternalReference(
                     source_name="Wazuh",
-                    description=f"Wazuh alert ID {alert['_id']}/{s['id']}: {s['rule']['description']}",
+                    description=f"Wazuh alert ID {alert['_id']}/{s['id']}:\n\n{s['rule']['id']}: {s['rule']['description']}",
                     url=urljoin(
                         self.app_url,  # type: ignore
                         f'app/discover#/context/wazuh-alerts-*/{alert["_id"]}?_a=(columns:!(_source),filters:!())',
                     ),
                 )
-                for alert in metadata["alerts"].values()
+                for alerts in metadata["alerts"].values()
+                for alert in alerts[
+                    -1:
+                ]  # TODO: setting: max_sighting_extrefs per rule_id
                 for s in (alert["_source"],)
+                if (ext_ref_count := ext_ref_count + 1)
+                <= 5  # TODO: replace with config: max_sighting_extrefs
             ],
         )
 
