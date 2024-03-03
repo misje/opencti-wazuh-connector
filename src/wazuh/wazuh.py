@@ -234,7 +234,7 @@ def tlp_allowed(entity, max_tlp):
     return all(
         OpenCTIConnectorHelper.check_max_tlp(tlp, max_tlp)
         for mdef in entity["objectMarking"]
-        for tlp in (mdef["standard_id"],)
+        for tlp in (mdef["definition"],)
         if mdef["definition_type"] == "TLP"
     )
 
@@ -268,9 +268,11 @@ class WazuhConnector:
 
     def __init__(self):
         self.CONNECTOR_VERSION: Final[str] = "0.0.1"
+        # TODO: it appears that the dummy indicator has to exist for external references to work:
         self.DUMMY_INDICATOR_ID: Final[
             str
-        ] = "indicator--220d5816-3786-5421-a6d3-fb149a0df54e"  # "indicator--c1034564-a9fb-429b-a1c1-c80116cc8e1e"
+            # ] = "indicator--220d5816-3786-5421-a6d3-fb149a0df54e"  # "indicator--c1034564-a9fb-429b-a1c1-c80116cc8e1e"
+        ] = "indicator--1195bcd2-67ee-563a-83f8-29ebd9eacec7"
 
         config_file_path = Path(__file__).parent.parent.resolve() / "config.yml"
         config = (
@@ -437,8 +439,8 @@ class WazuhConnector:
         # Remove:
         self.helper.log_debug(f"ENTITY: {entity}")
 
-        # FIXME: buggy if amber <= red?
         if not tlp_allowed(entity, self.max_tlp):
+            self.helper.connector_logger.info(f"max tlp: {self.max_tlp}")
             raise ValueError("Entity ignored because TLP not allowed")
 
         # Figure out exactly what this does (change id format?);
@@ -467,7 +469,7 @@ class WazuhConnector:
             # otherwise), not all entities contains information that is
             # searchable in Wazuh. There may also not be enough information to
             # perform a search that is targeted enough. This is not an error:
-            return "Entity has no queryable data"
+            return f"{entity['entity_type']} has no queryable data"
 
         hits = result["hits"]["hits"]
         if not hits:
@@ -691,11 +693,13 @@ class WazuhConnector:
                     )
                 ):
                     # Filename: smbd.filename = name, smbd.operation = pwrite_send? etc.
+                    # size? use size too if so
                     return self.client.search_multi_glob(
                         # TODO: worthwhile? Add all permutations of slash types and fields? Not sure if regex is the way to go
                         # remember, fields here cannot have globs: raise if they do?
                         fields=["syscheck.path"],
                         value="*/" + stix_entity["name"],
+                        # x_opencti_additional_names
                     )
                 elif has(stix_entity, ["hashes", "SHA-256"]):
                     return self.client.search_multi(
@@ -706,9 +710,6 @@ class WazuhConnector:
                         fields=["*sha1*"], value=stix_entity["hashes"]["SHA-1"]
                     )
                 else:
-                    self.helper.connector_logger.info(
-                        "StixFile/Artifact has no queryable information"
-                    )
                     return None
 
             # TODO: add setting that only looks up public addresses? (GeoLocation.countr_name exists?) Tested, not consistent enough
@@ -807,9 +808,6 @@ class WazuhConnector:
                 if query:
                     return self.client.search(query)
                 else:
-                    self.helper.connector_logger.info(
-                        "Network-Traffic has no queryable information"
-                    )
                     return None
             # TODO: or remove from docker-compose:
             # case "Email-Addr":
@@ -912,9 +910,6 @@ class WazuhConnector:
                         + arg_queries
                     )
                 else:
-                    self.helper.connector_logger.info(
-                        "Process has no queryable information"
-                    )
                     return None
             # case "Software":
             case "Vulnerability":
@@ -956,6 +951,7 @@ class WazuhConnector:
         )
 
     def create_sighting_stix(self, *, sighter_id: str, metadata: dict):
+        # TODO: add note too (optional)
         ext_ref_count = 0
         return stix2.Sighting(
             id=StixSightingRelationship.generate_id(
@@ -974,8 +970,17 @@ class WazuhConnector:
             custom_properties={"x_opencti_sighting_of_ref": metadata["observable_id"]},
             external_references=[
                 stix2.ExternalReference(
-                    source_name="Wazuh",
-                    description=f"Wazuh alert ID {alert['_id']}/{s['id']}:\n\n{s['rule']['id']}: {s['rule']['description']}",
+                    source_name="Wazuh alert",
+                    # TODO: move into helper func. that creates this data with various levels of detail. Add search information too
+                    description=(
+                        "|Key|Value|\n"
+                        "|---|---|\n"
+                        f"|Rule ID|{s['rule']['id']}|\n"
+                        f"|Rule desc.|{s['rule']['description']}|\n"
+                        f"|Rule level|{s['rule']['level']}|\n"
+                        f"|Alert ID|{alert['_id']}/{s['id']}|\n"
+                        # TODO: alert rule count?
+                    ),
                     url=urljoin(
                         self.app_url,  # type: ignore
                         f'app/discover#/context/wazuh-alerts-*/{alert["_id"]}?_a=(columns:!(_source),filters:!())',
