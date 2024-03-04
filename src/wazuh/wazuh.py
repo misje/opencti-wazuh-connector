@@ -367,6 +367,34 @@ class WazuhConnector:
             config,
             default=True,
         )
+        self.max_extrefs = (
+            maxrefs
+            if isinstance(
+                maxrefs := get_config_variable(
+                    "WAZUH_SIGHTING_MAX_EXTREFS",
+                    ["wazuh", "sighting_max_extrefs"],
+                    config,
+                    isNumber=True,
+                    default=10,
+                ),
+                int,
+            )
+            else 10
+        )
+        self.max_extrefs_per_alert_rule = (
+            maxrefs
+            if isinstance(
+                maxrefs := get_config_variable(
+                    "WAZUH_SIGHTING_MAX_EXTREFS_PER_ALERT_RULE",
+                    ["wazuh", "sighting_max_extrefs_per_alert_rule"],
+                    config,
+                    isNumber=True,
+                    default=1,
+                ),
+                int,
+            )
+            else 1
+        )
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
             "confidence": self.confidence,
@@ -987,14 +1015,16 @@ class WazuhConnector:
                     ),
                 )
                 for alerts in metadata["alerts"].values()
-                for alert in alerts[
-                    -1:
-                ]  # TODO: setting: max_sighting_extrefs per rule_id
+                # In addition to limit the total number of external references,
+                # also limit them per alert rule (pick the last N alerts to get
+                # the latest alerts):
+                for alert in alerts[-self.max_extrefs_per_alert_rule :]
                 for s in (alert["_source"],)
-                if (ext_ref_count := ext_ref_count + 1)
-                <= 5  # TODO: replace with config: max_sighting_extrefs
+                if (ext_ref_count := ext_ref_count + 1) <= self.max_extrefs
             ],
         )
+        # Add summary note?
+        # Add alert as note: per alert, per ID
 
     def create_note_stix(self, *, sighting_id, alert):
         s = alert["_source"]
