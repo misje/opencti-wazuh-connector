@@ -259,6 +259,18 @@ def rule_level_to_severity(level: int):
             return "low"
 
 
+def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] = []):
+    s = alert["_source"]
+    return (
+        "|Key|Value|\n"
+        "|---|---|\n"
+        f"|Rule ID|{s['rule']['id']}|\n"
+        f"|Rule desc.|{s['rule']['description']}|\n"
+        f"|Rule level|{s['rule']['level']}|\n"
+        f"|Alert ID|{alert['_id']}/{s['id']}|\n"
+    ) + "".join(f"|{key}|{value}|\n" for key, value in additional_rows)
+
+
 class WazuhConnector:
     class MetricHelper:
         def __init__(self, metric: OpenCTIMetricHandler):
@@ -395,6 +407,34 @@ class WazuhConnector:
                 maxrefs := get_config_variable(
                     "WAZUH_SIGHTING_MAX_EXTREFS_PER_ALERT_RULE",
                     ["wazuh", "sighting_max_extrefs_per_alert_rule"],
+                    config,
+                    isNumber=True,
+                    default=1,
+                ),
+                int,
+            )
+            else 1
+        )
+        self.max_notes = (
+            maxrefs
+            if isinstance(
+                maxrefs := get_config_variable(
+                    "WAZUH_SIGHTING_MAX_NOTES",
+                    ["wazuh", "sighting_max_notes"],
+                    config,
+                    isNumber=True,
+                    default=10,
+                ),
+                int,
+            )
+            else 10
+        )
+        self.max_notes_per_alert_rule = (
+            maxrefs
+            if isinstance(
+                maxrefs := get_config_variable(
+                    "WAZUH_SIGHTING_MAX_NOTES_PER_ALERT_RULE",
+                    ["wazuh", "sighting_max_notes_per_alert_rule"],
                     config,
                     isNumber=True,
                     default=1,
@@ -548,8 +588,10 @@ class WazuhConnector:
         # Up to N notes per rule.id per sighting
         sightings = sightings_collector.collated()
         for sighter_id, meta in sightings.items():
-            bundle += [self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)]
-            # FIXME: create notes for every alert
+            sighting = self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)
+            bundle += [sighting] + self.create_sighting_alert_notes(
+                sighting_id=sighting.id, metadata=meta
+            )
 
         ###############
         # hostname seems to be the target, not a system
@@ -989,8 +1031,6 @@ class WazuhConnector:
     def create_sighting_stix(
         self, *, sighter_id: str, metadata: SightingsCollector.Meta
     ):
-        # TODO: add note too (optional)
-        ext_ref_count = 0
         return stix2.Sighting(
             id=StixSightingRelationship.generate_id(
                 metadata.observable_id,
@@ -1006,50 +1046,98 @@ class WazuhConnector:
             # Use a dummy indicator since this field is required:
             sighting_of_ref=self.DUMMY_INDICATOR_ID,
             custom_properties={"x_opencti_sighting_of_ref": metadata.observable_id},
-            external_references=[
-                stix2.ExternalReference(
-                    source_name="Wazuh alert",
-                    # TODO: move into helper func. that creates this data with various levels of detail. Add search information too
-                    description=(
-                        "|Key|Value|\n"
-                        "|---|---|\n"
-                        f"|Rule ID|{s['rule']['id']}|\n"
-                        f"|Rule desc.|{s['rule']['description']}|\n"
-                        f"|Rule level|{s['rule']['level']}|\n"
-                        f"|Alert ID|{alert['_id']}/{s['id']}|\n"
-                        # TODO: alert rule count?
-                    ),
-                    url=urljoin(
-                        self.app_url,  # type: ignore
-                        f'app/discover#/context/wazuh-alerts-*/{alert["_id"]}?_a=(columns:!(_source),filters:!())',
-                    ),
-                )
-                for alerts in metadata.alerts.values()
-                # In addition to limit the total number of external references,
-                # also limit them per alert rule (pick the last N alerts to get
-                # the latest alerts):
-                for alert in alerts[-self.max_extrefs_per_alert_rule :]
-                for s in (alert["_source"],)
-                if (ext_ref_count := ext_ref_count + 1) <= self.max_extrefs
-            ],
+            external_references=self.create_sighting_ext_refs(metadata=metadata),
         )
         # Add summary note?
         # Add alert as note: per alert, per ID
 
-    def create_note_stix(self, *, sighting_id, alert):
+    def create_sighting_ext_refs(self, *, metadata: SightingsCollector.Meta):
+        ext_ref_count = 0
+        return [
+            self.create_sighting_ext_ref(alert=alert, limit_info=capped_at)
+            for alerts in metadata.alerts.values()
+            # In addition to limit the total number of external references,
+            # also limit them per alert rule (pick the last N alerts to get
+            # the latest alerts):
+            for i, alert in enumerate(alerts[-self.max_extrefs_per_alert_rule :])
+            for capped_at in (
+                (i + 1, len(alerts), self.max_extrefs_per_alert_rule)
+                if len(alerts) > self.max_extrefs_per_alert_rule
+                else None,
+            )
+            if (ext_ref_count := ext_ref_count + 1) <= self.max_extrefs
+        ]
+
+    def create_sighting_ext_ref(
+        self, *, alert, limit_info: tuple[int, int, int] | None
+    ):
+        capped_info = (
+            [
+                (
+                    str("Count"),
+                    f"{limit_info[0]} of {limit_info[1]} (limited to {limit_info[2]})",
+                )
+            ]
+            if limit_info
+            else []
+        )
+        return stix2.ExternalReference(
+            source_name="Wazuh alert",
+            description=alert_md_table(alert, capped_info),
+            url=urljoin(
+                self.app_url,  # type: ignore
+                f'app/discover#/context/wazuh-alerts-*/{alert["_id"]}?_a=(columns:!(_source),filters:!())',
+            ),
+        )
+
+    def create_sighting_alert_notes(
+        self, *, sighting_id: str, metadata: SightingsCollector.Meta
+    ):
+        note_count = 0
+        return [
+            self.create_note_stix(
+                sighting_id=sighting_id, alert=alert, limit_info=capped_at
+            )
+            for alerts in metadata.alerts.values()
+            # In addition to limit the total number of external references,
+            # also limit them per alert rule (pick the last N alerts to get
+            # the latest alerts):
+            for i, alert in enumerate(alerts[-self.max_notes_per_alert_rule :])
+            for capped_at in (
+                (i + 1, len(alerts), self.max_notes_per_alert_rule)
+                if len(alerts) > self.max_notes_per_alert_rule
+                else None,
+            )
+            if (note_count := note_count + 1) <= self.max_notes
+        ]
+
+    def create_note_stix(
+        self, *, sighting_id, alert, limit_info: tuple[int, int, int] | None
+    ):
         s = alert["_source"]
         sighted_at = s["@timestamp"]
         alert_json = json.dumps(s, indent=2)
+        capped_info = (
+            [
+                (
+                    str("Count"),
+                    f"{limit_info[0]} of {limit_info[1]} (limited to {limit_info[2]})",
+                )
+            ]
+            if limit_info
+            else []
+        )
         return stix2.Note(
             id=Note.generate_id(
                 created=sighted_at,
                 content=alert_json,
             ),
-            # TODO: use this created date or real date?:
             created=sighted_at,
             **self.stix_common_attrs,
-            abstract=f"""Wazuh alert "{s['rule']['description']}" (index {alert["_index"]}) for sighting at {sighted_at}""",
-            content=f"```\n{alert_json}\n" "",
+            abstract=f"""Wazuh alert "{s['rule']['description']}" for sighting at {sighted_at}""",
+            content=alert_md_table(alert, capped_info)
+            + "\n\n"
+            + f"```json\n{alert_json}\n",
             object_refs=sighting_id,
         )
 
