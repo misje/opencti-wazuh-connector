@@ -3,6 +3,7 @@ import stix2
 import yaml
 import dateparser
 import re
+import bisect
 from .opensearch import OpenSearchClient
 from pathlib import Path
 from pycti import (
@@ -21,7 +22,7 @@ from hashlib import sha256
 from datetime import datetime
 from urllib.parse import urljoin
 from os.path import basename
-import bisect
+from pydantic import BaseModel
 
 # TODO:
 #  metrics: run_coiunt, bundle_send, record_send, error_count, client_error_count
@@ -48,8 +49,15 @@ class SightingsCollector:
     first_seen, last_seen and count accordingly.
     """
 
+    class Meta(BaseModel):
+        observable_id: str
+        first_seen: str
+        last_seen: str
+        count: int
+        alerts: dict[str, list[dict]]
+
     def __init__(self, *, observable_id: str):
-        self._sightings = {}
+        self._sightings: dict[str, SightingsCollector.Meta] = {}
         # This module will only be used for one SCO at a time:
         self._observable_id = observable_id
         self._latest = ""
@@ -60,32 +68,32 @@ class SightingsCollector:
         """
         rule_id = alert["_source"]["rule"]["id"]
         if sighter_id in self._sightings:
-            self._sightings[sighter_id]["first_seen"] = min(
-                self._sightings[sighter_id]["first_seen"], timestamp
+            self._sightings[sighter_id].first_seen = min(
+                self._sightings[sighter_id].first_seen, timestamp
             )
-            self._sightings[sighter_id]["last_seen"] = max(
-                self._sightings[sighter_id]["last_seen"], timestamp
+            self._sightings[sighter_id].last_seen = max(
+                self._sightings[sighter_id].last_seen, timestamp
             )
-            self._sightings[sighter_id]["count"] += 1
-            if rule_id in self._sightings[sighter_id]["alerts"]:
+            self._sightings[sighter_id].count += 1
+            if rule_id in self._sightings[sighter_id].alerts:
                 bisect.insort(
-                    self._sightings[sighter_id]["alerts"][rule_id],
+                    self._sightings[sighter_id].alerts[rule_id],
                     alert,
                     key=lambda a: a["_source"]["@timestamp"],
                 )
             else:
-                self._sightings[sighter_id]["alerts"][rule_id] = [alert]
+                self._sightings[sighter_id].alerts[rule_id] = [alert]
 
             if timestamp > self._latest:
                 self._latest = timestamp
         else:
-            self._sightings[sighter_id] = {
-                "first_seen": timestamp,
-                "last_seen": timestamp,
-                "count": 1,
-                "observable_id": self._observable_id,
-                "alerts": {rule_id: [alert]},
-            }
+            self._sightings[sighter_id] = SightingsCollector.Meta(
+                observable_id=self._observable_id,
+                first_seen=timestamp,
+                last_seen=timestamp,
+                count=1,
+                alerts={rule_id: [alert]},
+            )
             self._latest = timestamp
 
     def collated(self):
@@ -99,16 +107,16 @@ class SightingsCollector:
             [
                 alert["_source"]["rule"]["level"]
                 for sighting in self._sightings.values()
-                for alerts in sighting["alerts"].values()
+                for alerts in sighting.alerts.values()
                 for alert in alerts
             ]
         )
 
     def first_seen(self):
-        return min([sighting["first_seen"] for sighting in self._sightings.values()])
+        return min([sighting.first_seen for sighting in self._sightings.values()])
 
     def last_seen(self):
-        return max([sighting["last_seen"] for sighting in self._sightings.values()])
+        return max([sighting.last_seen for sighting in self._sightings.values()])
 
     def alerts_by_rule_id(self):
         """
@@ -123,7 +131,7 @@ class SightingsCollector:
                 key=lambda a: a["_source"]["@timestamp"],
             )
             for sighting in self._sightings.values()
-            for rule_id, alerts in sighting["alerts"].items()
+            for rule_id, alerts in sighting.alerts.items()
         }
 
 
@@ -978,24 +986,26 @@ class WazuhConnector:
             description=f"Wazuh agent ID {id}",
         )
 
-    def create_sighting_stix(self, *, sighter_id: str, metadata: dict):
+    def create_sighting_stix(
+        self, *, sighter_id: str, metadata: SightingsCollector.Meta
+    ):
         # TODO: add note too (optional)
         ext_ref_count = 0
         return stix2.Sighting(
             id=StixSightingRelationship.generate_id(
-                metadata["observable_id"],
+                metadata.observable_id,
                 sighter_id,
-                metadata["first_seen"],
-                metadata["last_seen"],
+                metadata.first_seen,
+                metadata.last_seen,
             ),
             **self.stix_common_attrs,
-            first_seen=metadata["first_seen"],
-            last_seen=metadata["last_seen"],
-            count=metadata["count"],
+            first_seen=metadata.first_seen,
+            last_seen=metadata.last_seen,
+            count=metadata.count,
             where_sighted_refs=[sighter_id],
             # Use a dummy indicator since this field is required:
             sighting_of_ref=self.DUMMY_INDICATOR_ID,
-            custom_properties={"x_opencti_sighting_of_ref": metadata["observable_id"]},
+            custom_properties={"x_opencti_sighting_of_ref": metadata.observable_id},
             external_references=[
                 stix2.ExternalReference(
                     source_name="Wazuh alert",
@@ -1014,7 +1024,7 @@ class WazuhConnector:
                         f'app/discover#/context/wazuh-alerts-*/{alert["_id"]}?_a=(columns:!(_source),filters:!())',
                     ),
                 )
-                for alerts in metadata["alerts"].values()
+                for alerts in metadata.alerts.values()
                 # In addition to limit the total number of external references,
                 # also limit them per alert rule (pick the last N alerts to get
                 # the latest alerts):
