@@ -23,10 +23,8 @@ from datetime import datetime
 from urllib.parse import urljoin
 from os.path import basename
 from pydantic import BaseModel
+from functools import cache
 
-# TODO:
-#  metrics: run_coiunt, bundle_send, record_send, error_count, client_error_count
-#  state: idle, running, stopped
 #
 # Populate agents using agent metadata?
 # SETTING: agent_labels: comma-separated list of labels to attach to agents
@@ -40,6 +38,7 @@ from pydantic import BaseModel
 # STIX_ID_REGEX = re.compile(f".+--{UUID_RE}", re.IGNORECASE)
 
 
+# TODO: Improve logic, avoid all recalculations (unless cache fixes this?)
 class SightingsCollector:
     """
     Helper module to reduce the number of sightings to one instance per SDO
@@ -61,6 +60,14 @@ class SightingsCollector:
         # This module will only be used for one SCO at a time:
         self._observable_id = observable_id
         self._latest = ""
+
+    @cache
+    def _alerts_timestamps_sorted(self, rule_id: str):
+        return [
+            alert["_source"]["@timestamp"]
+            for sighting in self._sightings.values()
+            for alert in sighting.alerts.get(rule_id, [])
+        ]
 
     def add(self, *, timestamp: str, sighter_id: str, alert: dict):
         """
@@ -96,12 +103,16 @@ class SightingsCollector:
             )
             self._latest = timestamp
 
+    def observable_id(self):
+        return self._observable_id
+
     def collated(self):
         return self._sightings
 
     def last_sighting_timestamp(self):
         return self._latest
 
+    @cache
     def highest_rule_level(self):
         return max(
             [
@@ -112,12 +123,21 @@ class SightingsCollector:
             ]
         )
 
-    def first_seen(self):
-        return min([sighting.first_seen for sighting in self._sightings.values()])
+    @cache
+    def first_seen(self, rule_id: str | None = None):
+        if rule_id is None:
+            return min([sighting.first_seen for sighting in self._sightings.values()])
+        else:
+            return min(self._alerts_timestamps_sorted(rule_id))
 
-    def last_seen(self):
-        return max([sighting.last_seen for sighting in self._sightings.values()])
+    @cache
+    def last_seen(self, rule_id: str | None = None):
+        if rule_id is None:
+            return max([sighting.last_seen for sighting in self._sightings.values()])
+        else:
+            return max(self._alerts_timestamps_sorted(rule_id))
 
+    @cache
     def alerts_by_rule_id(self):
         """
         Return a dict with alerts grouped by rule_id
@@ -443,6 +463,12 @@ class WazuhConnector:
             )
             else 1
         )
+        self.create_sighting_summary = get_config_variable(
+            "WAZUH_SIGHTING_SUMMARY_NOTE",
+            ["wazuh", "sighting_summary_note"],
+            config,
+            default=True,
+        )  # self.create_incident = "PER_QUERY"
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
             "confidence": self.confidence,
@@ -584,11 +610,10 @@ class WazuhConnector:
 
         # TODO: enrichment: create tool, like ssh, used in events like ssh logons
 
-        # Up to N ext refs. per rule.id per sighting
-        # Up to N notes per rule.id per sighting
-        sightings = sightings_collector.collated()
-        for sighter_id, meta in sightings.items():
+        sighting_ids = []
+        for sighter_id, meta in sightings_collector.collated().items():
             sighting = self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)
+            sighting_ids.append(sighting.id)
             bundle += [sighting] + self.create_sighting_alert_notes(
                 sighting_id=sighting.id, metadata=meta
             )
@@ -628,7 +653,18 @@ class WazuhConnector:
         counts = {rule_id: len(alerts) for rule_id, alerts in alerts_by_rule_id.items()}
         self.helper.log_debug(f"COUNTS: {counts}")
 
-        # Incident per sighting, per system, per rule_id etc. …?
+        if self.create_sighting_summary:
+            bundle += [
+                self.create_summary_note(
+                    result=result,
+                    sightings_meta=sightings_collector,
+                    sightings_ids=sighting_ids,
+                )
+            ]
+
+        # TODO: PER_SIGHTING, PER_ALERT, PER_ALERT_RULE. Add mitre, other
+        # enrichments. Summary note. Add new first_seen/last_seen per rule id
+        # in summary note. Ensure summary note is at top (latest_hit timetamp?)
 
         iname = f"Wazuh alert: something sighted in {sighter.name}"
         incident = stix2.Incident(
@@ -646,7 +682,6 @@ class WazuhConnector:
             first_seen=sightings_collector.first_seen(),
             last_seen=sightings_collector.last_seen(),
         )
-        # TODO: add summary note, and note for each rule_id (include level, rule_id, description) all from latest
         bundle += [
             incident,
             stix2.Relationship(
@@ -720,27 +755,6 @@ class WazuhConnector:
                     ),
                 ]
 
-        # if self.alerts_as_notes:
-        #    bundle += [
-        #        self.create_note_stix(
-        #            sighting_id=sighting.id,
-        #            alert=hit,
-        #        ),
-        #    ]
-
-        self.helper.log_debug(f"Sightings end count: {len(sightings)}")
-        # TODO: Add note also for no hits:
-        # FIXME: update to use metadata?
-        #
-        # if self.create_obs_note:
-        #    bundle += [
-        #        self.create_summary_note(
-        #            result=result,
-        #            observable_id=entity["standard_id"],
-        #            sightings=sightings.values(),
-        #        )
-        #    ]
-
         bundle += list(agents.values())
         sent_count = len(
             self.helper.send_stix2_bundle(
@@ -759,6 +773,7 @@ class WazuhConnector:
             if ind is not None
         ]
 
+    # TODO: filter on alert rule level > x!
     # TODO: when name is used, look for alias too?
     def _query_alerts(self, entity, stix_entity) -> dict | None:
         match entity["entity_type"]:
@@ -998,6 +1013,7 @@ class WazuhConnector:
                     }
                 )
             case "User-Account":
+                # search user_id too
                 return self.client.search_multi(
                     fields=[
                         "*.dstuser",
@@ -1142,7 +1158,11 @@ class WazuhConnector:
         )
 
     def create_summary_note(
-        self, *, result: dict, observable_id: str, sightings: list[stix2.Sighting]
+        self,
+        *,
+        result: dict,
+        sightings_meta: SightingsCollector,
+        sightings_ids: list[str],
     ):
         run_time = datetime.now()
         run_time_string = run_time.isoformat() + "Z"
@@ -1159,18 +1179,28 @@ class WazuhConnector:
             f"|Hits returned|{hits_returned}|\n"
             f"|Total hits|{total_hits}|\n"
             f"|Max hits|{self.hits_limit}|\n"
-            f"|Dropped|{total_hits - hits_returned}|\n"
+            f"|**Dropped**|**{total_hits - hits_returned}|**\n"
             f"|Search since|{self.search_after.isoformat() + 'Z' if self.search_after else '–'}|\n"
             f"|Include filter|{json.dumps(self.client.include_match) if self.client.include_match else ''}|\n"
             f"|Exclude filter|{json.dumps(self.client.exclude_match) if self.client.exclude_match else ''}|\n"
             f"|Connector v.|{self.CONNECTOR_VERSION}|\n"
-            # Text about what was searched and how
+            "\n"
+            "### Alerts overview\n"
+            "\n"
+            "|Rule|Count|Earliest|Latest|Description|\n"
+            "|----|-----|--------|------|-----------|\n"
+        ) + "".join(
+            f"{rule_id}|{len(alerts)}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
+            for rule_id, alerts in sightings_meta.alerts_by_rule_id().items()
+            for rule_desc in (alerts[0]["_source"]["rule"]["description"],)
         )
+        # Text about what was searched and how
+        # TODO: with sightings_meta, info about earliest/latest count per rule id
         return stix2.Note(
             id=Note.generate_id(created=run_time_string, content=content),
             created=run_time_string,
             **self.stix_common_attrs,
             abstract=abstract,
             content=content,
-            object_refs=[observable_id] + list(map(lambda s: s.id, sightings)),
+            object_refs=[sightings_meta.observable_id()] + sightings_ids,
         )
