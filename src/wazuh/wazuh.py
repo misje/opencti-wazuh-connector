@@ -37,6 +37,8 @@ from functools import cache
 # UUID_RE = r"^a[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$"
 # STIX_ID_REGEX = re.compile(f".+--{UUID_RE}", re.IGNORECASE)
 
+# TODO: create indicator sighting? ask filigran?
+
 
 # TODO: Improve logic, avoid all recalculations (unless cache fixes this?)
 class SightingsCollector:
@@ -153,6 +155,15 @@ class SightingsCollector:
             for sighting in self._sightings.values()
             for rule_id, alerts in sighting.alerts.items()
         }
+
+    @cache
+    def alerts(self):
+        return [
+            alert
+            for sighting in self._sightings.values()
+            for alerts in sighting.alerts.values()
+            for alert in alerts
+        ]
 
 
 def has(obj: dict, spec: list[str], value=None):
@@ -289,6 +300,28 @@ def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] = []):
         f"|Rule level|{s['rule']['level']}|\n"
         f"|Alert ID|{alert['_id']}/{s['id']}|\n"
     ) + "".join(f"|{key}|{value}|\n" for key, value in additional_rows)
+
+
+def oneof(*keys: str, within: dict, default=None):
+    return next((within[key] for key in keys if key in within), default)
+
+
+def entity_name_value(entity: dict):
+    name = entity["entity_type"]
+    value = None
+    match name:
+        case "StixFile" | "Artifact":
+            value = oneof("name", "x_opencti_additional_names", within=entity)
+        case "Directory":
+            value = oneof("path", "x_opencti_additional_names", within=entity)
+        case "Software" | "Windows-Registry-Value-Type":
+            value = oneof("name", within=entity)
+        case "Windows-Registry-Key":
+            value = oneof("key", within=entity)
+        case _:
+            value = oneof("value", within=entity)
+
+    return " ".join(filter(None, [name, value]))
 
 
 class WazuhConnector:
@@ -468,7 +501,22 @@ class WazuhConnector:
             ["wazuh", "sighting_summary_note"],
             config,
             default=True,
-        )  # self.create_incident = "PER_QUERY"
+        )
+
+        self.require_indicator_for_incidents = get_config_variable(
+            "WAZUH_INCIDENT_REQUIRE_INDICATOR",
+            ["wazuh", "incident_require_indicator"],
+            config,
+            default=True,
+        )
+        # TODO: verify modes using Field:
+        self.create_incident = get_config_variable(
+            "WAZUH_INCIDENT_CREATE_MODE",
+            ["wazuh", "incident_create_mode"],
+            config,
+            default="per_sighting",
+        )
+
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
             "confidence": self.confidence,
@@ -512,6 +560,9 @@ class WazuhConnector:
             search_after=self.search_after,
             include_match=parse_match_patterns(self.search_include),  # type: ignore
             exclude_match=parse_match_patterns(self.search_exclude),  # type: ignore
+            # TODO: Use Field to validate. Document that search_after is prepended if defined:
+            # filters=[{"range": {"rule.level": {"gte": 8}}}],
+            # filters=get_config_variable("WAZUH_SEARCH_FILTER", ["wazuh", "search_filter"], config),
         )
 
     def start(self):
@@ -530,8 +581,8 @@ class WazuhConnector:
             entity = self.helper.api.vulnerability.read(id=data["entity_id"])
             entity_type = "vulnerability"
             # It doesn't make sense to support indicators, having to parse all sorts of patterns:
-            # elif data["entity_id"].startswith("indicator--"):
-            #    entity = self.helper.api.indicator.read(id=data["entity_id"])
+        # elif data["entity_id"].startswith("indicator--"):
+        #    entity = self.helper.api.indicator.read(id=data["entity_id"])
         else:
             entity = self.helper.api.stix_cyber_observable.read(id=data["entity_id"])
 
@@ -540,6 +591,7 @@ class WazuhConnector:
 
         # Remove:
         self.helper.log_debug(f"ENTITY: {entity}")
+        # TODO: debug print if entity_type != x_opencti_type
 
         if not tlp_allowed(entity, self.max_tlp):
             self.helper.connector_logger.info(f"max tlp: {self.max_tlp}")
@@ -550,6 +602,11 @@ class WazuhConnector:
         stix_entity = enrichment["stix_entity"]
         # Remove:
         self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
+
+        if entity["entity_type"] != stix_entity["x_opencti_type"]:
+            self.helper.log_debug(
+                f'DIFFERENT: entity_type: {entity["entity_type"]}, x_opencti_type: {stix_entity["x_opencti_type"]}'
+            )
 
         obs_indicators = self.entity_indicators(entity)
         # Remove:
@@ -574,6 +631,7 @@ class WazuhConnector:
             return f"{entity['entity_type']} has no queryable data"
 
         hits = result["hits"]["hits"]
+        # TODO: create note (optionally) if no hits found(?):
         if not hits:
             return "No hits found"
 
@@ -665,95 +723,23 @@ class WazuhConnector:
         # TODO: PER_SIGHTING, PER_ALERT, PER_ALERT_RULE. Add mitre, other
         # enrichments. Summary note. Add new first_seen/last_seen per rule id
         # in summary note. Ensure summary note is at top (latest_hit timetamp?)
-
-        iname = f"Wazuh alert: something sighted in {sighter.name}"
-        incident = stix2.Incident(
-            id=Incident.generate_id(
-                iname, sightings_collector.last_sighting_timestamp()
-            ),
-            created=sightings_collector.last_sighting_timestamp(),
-            **self.stix_common_attrs,
-            incident_type="alert",
-            name=iname,
-            description="Beskrivelsen",
-            allow_custom=True,
-            # The following are extensions:
-            severity=rule_level_to_severity(sightings_collector.highest_rule_level()),
-            first_seen=sightings_collector.first_seen(),
-            last_seen=sightings_collector.last_seen(),
-        )
-        bundle += [
-            incident,
-            stix2.Relationship(
-                id=StixCoreRelationship.generate_id(
-                    "related-to", incident.id, entity["standard_id"]
-                ),
-                created=sightings_collector.last_sighting_timestamp(),
-                **self.stix_common_attrs,
-                relationship_type="related-to",
-                source_ref=incident.id,
-                target_ref=entity["standard_id"],
-            ),
-            stix2.Relationship(
-                id=StixCoreRelationship.generate_id(
-                    "targets",
-                    incident.id,
-                    sighter.id,
-                ),
-                created=sightings_collector.last_sighting_timestamp(),
-                **self.stix_common_attrs,
-                relationship_type="targets",
-                source_ref=incident.id,
-                target_ref=sighter.id,
-            ),
-        ]
-        bundle += [
-            stix2.Relationship(
-                id=StixCoreRelationship.generate_id(
-                    "indicates",
-                    ind["standard_id"],  # type: ignore
-                    incident.id,
-                ),
-                created=sightings_collector.last_sighting_timestamp(),
-                **self.stix_common_attrs,
-                relationship_type="indicates",
-                source_ref=ind["standard_id"],  # type: ignore
-                target_ref=incident.id,
+        if (
+            self.require_indicator_for_incidents
+            and not entity_type == "observable"
+            and not obs_indicators
+        ):
+            self.helper.connector_logger.info(
+                "Not creating incident because entity is an observable, an indicator is required and no indicators are found"
             )
-            for ind in obs_indicators
-        ]
-
-        # TEST: extract mitre info:
-        for alerts in alerts_by_rule_id.values():
-            mitre_ids = [
-                id
-                for alert in alerts[0:1]
-                for rule in (alert["_source"]["rule"],)
-                if "mitre" in rule
-                for id in rule["mitre"]["id"]
-            ]
-            self.helper.log_debug(f"MITRE IDS: {mitre_ids}")
-            for mitre_id in mitre_ids:
-                pattern = stix2.AttackPattern(
-                    id=AttackPattern.generate_id(mitre_id, mitre_id),
-                    name=mitre_id,
-                    # custom_properties={"x_mitre_id": mitre_id},
-                    allow_custom=True,
-                    x_mitre_id=mitre_id,
-                )
-                bundle += [
-                    pattern,
-                    stix2.Relationship(
-                        id=StixCoreRelationship.generate_id(
-                            "uses", incident.id, pattern.id
-                        ),
-                        created=alerts[0]["_source"]["@timestamp"],
-                        **self.stix_common_attrs,
-                        relationship_type="uses",
-                        source_ref=incident.id,
-                        target_ref=pattern.id,
-                    ),
-                ]
+        else:
+            bundle += self.create_incidents(
+                entity=entity,
+                obs_indicators=obs_indicators,
+                result=result,
+                sighter=sighter,
+                sightings_meta=sightings_collector,
+                sightings_ids=sighting_ids,
+            )
 
         bundle += list(agents.values())
         sent_count = len(
@@ -1179,10 +1165,10 @@ class WazuhConnector:
             f"|Hits returned|{hits_returned}|\n"
             f"|Total hits|{total_hits}|\n"
             f"|Max hits|{self.hits_limit}|\n"
-            f"|**Dropped**|**{total_hits - hits_returned}|**\n"
+            f"|**Dropped**|**{total_hits - hits_returned}**|\n"
             f"|Search since|{self.search_after.isoformat() + 'Z' if self.search_after else '–'}|\n"
-            f"|Include filter|{json.dumps(self.client.include_match) if self.client.include_match else ''}|\n"
-            f"|Exclude filter|{json.dumps(self.client.exclude_match) if self.client.exclude_match else ''}|\n"
+            f"|Include filter|{json.dumps(self.search_include) if self.client.include_match else ''}|\n"
+            f"|Exclude filter|{json.dumps(self.search_exclude) if self.client.exclude_match else ''}|\n"
             f"|Connector v.|{self.CONNECTOR_VERSION}|\n"
             "\n"
             "### Alerts overview\n"
@@ -1194,8 +1180,7 @@ class WazuhConnector:
             for rule_id, alerts in sightings_meta.alerts_by_rule_id().items()
             for rule_desc in (alerts[0]["_source"]["rule"]["description"],)
         )
-        # Text about what was searched and how
-        # TODO: with sightings_meta, info about earliest/latest count per rule id
+
         return stix2.Note(
             id=Note.generate_id(created=run_time_string, content=content),
             created=run_time_string,
@@ -1204,3 +1189,156 @@ class WazuhConnector:
             content=content,
             object_refs=[sightings_meta.observable_id()] + sightings_ids,
         )
+
+    def create_incidents(
+        self,
+        *,
+        entity: dict,
+        obs_indicators: list[dict],
+        result: dict,
+        sighter: stix2.Identity,
+        sightings_meta: SightingsCollector,
+        sightings_ids: list[str],
+    ):
+        sightings = sightings_meta.collated()
+        incidents = []
+        bundle = []
+        match self.create_incident:
+            # case "per_sighting":
+            # case "per_alert":
+            # case "per_alert_rule":
+            case "per_query":
+                total_sightings = sum(map(lambda s: s.count, sightings.values()))
+                query_hits_dropped = (
+                    len(result["hits"]["hits"]) < result["hits"]["total"]["value"]
+                )
+                total_systems = len(sightings.keys())
+                incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
+                incident = stix2.Incident(
+                    id=Incident.generate_id(
+                        incident_name, sightings_meta.last_sighting_timestamp()
+                    ),
+                    created=sightings_meta.last_sighting_timestamp(),
+                    **self.stix_common_attrs,
+                    incident_type="alert",
+                    name=incident_name,
+                    description=f"Observable {entity_name_value(entity)} has been sighted a total of {total_sightings}{'+' if query_hits_dropped else ''} times in {total_systems} system(s)",
+                    allow_custom=True,
+                    # The following are extensions:
+                    severity=rule_level_to_severity(
+                        sightings_meta.highest_rule_level()
+                    ),
+                    first_seen=sightings_meta.first_seen(),
+                    last_seen=sightings_meta.last_seen(),
+                )
+                incidents = [incident]
+                bundle = incidents + self.create_incident_relationships(
+                    incident=incident,
+                    entity=entity,
+                    obs_indicators=obs_indicators,
+                    sighters=list(sightings.keys()),
+                )
+
+            case _:
+                raise ValueError(
+                    f'WAZUH_INCIDENT_CREATE_MODE "{self.create_incident}" is invalid'
+                )
+
+        bundle += [
+            obj
+            for incident in incidents
+            for obj in self.enrich_incident(
+                incident=incident, alerts=sightings_meta.alerts()
+            )
+        ]
+        # TODO: add note
+        return bundle
+
+    def create_incident_relationships(
+        self,
+        *,
+        incident: stix2.Incident,
+        entity: dict,
+        obs_indicators: list[dict],
+        sighters: list[str],
+    ):
+        return (
+            [
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "related-to", incident.id, entity["standard_id"]
+                    ),
+                    created=incident.created,
+                    **self.stix_common_attrs,
+                    relationship_type="related-to",
+                    source_ref=incident.id,
+                    target_ref=entity["standard_id"],
+                )
+            ]
+            + [
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "targets",
+                        incident.id,
+                        sighter,
+                    ),
+                    created=incident.created,
+                    **self.stix_common_attrs,
+                    relationship_type="targets",
+                    source_ref=incident.id,
+                    target_ref=sighter,
+                )
+                for sighter in sighters
+            ]
+            + [
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "indicates",
+                        ind["standard_id"],
+                        incident.id,
+                    ),
+                    created=incident.created,
+                    **self.stix_common_attrs,
+                    relationship_type="indicates",
+                    source_ref=ind["standard_id"],
+                    target_ref=incident.id,
+                )
+                for ind in obs_indicators
+            ]
+        )
+
+    def enrich_incident(self, *, incident: stix2.Incident, alerts: list[dict]):
+        return self.enrich_incident_mitre(incident=incident, alerts=alerts)
+
+    def enrich_incident_mitre(self, *, incident: stix2.Incident, alerts: list[dict]):
+        bundle = []
+        mitre_ids = [
+            id
+            for alert in alerts[0:1]
+            for rule in (alert["_source"]["rule"],)
+            if "mitre" in rule
+            for id in rule["mitre"]["id"]
+        ]
+        self.helper.log_debug(f"MITRE IDS: {mitre_ids}")
+        for mitre_id in mitre_ids:
+            pattern = stix2.AttackPattern(
+                id=AttackPattern.generate_id(mitre_id, mitre_id),
+                name=mitre_id,
+                allow_custom=True,
+                x_mitre_id=mitre_id,
+            )
+            bundle += [
+                pattern,
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "uses", incident.id, pattern.id
+                    ),
+                    created=alerts[0]["_source"]["@timestamp"],
+                    **self.stix_common_attrs,
+                    relationship_type="uses",
+                    source_ref=incident.id,
+                    target_ref=pattern.id,
+                ),
+            ]
+
+        return bundle

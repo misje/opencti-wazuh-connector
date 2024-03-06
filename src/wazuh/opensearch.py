@@ -1,5 +1,4 @@
 import urllib3
-import json
 import requests
 from datetime import datetime
 from pycti import OpenCTIConnectorHelper
@@ -34,6 +33,7 @@ class OpenSearchClient:
         password: str,
         limit: int,
         index: str,
+        filters: list[dict[str, dict]] = [],
         search_after: datetime | None,
         include_match: list[dict] | None,
         exclude_match: list[dict] | None,
@@ -44,6 +44,7 @@ class OpenSearchClient:
         self.index = index
         self.limit = limit
         self.helper = helper
+        self.filters = filters
         self.search_after = search_after
         self.include_match = include_match
         self.exclude_match = exclude_match
@@ -86,6 +87,7 @@ class OpenSearchClient:
         query = {
             "query": query,
             "size": self.limit,
+            # TODO: order by rule id first( optional)
             "sort": [{"timestamp": {"order": "desc"}}],
         }
         self.helper.connector_logger.debug(f'Sending query "{query}"')
@@ -137,6 +139,13 @@ class OpenSearchClient:
         must = must + (self.include_match or [])
         must_not = must_not + (self.exclude_match or [])
 
+        filter = self.filters
+        if self.search_after:
+            filter.insert(
+                0,
+                {"range": {"@timestamp": {"gte": self.search_after.isoformat() + "Z"}}},
+            )
+
         full_query = {"bool": {}}
         if must:
             full_query["bool"]["must"] = must
@@ -145,10 +154,8 @@ class OpenSearchClient:
             full_query["bool"]["minimum_should_match"] = 1
         if must_not:
             full_query["bool"]["must_not"] = must_not
-        if self.search_after:
-            full_query["bool"]["filter"] = [
-                {"range": {"@timestamp": {"gte": self.search_after.isoformat() + "Z"}}}
-            ]
+        if filter:
+            full_query["bool"]["filter"] = filter
 
         return self._search(full_query)
 
