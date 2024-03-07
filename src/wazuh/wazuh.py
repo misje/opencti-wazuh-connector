@@ -4,10 +4,12 @@ import yaml
 import dateparser
 import re
 import bisect
+import ipaddress
 from .opensearch import OpenSearchClient
 from pathlib import Path
 from pycti import (
     AttackPattern,
+    CustomObservableHostname,
     Identity,
     Incident,
     Note,
@@ -357,6 +359,18 @@ def rule_level_to_severity(level: int):
             return "low"
 
 
+def cvss3_to_severity(score: float):
+    match score:
+        case score if score > 9.0:
+            return "critical"
+        case score if score > 7.0:
+            return "high"
+        case score if score > 4.0:
+            return "medium"
+        case _:
+            return "low"
+
+
 def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] = []):
     s = alert["_source"]
     return (
@@ -601,6 +615,18 @@ class WazuhConnector:
             config,
             default="per_sighting",
         )
+        self.create_agent_ip_obs = get_config_variable(
+            "WAZUH_CREATE_AGENT_IP_OBSERVABLE",
+            ["wazuh", "create_agent_ip_observable"],
+            config,
+            default=False,
+        )
+        self.create_agent_host_obs = get_config_variable(
+            "WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE",
+            ["wazuh", "create_agent_hostname_observable"],
+            config,
+            default=False,
+        )
 
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
@@ -751,7 +777,11 @@ class WazuhConnector:
                     "Failed to parse _source: Unexpected JSON structure"
                 )
 
-        # TODO: enrichment: create tool, like ssh, used in events like ssh logons
+        # TODO: Use in incident and add as targets(?):
+        if self.create_agent_ip_obs:
+            bundle += self.create_agent_addr_obs(alerts=hits)
+        if self.create_agent_host_obs:
+            bundle += self.create_agent_hostname_obs(alerts=hits)
 
         sighting_ids = []
         for sighter_id, meta in sightings_collector.collated().items():
@@ -810,7 +840,7 @@ class WazuhConnector:
         # in summary note. Ensure summary note is at top (latest_hit timetamp?)
         if (
             self.require_indicator_for_incidents
-            and not entity_type == "observable"
+            and entity_type == "observable"
             and not obs_indicators
         ):
             self.helper.connector_logger.info(
@@ -1294,6 +1324,8 @@ class WazuhConnector:
         query_hits_dropped = (
             len(result["hits"]["hits"]) < result["hits"]["total"]["value"]
         )
+        # TODO:
+        # severity = cvss3_to_severity(alert entity['entity_type'] == 'Vulnerability'
         match self.create_incident:
             case "per_query":
                 incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
@@ -1520,8 +1552,9 @@ class WazuhConnector:
         return bundle
 
     def enrich_incident_tool(self, *, incident: stix2.Incident, alerts: list[dict]):
-        tool = None
+        bundle = []
         for alert in alerts:
+            tool = None
             if (
                 has(alert, ["_source", "rule", "mitre", "id"])
                 and "T1053.005" in alert["_source"]["rule"]["mitre"]["id"]
@@ -1530,18 +1563,85 @@ class WazuhConnector:
             elif "psexec" in alert["_source"]["rule"]["description"].casefold():
                 tool = create_tool_stix("PsExec")
 
-        return (
-            [
-                tool,
-                stix2.Relationship(
-                    id=StixCoreRelationship.generate_id("uses", incident.id, tool.id),
-                    created=alert["_source"]["@timestamp"],
-                    **self.stix_common_attrs,
-                    relationship_type="uses",
-                    source_ref=incident.id,
-                    target_ref=tool.id,
+            if tool:
+                bundle += [
+                    tool,
+                    stix2.Relationship(
+                        id=StixCoreRelationship.generate_id(
+                            "uses", incident.id, tool.id
+                        ),
+                        created=alert["_source"]["@timestamp"],
+                        **self.stix_common_attrs,
+                        relationship_type="uses",
+                        source_ref=incident.id,
+                        target_ref=tool.id,
+                    ),
+                ]
+
+        return bundle
+
+    def create_agent_addr_obs(self, *, alerts: list[dict]):
+        agents = {
+            agent["id"]: {
+                "name": agent["name"],
+                "ip": ipaddress.ip_address(agent["ip"]),
+                "standard_id": Identity.generate_id(agent["id"], "system"),
+            }
+            for alert in alerts
+            for agent in (alert["_source"]["agent"],)
+        }
+        bundle = []
+        for agent in agents.values():
+            SCO = (
+                stix2.IPv4Address
+                if type(agent["ip"]) is ipaddress.IPv4Address
+                else stix2.IPv6Address
+            )
+            addr = SCO(
+                value=agent["ip"],
+                allow_custom=True,
+                **self.stix_common_attrs,
+            )
+            rel = stix2.Relationship(
+                id=StixCoreRelationship.generate_id(
+                    "related-to", agent["standard_id"], addr.id
                 ),
-            ]
-            if tool
-            else []
-        )
+                **self.stix_common_attrs,
+                relationship_type="related-to",
+                source_ref=agent["standard_id"],
+                target_ref=addr.id,
+            )
+            bundle.append(addr)
+            bundle.append(rel)
+
+        return bundle
+
+    def create_agent_hostname_obs(self, *, alerts: list[dict]):
+        agents = {
+            agent["id"]: {
+                "name": agent["name"],
+                "standard_id": Identity.generate_id(agent["id"], "system"),
+            }
+            for alert in alerts
+            for agent in (alert["_source"]["agent"],)
+        }
+        bundle = []
+        for agent in agents.values():
+            hostname = CustomObservableHostname(
+                value=agent["name"],
+                allow_custom=True,
+                **self.stix_common_attrs,
+            )
+            rel = stix2.Relationship(
+                id=StixCoreRelationship.generate_id(
+                    "related-to", agent["standard_id"], hostname.id
+                ),
+                **self.stix_common_attrs,
+                relationship_type="related-to",
+                source_ref=agent["standard_id"],
+                target_ref=hostname.id,
+            )
+            bundle.append(hostname)
+            bundle.append(rel)
+
+        return bundle
