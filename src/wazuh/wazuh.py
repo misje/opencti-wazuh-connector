@@ -21,7 +21,7 @@ from typing import Final
 from hashlib import sha256
 from datetime import datetime
 from urllib.parse import urljoin
-from os.path import basename
+from os.path import basename, commonprefix
 from pydantic import BaseModel
 from functools import cache
 
@@ -157,8 +157,22 @@ class SightingsCollector:
                 alerts,
                 key=lambda a: a["_source"]["@timestamp"],
             )
-            for sighting in self._sightings.values()
-            for rule_id, alerts in sighting.alerts.items()
+            for rule_id in {
+                rule_id
+                for sighting in self._sightings.values()
+                for rule_id in sighting.alerts
+            }
+            for alerts in (
+                [
+                    alert
+                    for alerts in [
+                        sighting.alerts[rule_id]
+                        for sighting in self._sightings.values()
+                        if rule_id in sighting.alerts
+                    ]
+                    for alert in alerts
+                ],
+            )
         }
 
     @cache
@@ -173,12 +187,39 @@ class SightingsCollector:
                 "last_seen": max([alert["_source"]["@timestamp"] for alert in alerts]),
                 "sighters": [
                     sighter
-                    for sighter, sighting2 in self._sightings.items()
-                    if rule_id in sighting2.alerts
+                    for sighter, sighting in self._sightings.items()
+                    if rule_id in sighting.alerts
                 ],
             }
-            for sighting in self._sightings.values()
-            for rule_id, alerts in sighting.alerts.items()
+            for rule_id in {
+                rule_id
+                for sighting in self._sightings.values()
+                for rule_id in sighting.alerts
+            }
+            for alerts in (
+                [
+                    alert
+                    for alerts in [
+                        sighting.alerts[rule_id]
+                        for sighting in self._sightings.values()
+                        if rule_id in sighting.alerts
+                    ]
+                    for alert in alerts
+                ],
+            )
+        }
+
+    @cache
+    def alerts_by_sighter_meta(self):
+        return {
+            sighter_id: {
+                "alerts": sorted(
+                    [alert for alerts in meta.alerts.values() for alert in alerts],
+                    key=lambda a: a["_source"]["@timestamp"],
+                ),
+                "sighter_name": meta.sighter_name,
+            }
+            for sighter_id, meta in self._sightings.items()
         }
 
     @cache
@@ -349,6 +390,15 @@ def entity_name_value(entity: dict):
             value = oneof("value", within=entity)
 
     return " ".join(filter(None, [name, value]))
+
+
+def common_prefix_string(strings: list[str], elideString: str = "[…]"):
+    if not strings:
+        return ""
+    if len(common := commonprefix(strings)) == len(strings[0]):
+        return common
+    else:
+        return common + elideString
 
 
 class WazuhConnector:
@@ -618,7 +668,6 @@ class WazuhConnector:
 
         # Remove:
         self.helper.log_debug(f"ENTITY: {entity}")
-        # TODO: debug print if entity_type != x_opencti_type
 
         if not tlp_allowed(entity, self.max_tlp):
             self.helper.connector_logger.info(f"max tlp: {self.max_tlp}")
@@ -630,6 +679,7 @@ class WazuhConnector:
         # Remove:
         self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
 
+        # Remove:
         if entity["entity_type"] != stix_entity["x_opencti_type"]:
             self.helper.log_debug(
                 f'DIFFERENT: entity_type: {entity["entity_type"]}, x_opencti_type: {stix_entity["x_opencti_type"]}'
@@ -1203,8 +1253,12 @@ class WazuhConnector:
         ) + "".join(
             f"{rule_id}|{level}|{len(alerts)}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
             for rule_id, alerts in sightings_meta.alerts_by_rule_id().items()
-            for rule_desc in (alerts[0]["_source"]["rule"]["description"],)
             for level in (alerts[0]["_source"]["rule"]["level"],)
+            for rule_desc in (
+                common_prefix_string(
+                    [alert["_source"]["rule"]["description"] for alert in alerts]
+                ),
+            )
         )
 
         return stix2.Note(
@@ -1286,18 +1340,26 @@ class WazuhConnector:
             case "per_alert_rule":
                 for rule_id, meta in sightings_meta.alerts_by_rule_meta().items():
                     incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
-                    # TODO: (here and elsewhere): when rule description differs, create a "mix" that removes unique parts of the string
-                    ref_alert = meta["alerts"][0]["_source"]
+                    # Alerts are grouped by ID and all have the same level, so just pick one:
+                    alerts_level = meta["alerts"][0]["_source"]["rule"]["level"]
+                    # Alerts may have different description even if they have
+                    # the same level. Pick the longest common prefix:
+                    alerts_desc = common_prefix_string(
+                        [
+                            alert["_source"]["rule"]["description"]
+                            for alert in meta["alerts"]
+                        ]
+                    )
                     incident = stix2.Incident(
                         id=Incident.generate_id(incident_name, meta["last_seen"]),
                         created=meta["last_seen"],
                         **self.stix_common_attrs,
                         incident_type="alert",
                         name=incident_name,
-                        description=f"""Observable {entity_name_value(entity)} has been sighted {len(meta['alerts'])}{'+' if query_hits_dropped else ''} time(s) in alert rule {rule_id}: "{ref_alert['rule']['description']}\"""",
+                        description=f"""Observable {entity_name_value(entity)} has been sighted {len(meta['alerts'])}{'+' if query_hits_dropped else ''} time(s) in alert rule {rule_id}: "{alerts_desc}\"""",
                         allow_custom=True,
                         # The following are extensions:
-                        severity=rule_level_to_severity(ref_alert["rule"]["level"]),
+                        severity=rule_level_to_severity(alerts_level),
                         first_seen=meta["first_seen"],
                         last_seen=meta["last_seen"],
                     )
@@ -1310,7 +1372,38 @@ class WazuhConnector:
                         sighters=meta["sighters"],
                     )
 
-            # case "per_alert":
+            case "per_alert":
+                for sighter_id, meta in sightings_meta.alerts_by_sighter_meta().items():
+                    incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted in {meta['sighter_name']}"
+                    incidents = [
+                        stix2.Incident(
+                            id=Incident.generate_id(incident_name, sighted_at),
+                            created=sighted_at,
+                            **self.stix_common_attrs,
+                            incident_type="alert",
+                            name=incident_name,
+                            description=f"""Observable {entity_name_value(entity)} has been sighted in alert rule {rule_id}: "{rule_desc}\"""",
+                            allow_custom=True,
+                            # The following are extensions:
+                            severity=rule_level_to_severity(rule_level),
+                            first_seen=sighted_at,
+                            last_seen=sighted_at,
+                        )
+                        for alert in meta["alerts"]
+                        for sighted_at in (alert["_source"]["@timestamp"],)
+                        for rule_id in (alert["_source"]["rule"]["id"],)
+                        for rule_desc in (alert["_source"]["rule"]["description"],)
+                        for rule_level in (alert["_source"]["rule"]["level"],)
+                    ]
+                    bundle += incidents
+
+                    for incident in incidents:
+                        bundle += self.create_incident_relationships(
+                            incident=incident,
+                            entity=entity,
+                            obs_indicators=obs_indicators,
+                            sighters=[sighter_id],
+                        )
 
             case _:
                 raise ValueError(
