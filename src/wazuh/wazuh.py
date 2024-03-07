@@ -15,6 +15,7 @@ from pycti import (
     OpenCTIMetricHandler,
     StixCoreRelationship,
     StixSightingRelationship,
+    Tool,
     get_config_variable,
 )
 from typing import Final
@@ -399,6 +400,13 @@ def common_prefix_string(strings: list[str], elideString: str = "[…]"):
         return common
     else:
         return common + elideString
+
+
+def create_tool_stix(name: str):
+    return stix2.Tool(
+        id=Tool.generate_id(name),
+        name=name,
+    )
 
 
 class WazuhConnector:
@@ -1474,7 +1482,9 @@ class WazuhConnector:
         )
 
     def enrich_incident(self, *, incident: stix2.Incident, alerts: list[dict]):
-        return self.enrich_incident_mitre(incident=incident, alerts=alerts)
+        return self.enrich_incident_mitre(
+            incident=incident, alerts=alerts
+        ) + self.enrich_incident_tool(incident=incident, alerts=alerts)
 
     def enrich_incident_mitre(self, *, incident: stix2.Incident, alerts: list[dict]):
         bundle = []
@@ -1508,3 +1518,30 @@ class WazuhConnector:
             ]
 
         return bundle
+
+    def enrich_incident_tool(self, *, incident: stix2.Incident, alerts: list[dict]):
+        tool = None
+        for alert in alerts:
+            if (
+                has(alert, ["_source", "rule", "mitre", "id"])
+                and "T1053.005" in alert["_source"]["rule"]["mitre"]["id"]
+            ):
+                tool = create_tool_stix("schtasks")
+            elif "psexec" in alert["_source"]["rule"]["description"].casefold():
+                tool = create_tool_stix("PsExec")
+
+        return (
+            [
+                tool,
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id("uses", incident.id, tool.id),
+                    created=alert["_source"]["@timestamp"],
+                    **self.stix_common_attrs,
+                    relationship_type="uses",
+                    source_ref=incident.id,
+                    target_ref=tool.id,
+                ),
+            ]
+            if tool
+            else []
+        )
