@@ -52,10 +52,12 @@ class SightingsCollector:
 
     class Meta(BaseModel):
         observable_id: str
+        sighter_name: str
         first_seen: str
         last_seen: str
         count: int
         alerts: dict[str, list[dict]]
+        max_rule_level: int = 0
 
     def __init__(self, *, observable_id: str):
         self._sightings: dict[str, SightingsCollector.Meta] = {}
@@ -71,33 +73,43 @@ class SightingsCollector:
             for alert in sighting.alerts.get(rule_id, [])
         ]
 
-    def add(self, *, timestamp: str, sighter_id: str, alert: dict):
+    def add(self, *, timestamp: str, sighter: stix2.Identity, alert: dict):
         """
         Add or update metadata for sightings of an observable in sighter_id
         """
         rule_id = alert["_source"]["rule"]["id"]
-        if sighter_id in self._sightings:
-            self._sightings[sighter_id].first_seen = min(
-                self._sightings[sighter_id].first_seen, timestamp
+        if sighter.id in self._sightings:
+            self._sightings[sighter.id].first_seen = min(
+                self._sightings[sighter.id].first_seen, timestamp
             )
-            self._sightings[sighter_id].last_seen = max(
-                self._sightings[sighter_id].last_seen, timestamp
+            self._sightings[sighter.id].last_seen = max(
+                self._sightings[sighter.id].last_seen, timestamp
             )
-            self._sightings[sighter_id].count += 1
-            if rule_id in self._sightings[sighter_id].alerts:
+            self._sightings[sighter.id].count += 1
+            if rule_id in self._sightings[sighter.id].alerts:
                 bisect.insort(
-                    self._sightings[sighter_id].alerts[rule_id],
+                    self._sightings[sighter.id].alerts[rule_id],
                     alert,
                     key=lambda a: a["_source"]["@timestamp"],
                 )
             else:
-                self._sightings[sighter_id].alerts[rule_id] = [alert]
+                self._sightings[sighter.id].alerts[rule_id] = [alert]
 
             if timestamp > self._latest:
                 self._latest = timestamp
+
+            self._sightings[sighter.id].max_rule_level = max(
+                [self._sightings[sighter.id].max_rule_level]
+                + [
+                    alert["_source"]["rule"]["level"]
+                    for alerts in self._sightings[sighter.id].alerts.values()
+                    for alert in alerts
+                ]
+            )
         else:
-            self._sightings[sighter_id] = SightingsCollector.Meta(
+            self._sightings[sighter.id] = SightingsCollector.Meta(
                 observable_id=self._observable_id,
+                sighter_name=sighter.name,
                 first_seen=timestamp,
                 last_seen=timestamp,
                 count=1,
@@ -115,15 +127,8 @@ class SightingsCollector:
         return self._latest
 
     @cache
-    def highest_rule_level(self):
-        return max(
-            [
-                alert["_source"]["rule"]["level"]
-                for sighting in self._sightings.values()
-                for alerts in sighting.alerts.values()
-                for alert in alerts
-            ]
-        )
+    def max_rule_level(self):
+        return max([sighting.max_rule_level for sighting in self._sightings.values()])
 
     @cache
     def first_seen(self, rule_id: str | None = None):
@@ -316,6 +321,8 @@ def entity_name_value(entity: dict):
             value = oneof("path", "x_opencti_additional_names", within=entity)
         case "Software" | "Windows-Registry-Value-Type":
             value = oneof("name", within=entity)
+        case "User-Account":
+            value = oneof("account_login", "user_id", "display_name", within=entity)
         case "Windows-Registry-Key":
             value = oneof("key", within=entity)
         case _:
@@ -657,7 +664,7 @@ class WazuhConnector:
 
                 sightings_collector.add(
                     timestamp=s["@timestamp"],
-                    sighter_id=sighter.id,
+                    sighter=sighter,
                     alert=hit,
                 )
 
@@ -736,9 +743,7 @@ class WazuhConnector:
                 entity=entity,
                 obs_indicators=obs_indicators,
                 result=result,
-                sighter=sighter,
                 sightings_meta=sightings_collector,
-                sightings_ids=sighting_ids,
             )
 
         bundle += list(agents.values())
@@ -999,7 +1004,7 @@ class WazuhConnector:
                     }
                 )
             case "User-Account":
-                # search user_id too
+                # search user_id too, perhaps also display_name(?)
                 return self.client.search_multi(
                     fields=[
                         "*.dstuser",
@@ -1173,12 +1178,13 @@ class WazuhConnector:
             "\n"
             "### Alerts overview\n"
             "\n"
-            "|Rule|Count|Earliest|Latest|Description|\n"
-            "|----|-----|--------|------|-----------|\n"
+            "|Rule|Level|Count|Earliest|Latest|Description|\n"
+            "|----|-----|-----|--------|------|-----------|\n"
         ) + "".join(
-            f"{rule_id}|{len(alerts)}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
+            f"{rule_id}|{level}|{len(alerts)}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
             for rule_id, alerts in sightings_meta.alerts_by_rule_id().items()
             for rule_desc in (alerts[0]["_source"]["rule"]["description"],)
+            for level in (alerts[0]["_source"]["rule"]["level"],)
         )
 
         return stix2.Note(
@@ -1196,23 +1202,44 @@ class WazuhConnector:
         entity: dict,
         obs_indicators: list[dict],
         result: dict,
-        sighter: stix2.Identity,
         sightings_meta: SightingsCollector,
-        sightings_ids: list[str],
     ):
         sightings = sightings_meta.collated()
         incidents = []
         bundle = []
+        total_sightings = sum(map(lambda s: s.count, sightings.values()))
+        total_systems = len(sightings.keys())
+        query_hits_dropped = (
+            len(result["hits"]["hits"]) < result["hits"]["total"]["value"]
+        )
         match self.create_incident:
-            # case "per_sighting":
+            case "per_sighting":
+                for sighter_id, meta in sightings.items():
+                    incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted in {meta.sighter_name}"
+                    incident = stix2.Incident(
+                        id=Incident.generate_id(incident_name, meta.last_seen),
+                        created=meta.last_seen,
+                        **self.stix_common_attrs,
+                        incident_type="alert",
+                        name=incident_name,
+                        description=f"Observable {entity_name_value(entity)} has been sighted {meta.count}{'+' if query_hits_dropped else ''} time(s) in {meta.sighter_name}",
+                        allow_custom=True,
+                        # The following are extensions:
+                        severity=rule_level_to_severity(meta.max_rule_level),
+                        first_seen=meta.first_seen,
+                        last_seen=meta.last_seen,
+                    )
+                    incidents.append(incident)
+                    bundle.append(incident)
+                    bundle += self.create_incident_relationships(
+                        incident=incident,
+                        entity=entity,
+                        obs_indicators=obs_indicators,
+                        sighters=[sighter_id],
+                    )
             # case "per_alert":
             # case "per_alert_rule":
             case "per_query":
-                total_sightings = sum(map(lambda s: s.count, sightings.values()))
-                query_hits_dropped = (
-                    len(result["hits"]["hits"]) < result["hits"]["total"]["value"]
-                )
-                total_systems = len(sightings.keys())
                 incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
                 incident = stix2.Incident(
                     id=Incident.generate_id(
@@ -1222,12 +1249,10 @@ class WazuhConnector:
                     **self.stix_common_attrs,
                     incident_type="alert",
                     name=incident_name,
-                    description=f"Observable {entity_name_value(entity)} has been sighted a total of {total_sightings}{'+' if query_hits_dropped else ''} times in {total_systems} system(s)",
+                    description=f"Observable {entity_name_value(entity)} has been sighted a total of {total_sightings}{'+' if query_hits_dropped else ''} time(s) in {total_systems} system(s)",
                     allow_custom=True,
                     # The following are extensions:
-                    severity=rule_level_to_severity(
-                        sightings_meta.highest_rule_level()
-                    ),
+                    severity=rule_level_to_severity(sightings_meta.max_rule_level()),
                     first_seen=sightings_meta.first_seen(),
                     last_seen=sightings_meta.last_seen(),
                 )
