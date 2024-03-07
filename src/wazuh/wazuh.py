@@ -162,6 +162,26 @@ class SightingsCollector:
         }
 
     @cache
+    def alerts_by_rule_meta(self):
+        return {
+            rule_id: {
+                "alerts": sorted(
+                    alerts,
+                    key=lambda a: a["_source"]["@timestamp"],
+                ),
+                "first_seen": min([alert["_source"]["@timestamp"] for alert in alerts]),
+                "last_seen": max([alert["_source"]["@timestamp"] for alert in alerts]),
+                "sighters": [
+                    sighter
+                    for sighter, sighting2 in self._sightings.items()
+                    if rule_id in sighting2.alerts
+                ],
+            }
+            for sighting in self._sightings.values()
+            for rule_id, alerts in sighting.alerts.items()
+        }
+
+    @cache
     def alerts(self):
         return [
             alert
@@ -1263,7 +1283,32 @@ class WazuhConnector:
                         sighters=[sighter_id],
                     )
 
-            # case "per_alert_rule":
+            case "per_alert_rule":
+                for rule_id, meta in sightings_meta.alerts_by_rule_meta().items():
+                    incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
+                    # TODO: (here and elsewhere): when rule description differs, create a "mix" that removes unique parts of the string
+                    ref_alert = meta["alerts"][0]["_source"]
+                    incident = stix2.Incident(
+                        id=Incident.generate_id(incident_name, meta["last_seen"]),
+                        created=meta["last_seen"],
+                        **self.stix_common_attrs,
+                        incident_type="alert",
+                        name=incident_name,
+                        description=f"""Observable {entity_name_value(entity)} has been sighted {len(meta['alerts'])}{'+' if query_hits_dropped else ''} time(s) in alert rule {rule_id}: "{ref_alert['rule']['description']}\"""",
+                        allow_custom=True,
+                        # The following are extensions:
+                        severity=rule_level_to_severity(ref_alert["rule"]["level"]),
+                        first_seen=meta["first_seen"],
+                        last_seen=meta["last_seen"],
+                    )
+                    incidents.append(incident)
+                    bundle.append(incident)
+                    bundle += self.create_incident_relationships(
+                        incident=incident,
+                        entity=entity,
+                        obs_indicators=obs_indicators,
+                        sighters=meta["sighters"],
+                    )
 
             # case "per_alert":
 
