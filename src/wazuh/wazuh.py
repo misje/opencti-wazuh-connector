@@ -1213,32 +1213,6 @@ class WazuhConnector:
             len(result["hits"]["hits"]) < result["hits"]["total"]["value"]
         )
         match self.create_incident:
-            case "per_sighting":
-                for sighter_id, meta in sightings.items():
-                    incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted in {meta.sighter_name}"
-                    incident = stix2.Incident(
-                        id=Incident.generate_id(incident_name, meta.last_seen),
-                        created=meta.last_seen,
-                        **self.stix_common_attrs,
-                        incident_type="alert",
-                        name=incident_name,
-                        description=f"Observable {entity_name_value(entity)} has been sighted {meta.count}{'+' if query_hits_dropped else ''} time(s) in {meta.sighter_name}",
-                        allow_custom=True,
-                        # The following are extensions:
-                        severity=rule_level_to_severity(meta.max_rule_level),
-                        first_seen=meta.first_seen,
-                        last_seen=meta.last_seen,
-                    )
-                    incidents.append(incident)
-                    bundle.append(incident)
-                    bundle += self.create_incident_relationships(
-                        incident=incident,
-                        entity=entity,
-                        obs_indicators=obs_indicators,
-                        sighters=[sighter_id],
-                    )
-            # case "per_alert":
-            # case "per_alert_rule":
             case "per_query":
                 incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
                 incident = stix2.Incident(
@@ -1263,6 +1237,35 @@ class WazuhConnector:
                     obs_indicators=obs_indicators,
                     sighters=list(sightings.keys()),
                 )
+
+            case "per_sighting":
+                for sighter_id, meta in sightings.items():
+                    incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted in {meta.sighter_name}"
+                    incident = stix2.Incident(
+                        id=Incident.generate_id(incident_name, meta.last_seen),
+                        created=meta.last_seen,
+                        **self.stix_common_attrs,
+                        incident_type="alert",
+                        name=incident_name,
+                        description=f"Observable {entity_name_value(entity)} has been sighted {meta.count}{'+' if query_hits_dropped else ''} time(s) in {meta.sighter_name}",
+                        allow_custom=True,
+                        # The following are extensions:
+                        severity=rule_level_to_severity(meta.max_rule_level),
+                        first_seen=meta.first_seen,
+                        last_seen=meta.last_seen,
+                    )
+                    incidents.append(incident)
+                    bundle.append(incident)
+                    bundle += self.create_incident_relationships(
+                        incident=incident,
+                        entity=entity,
+                        obs_indicators=obs_indicators,
+                        sighters=[sighter_id],
+                    )
+
+            # case "per_alert_rule":
+
+            # case "per_alert":
 
             case _:
                 raise ValueError(
