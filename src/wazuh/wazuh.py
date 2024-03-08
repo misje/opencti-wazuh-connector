@@ -399,6 +399,8 @@ def entity_name_value(entity: dict):
             value = oneof("name", within=entity)
         case "User-Account":
             value = oneof("account_login", "user_id", "display_name", within=entity)
+        case "Vulnerability":
+            value = oneof("name", within=entity)
         case "Windows-Registry-Key":
             value = oneof("key", within=entity)
         case _:
@@ -423,6 +425,14 @@ def create_tool_stix(name: str):
     )
 
 
+def incident_entity_relation_type(entity: dict):
+    match entity["entity_type"]:
+        case "Vulnerability":
+            return "targets"
+        case _:
+            return "related-to"
+
+
 class WazuhConnector:
     class MetricHelper:
         def __init__(self, metric: OpenCTIMetricHandler):
@@ -444,7 +454,7 @@ class WazuhConnector:
         self.DUMMY_INDICATOR_ID: Final[
             str
             # ] = "indicator--220d5816-3786-5421-a6d3-fb149a0df54e"  # "indicator--c1034564-a9fb-429b-a1c1-c80116cc8e1e"
-        ] = "indicator--1195bcd2-67ee-563a-83f8-29ebd9eacec7"
+        ] = "indicator--167565fe-69da-5e2f-a1c1-0542736f9f9a"  # = "indicator--1195bcd2-67ee-563a-83f8-29ebd9eacec7"
 
         config_file_path = Path(__file__).parent.parent.resolve() / "config.yml"
         config = (
@@ -783,6 +793,9 @@ class WazuhConnector:
         if self.create_agent_host_obs:
             bundle += self.create_agent_hostname_obs(alerts=hits)
 
+        # FIXME: WAZUH_INCIDENT_CREATE_MODE=per_sighting produces missing ref
+        # errors unless dummy indicator exists. Update: might be random and
+        # unrelated.
         sighting_ids = []
         for sighter_id, meta in sightings_collector.collated().items():
             sighting = self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)
@@ -1289,7 +1302,7 @@ class WazuhConnector:
             "|Rule|Level|Count|Earliest|Latest|Description|\n"
             "|----|-----|-----|--------|------|-----------|\n"
         ) + "".join(
-            f"{rule_id}|{level}|{len(alerts)}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
+            f"{rule_id}|{level}|{len(alerts)}{'+' if total_hits > hits_returned else ''}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
             for rule_id, alerts in sightings_meta.alerts_by_rule_id().items()
             for level in (alerts[0]["_source"]["rule"]["level"],)
             for rule_desc in (
@@ -1472,11 +1485,13 @@ class WazuhConnector:
             [
                 stix2.Relationship(
                     id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, entity["standard_id"]
+                        incident_entity_relation_type(entity),
+                        incident.id,
+                        entity["standard_id"],
                     ),
                     created=incident.created,
                     **self.stix_common_attrs,
-                    relationship_type="related-to",
+                    relationship_type=incident_entity_relation_type(entity),
                     source_ref=incident.id,
                     target_ref=entity["standard_id"],
                 )
