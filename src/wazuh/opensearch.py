@@ -171,6 +171,12 @@ class OpenSearchClient:
         """
         return self.search([{"match": {key: value}} for key, value in terms.items()])
 
+    # TODO: create helper method for searching for multiple values (or globs)
+    # in multiple fields by creating a bool should with individual fields (take
+    # care of permutation count)
+    #
+    # TODO: implement query_string/simple_query_string (ignoring errors) for searching all fields (Text observable)?
+
     def search_multi(
         self,
         *,

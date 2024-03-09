@@ -256,14 +256,14 @@ def has(obj: dict, spec: list[str], value=None):
         return False
 
 
-# def has_any(obj, spec, values:list|None = None):
-#    if not spec:
-#        return any(obj == value for value in values) if values is not None else True
-#    try:
-#        key, *rest = spec
-#        return has_any(obj[key], rest, values=values)
-#    except (KeyError, TypeError):
-#        return False
+# def has_any_val(obj:dict, spec:list[str], values:list|None = None):
+#   if not spec:
+#       return any(obj == value for value in values) if values is not None else True
+#   try:
+#       key, *rest = spec
+#       return has_any_val(obj[key], rest, values=values)
+#   except (KeyError, TypeError):
+#       return False
 
 
 def has_any(obj: dict, spec1: list[str], spec2: list[str]):
@@ -637,6 +637,7 @@ class WazuhConnector:
             config,
             default=False,
         )
+        # TODO: max bundle size limit. abort if above
 
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
@@ -681,6 +682,7 @@ class WazuhConnector:
             search_after=self.search_after,
             include_match=parse_match_patterns(self.search_include),  # type: ignore
             exclude_match=parse_match_patterns(self.search_exclude),  # type: ignore
+            # TODO: optional sort on rule.level before time?
             # TODO: Use Field to validate. Document that search_after is prepended if defined:
             # filters=[{"range": {"rule.level": {"gte": 8}}}],
             # filters=get_config_variable("WAZUH_SEARCH_FILTER", ["wazuh", "search_filter"], config),
@@ -929,10 +931,13 @@ class WazuhConnector:
                     "*.ActorIpAddress",
                     "*.remote_ip",
                     "*.remote_ip_address",
+                    "*.remote_address",
                     "*.sourceIPAddress",
                     "*.source_ip_address",
+                    "*.local_address",
                     "*.callerIp",
                     "*.ipAddress",
+                    "*.ipv*.address",
                     "data.win.eventdata.queryName",
                 ]
                 address = entity["observable_value"]
@@ -974,7 +979,11 @@ class WazuhConnector:
                             {
                                 "multi_match": {
                                     "query": src_ip["value"],
-                                    "fields": ["*.src_ip", "*.srcip"],
+                                    "fields": [
+                                        "*.src_ip",
+                                        "*.srcip",
+                                        "*.local_address",
+                                    ],
                                 }
                             }
                         )
@@ -983,7 +992,11 @@ class WazuhConnector:
                         {
                             "multi_match": {
                                 "query": stix_entity["src_port"],
-                                "fields": ["*.src_port", "*.srcport"],
+                                "fields": [
+                                    "*.src_port",
+                                    "*.srcport",
+                                    "*.local_port",
+                                ],
                             }
                         }
                     )
@@ -996,7 +1009,11 @@ class WazuhConnector:
                             {
                                 "multi_match": {
                                     "query": dest_ip["value"],
-                                    "fields": ["*.dest_ip", "*.dstip"],
+                                    "fields": [
+                                        "*.dest_ip",
+                                        "*.dstip",
+                                        "*.remote_address",
+                                    ],
                                 }
                             }
                         )
@@ -1005,7 +1022,11 @@ class WazuhConnector:
                         {
                             "multi_match": {
                                 "query": stix_entity["dst_port"],
-                                "fields": ["*.dest_port", "*.dstport"],
+                                "fields": [
+                                    "*.dest_port",
+                                    "*.dstport",
+                                    "*.remote_port",
+                                ],
                             }
                         }
                     )
@@ -1014,8 +1035,15 @@ class WazuhConnector:
                     return self.client.search(query)
                 else:
                     return None
-            # TODO: or remove from docker-compose:
-            # case "Email-Addr":
+            case "Email-Addr":
+                return self.client.search_multi(
+                    fields=[
+                        "*email",
+                        "*Email",
+                        "data.office365.UserId",
+                    ],
+                    value=stix_entity["account_login"],
+                )
             case "Domain-Name" | "Hostname":
                 fields = [
                     "data.win.eventdata.queryName",
@@ -1043,7 +1071,7 @@ class WazuhConnector:
                     )
             case "Url":
                 return self.client.search_multi(
-                    fields=["*.url", "data.office365.SiteUrl"],
+                    fields=["*url", "*Url"],
                     value=entity["observable_value"],
                 )
             case "Directory":
@@ -1134,6 +1162,7 @@ class WazuhConnector:
                         "*.userName",
                         "*.username",
                         "data.gcp.protoPayload.authenticationInfo.principalEmail",
+                        "data.gcp.resource.labels.email_id",
                         "data.office365.UserId",
                     ],
                     value=stix_entity["account_login"],
@@ -1529,9 +1558,13 @@ class WazuhConnector:
         )
 
     def enrich_incident(self, *, incident: stix2.Incident, alerts: list[dict]):
-        return self.enrich_incident_mitre(
-            incident=incident, alerts=alerts
-        ) + self.enrich_incident_tool(incident=incident, alerts=alerts)
+        # TODO: enable based on a list (…ENRICH=mitre,tool,account)
+        return (
+            self.enrich_incident_mitre(incident=incident, alerts=alerts)
+            + self.enrich_incident_tool(incident=incident, alerts=alerts)
+            ## Perhaps not very useful:
+            # + self.enrich_accounts(incident=incident, alerts=alerts)
+        )
 
     def enrich_incident_mitre(self, *, incident: stix2.Incident, alerts: list[dict]):
         bundle = []
@@ -1591,6 +1624,37 @@ class WazuhConnector:
                         source_ref=incident.id,
                         target_ref=tool.id,
                     ),
+                ]
+
+        return bundle
+
+    def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
+        bundle = []
+        for alert in alerts:
+            # Remove invalid usernames (like 'root(uid=0)', or just remove any (uid=…) part.
+            if has_any(alert, ["_source", "data"], ["dstuser", "srcuser"]):
+                accounts = [
+                    stix2.UserAccount(
+                        account_login=username,
+                        allow_custom=True,
+                        **self.stix_common_attrs,
+                    )
+                    for data in (alert["_source"]["data"],)
+                    for field, username in data.items()
+                    if field in {"dstuser", "srcuser"}
+                ]
+                bundle += accounts + [
+                    stix2.Relationship(
+                        id=StixCoreRelationship.generate_id(
+                            "related-to", incident.id, account.id
+                        ),
+                        created=alert["_source"]["@timestamp"],
+                        **self.stix_common_attrs,
+                        relationship_type="related-to",
+                        source_ref=incident.id,
+                        target_ref=account.id,
+                    )
+                    for account in accounts
                 ]
 
         return bundle
