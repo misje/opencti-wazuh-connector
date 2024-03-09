@@ -892,9 +892,15 @@ class WazuhConnector:
             if ind is not None
         ]
 
-    # TODO: when name is used, look for alias too?
+    # TODO: get help to write more targeted searches. If fields are used
+    # differently by different decoders, search for that rule. Get help by
+    # making issuers report their fields using something like 'GET
+    # /wazuh-alerts-*/_field_caps?fields=*filename*'
+
     def _query_alerts(self, entity, stix_entity) -> dict | None:
         match entity["entity_type"]:
+            # TODO: Use name as well as hash if defined (optional, config)
+            # NOTE: Backslashes are execpted to not be escaped in OpenCTI
             case "StixFile" | "Artifact":
                 if (
                     entity["entity_type"] == "StixFile"
@@ -903,31 +909,35 @@ class WazuhConnector:
                         stix_entity, ["hashes"], ["SHA-256", "SHA-1", "MD5"]
                     )
                 ):
-                    # Filename: smbd.filename = name, smbd.operation = pwrite_send? etc.
                     # size? use size too if so
-                    return self.client.search_multi_glob(
-                        # TODO: worthwhile? Add all permutations of slash types and fields? Not sure if regex is the way to go
-                        # remember, fields here cannot have globs: raise if they do?
+                    filenames = list(
+                        map(
+                            lambda a: re.escape(a),
+                            [stix_entity["name"]]
+                            + stix_entity["x_opencti_additional_names"],
+                        )
+                    )
+                    return self.client.search_multi_regex(
                         fields=[
-                            # TODO: windata Image, targetimage etc.
-                            "syscheck.path",
-                            "*filename",
-                            "data.file",
-                            "data.audit.file.name",
-                            "data.virustotal.source.file",
-                            "data.win.eventdata.filePath",
-                            "data.win.eventdata.file",
-                            "data.smbd.filename",
-                            "data.sca.check.file",
-                            "data.TargetPath",
-                            "data.Path",
                             "data.ChildPath",
                             "data.ParentPath",
+                            "data.Path",
                             "data.TargetFileName",
+                            "data.TargetPath",
+                            "data.audit.file.name",
+                            "data.file",
+                            "data.sca.check.file",
+                            "data.smbd.filename",
+                            "data.smbd.new_filename",
+                            "data.virustotal.source.file",
+                            "data.win.eventdata.file",
+                            "data.win.eventdata.filePath",
+                            "syscheck.path",
                         ],
-                        # TODO: if file contains slashes (win/lin), treat as full path and don't do glob:
-                        value="*/" + stix_entity["name"],
-                        # x_opencti_additional_names
+                        # Search for paths ignoring case for better experience
+                        # on Windows:
+                        case_insensitive=True,
+                        regexp=f'.*[/\\\\]+({"|".join(filenames)})',
                     )
                 elif has(stix_entity, ["hashes", "SHA-256"]):
                     return self.client.search_multi(
@@ -1120,26 +1130,45 @@ class WazuhConnector:
                     value=entity["observable_value"],
                 )
             case "Directory":
+                # NOTE: Backslashes are execpted to not be escaped in OpenCTI
+                path = stix_entity["path"].replace("\\", "\\\\\\\\")
+                # Search for the directory path also in filename/path fields
+                # that may be of intereset (not necessarily all the same fields
+                # as in File/StixFile:
                 filename_searches = [
-                    {"wildcard": {field: f"{stix_entity['path']}/*"}}
+                    {
+                        "regexp": {
+                            field: {
+                                "value": f"{path}[/\\\\]+.*",
+                                # Search for paths ignoring case for better
+                                # experience on Windows:
+                                "case_insensitive": True,
+                            }
+                        }
+                    }
+                    # Do not add globs here; it will throw:
                     for field in [
+                        "data.ChildPath",
+                        "data.ParentPath",
+                        "data.Path",
+                        "data.TargetPath",
+                        "data.audit.file.name",
                         "data.smbd.filename",
                         "data.smbd.new_filename",
-                        "data.audit.file.name",
-                        "data.TargetPath",
-                        "data.Path",
-                        "data.ParentPath",
-                        "data.ChildPath",
+                        "data.win.eventdata.image",
+                        "data.win.eventdata.sourceImage",
+                        "data.win.eventdata.targetImage",
                     ]
                 ]
                 return self.client.search(
                     should=[
                         {
                             "multi_match": {
-                                "query": stix_entity["path"],
+                                "query": path,
                                 "fields": [
                                     "*.path",
                                     "*.pwd",
+                                    "*.currentDirectory",
                                     "*.directory",
                                     "data.home",
                                     "data.SourceFilePath",
@@ -1186,6 +1215,7 @@ class WazuhConnector:
                 )
             # TODO: use wazuh API?:
             case "Process":
+                # search data.win.eventdata.(image,sourceImage,targetImage) (and check decoders again for more fields)
                 if "command_line" in stix_entity:
                     tokens = re.findall(
                         r"""("[^"]*"|'[^']*'|\S+)""", stix_entity["command_line"]
@@ -1237,8 +1267,10 @@ class WazuhConnector:
                         "*.userName",
                         "*.username",
                         "*.source_user",
+                        "*.sourceUser",
                         "*.destination_user",
                         "*.LoggedUser",
+                        "*.parentUser",
                         "data.win.eventdata.samAccountname",
                         "data.gcp.protoPayload.authenticationInfo.principalEmail",
                         "data.gcp.resource.labels.email_id",

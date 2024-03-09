@@ -192,8 +192,31 @@ class OpenSearchClient:
             }
         )
 
-    # TODO: raise if any fields contains globs(?):
-    def search_multi_glob(self, *, fields: list[str], value: str):
-        return self.search(should=[{"wildcard": {field: value}} for field in fields])
+    def search_multi_glob(self, *, fields: list[str], glob: str):
+        if any("*" in field for field in fields):
+            raise ValueError(
+                "Fields in an OpenSearch wildcard query cannot contain globs"
+            )
+
+        return self.search(should=[{"wildcard": {field: glob}} for field in fields])
+
+    def search_multi_regex(
+        self, *, fields: list[str], regexp: str, case_insensitive: bool = False
+    ):
+        if any("*" in field for field in fields):
+            raise ValueError(
+                "Fields in an OpenSearch regexp query cannot contain globs"
+            )
+
+        return self.search(
+            should=[
+                {
+                    "regexp": {
+                        field: {"value": regexp, "case_insensitive": case_insensitive}
+                    }
+                }
+                for field in fields
+            ]
+        )
 
     # TODO: create an API that can chain "wildcard", "match" etc. to build should, must etc.?
