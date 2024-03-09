@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from functools import cache
 
 # TODO: find related observables for sighting and operate on those (match against pattern?, what does based-on mean?)
+# relate sightings to incident?
 
 #
 # Populate agents using agent metadata?
@@ -296,6 +297,25 @@ def parse_config_datetime(value, setting_name):
         )
 
     return timestamp
+
+
+def extract_fields(obj: dict, fields: list[str], raise_if_missing: bool = True) -> dict:
+    def traverse(obj: dict, keys: list[str]):
+        for key in keys:
+            try:
+                obj = obj[key]
+            except KeyError as e:
+                if raise_if_missing:
+                    raise e
+
+        return obj
+
+    return {field: traverse(obj, field.split(".")) for field in fields}
+
+    # return {
+    #    field: eval("obj" + "".join(f"['{key}']" for key in field.split(".")))
+    #    for field in fields
+    # }
 
 
 def parse_match_patterns(patterns: str):
@@ -613,7 +633,6 @@ class WazuhConnector:
             config,
             default=True,
         )
-
         self.require_indicator_for_incidents = get_config_variable(
             "WAZUH_INCIDENT_REQUIRE_INDICATOR",
             ["wazuh", "incident_require_indicator"],
@@ -636,6 +655,12 @@ class WazuhConnector:
         self.create_agent_host_obs = get_config_variable(
             "WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE",
             ["wazuh", "create_agent_hostname_observable"],
+            config,
+            default=False,
+        )
+        self.ignore_private_addrs = get_config_variable(
+            "WAZUH_IGNORE_PRIVATE_IP_ADDRS",
+            ["wazuh", "ignore_private_ip_addrs"],
             config,
             default=False,
         )
@@ -979,6 +1004,16 @@ class WazuhConnector:
                     "data.win.eventdata.queryName",
                 ]
                 address = entity["observable_value"]
+                # This throws if the value is not an IP address. Accept this:
+                if (
+                    self.ignore_private_addrs
+                    and ipaddress.ip_address(address).is_private
+                ):
+                    self.helper.connector_logger.info(
+                        f"Ignoring private IP address {address}"
+                    )
+                    return None
+
                 if self.search_agent_ip:
                     return self.client.search_multi(
                         fields=fields,
@@ -1675,6 +1710,8 @@ class WazuhConnector:
             + self.enrich_incident_tool(incident=incident, alerts=alerts)
             ## Perhaps not very useful:
             # + self.enrich_accounts(incident=incident, alerts=alerts)
+            # Revisit:
+            # + self.enrich_uris(incident=incident, alerts=alerts)
         )
 
     def enrich_incident_mitre(self, *, incident: stix2.Incident, alerts: list[dict]):
@@ -1767,6 +1804,45 @@ class WazuhConnector:
                     )
                     for account in accounts
                 ]
+
+        return bundle
+
+    def enrich_uris(self, *, incident: stix2.Incident, alerts: list[dict]):
+        bundle = []
+        for alert in alerts:
+            urls = [
+                stix2.URL(
+                    value=uri,
+                    allow_custom=True,
+                    **self.stix_common_attrs,
+                )
+                for data in (alert["_source"]["data"],)
+                for uri in extract_fields(
+                    data,
+                    [
+                        # NOTE: globs not supported:
+                        "data.url",
+                        "data.osquery.columns.update_url",
+                        "data.office365.MeetingURL",
+                        "data.office365.MessageURLs",
+                        "data.office365.RemoteItemWebUrl",
+                    ],
+                    raise_if_missing=False,
+                ).values()
+            ]
+            bundle += urls + [
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "related-to", incident.id, url.id
+                    ),
+                    created=alert["_source"]["@timestamp"],
+                    **self.stix_common_attrs,
+                    relationship_type="related-to",
+                    source_ref=incident.id,
+                    target_ref=url.id,
+                )
+                for url in urls
+            ]
 
         return bundle
 
