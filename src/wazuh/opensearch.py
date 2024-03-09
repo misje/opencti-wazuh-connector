@@ -195,3 +195,5 @@ class OpenSearchClient:
     # TODO: raise if any fields contains globs(?):
     def search_multi_glob(self, *, fields: list[str], value: str):
         return self.search(should=[{"wildcard": {field: value}} for field in fields])
+
+    # TODO: create an API that can chain "wildcard", "match" etc. to build should, must etc.?

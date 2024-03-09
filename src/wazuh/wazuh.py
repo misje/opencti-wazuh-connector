@@ -28,6 +28,8 @@ from os.path import basename, commonprefix
 from pydantic import BaseModel
 from functools import cache
 
+# TODO: find related observables for sighting and operate on those (match against pattern?, what does based-on mean?)
+
 #
 # Populate agents using agent metadata?
 # SETTING: agent_labels: comma-separated list of labels to attach to agents
@@ -637,7 +639,10 @@ class WazuhConnector:
             config,
             default=False,
         )
-        # TODO: max bundle size limit. abort if above
+        # TODO: bundle_size_abort_limit
+        # TODO: hit_abort_limit: abort if met
+        # Ignore local addresses
+        # Ignore too wide dirs? "/", "/usr" etc.
 
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
@@ -887,7 +892,6 @@ class WazuhConnector:
             if ind is not None
         ]
 
-    # TODO: filter on alert rule level > x!
     # TODO: when name is used, look for alias too?
     def _query_alerts(self, entity, stix_entity) -> dict | None:
         match entity["entity_type"]:
@@ -904,7 +908,24 @@ class WazuhConnector:
                     return self.client.search_multi_glob(
                         # TODO: worthwhile? Add all permutations of slash types and fields? Not sure if regex is the way to go
                         # remember, fields here cannot have globs: raise if they do?
-                        fields=["syscheck.path"],
+                        fields=[
+                            # TODO: windata Image, targetimage etc.
+                            "syscheck.path",
+                            "*filename",
+                            "data.file",
+                            "data.audit.file.name",
+                            "data.virustotal.source.file",
+                            "data.win.eventdata.filePath",
+                            "data.win.eventdata.file",
+                            "data.smbd.filename",
+                            "data.sca.check.file",
+                            "data.TargetPath",
+                            "data.Path",
+                            "data.ChildPath",
+                            "data.ParentPath",
+                            "data.TargetFileName",
+                        ],
+                        # TODO: if file contains slashes (win/lin), treat as full path and don't do glob:
                         value="*/" + stix_entity["name"],
                         # x_opencti_additional_names
                     )
@@ -923,6 +944,7 @@ class WazuhConnector:
             case "IPv4-Addr" | "IPv6-Addr":
                 fields = [
                     "*.ip",
+                    "*.IP",
                     "*.dest_ip",
                     "*.dstip",
                     "*.src_ip",
@@ -932,11 +954,17 @@ class WazuhConnector:
                     "*.remote_ip",
                     "*.remote_ip_address",
                     "*.remote_address",
+                    "*.destination_address",
+                    "*.nat_destination_ip",
                     "*.sourceIPAddress",
                     "*.source_ip_address",
+                    "*.source_address",
                     "*.local_address",
+                    "*.LocalIp",
+                    "*.nat_source_ip",
                     "*.callerIp",
                     "*.ipAddress",
+                    "*.IPAddress",
                     "*.ipv*.address",
                     "data.win.eventdata.queryName",
                 ]
@@ -961,8 +989,10 @@ class WazuhConnector:
                     fields=[
                         "*.src_mac",
                         "*.srcmac",
+                        "*.smac",
                         "*.dst_mac",
                         "*.dstmac",
+                        "*.dmac",
                         "*.mac",
                         "data.osquery.columns.interface",
                     ],
@@ -983,6 +1013,9 @@ class WazuhConnector:
                                         "*.src_ip",
                                         "*.srcip",
                                         "*.local_address",
+                                        "*.source_address",
+                                        "*.nat_source_ip",
+                                        "*.LocalIp",
                                     ],
                                 }
                             }
@@ -996,6 +1029,9 @@ class WazuhConnector:
                                     "*.src_port",
                                     "*.srcport",
                                     "*.local_port",
+                                    "*.spt",
+                                    "*.nat_source_port",
+                                    "data.IP",
                                 ],
                             }
                         }
@@ -1013,6 +1049,8 @@ class WazuhConnector:
                                         "*.dest_ip",
                                         "*.dstip",
                                         "*.remote_address",
+                                        "*.destination_address",
+                                        "*.nat_destination_ip",
                                     ],
                                 }
                             }
@@ -1026,6 +1064,8 @@ class WazuhConnector:
                                     "*.dest_port",
                                     "*.dstport",
                                     "*.remote_port",
+                                    "*.dpt",
+                                    "*.nat_destination_port",
                                 ],
                             }
                         }
@@ -1049,6 +1089,11 @@ class WazuhConnector:
                     "data.win.eventdata.queryName",
                     "data.dns.question.name",
                     "*.hostname",
+                    "*.domain",
+                    "*.netbios_hostname",
+                    "*.dns_hostname",
+                    "*.HostName",
+                    "*.host",
                 ]
                 hostname = entity["observable_value"]
                 if self.search_agent_name:
@@ -1071,14 +1116,41 @@ class WazuhConnector:
                     )
             case "Url":
                 return self.client.search_multi(
-                    fields=["*url", "*Url"],
+                    fields=["*url", "*Url", "*.URL", "*.uri"],
                     value=entity["observable_value"],
                 )
             case "Directory":
-                return self.client.search_multi(
-                    fields=["*.path"],
-                    value=stix_entity["path"],
+                filename_searches = [
+                    {"wildcard": {field: f"{stix_entity['path']}/*"}}
+                    for field in [
+                        "data.smbd.filename",
+                        "data.smbd.new_filename",
+                        "data.audit.file.name",
+                        "data.TargetPath",
+                        "data.Path",
+                        "data.ParentPath",
+                        "data.ChildPath",
+                    ]
+                ]
+                return self.client.search(
+                    should=[
+                        {
+                            "multi_match": {
+                                "query": stix_entity["path"],
+                                "fields": [
+                                    "*.path",
+                                    "*.pwd",
+                                    "*.directory",
+                                    "data.home",
+                                    "data.SourceFilePath",
+                                    "data.TargetPath",
+                                ],
+                            }
+                        }
+                    ]
+                    + filename_searches
                 )
+
             case "Windows-Registry-Key":
                 return self.client.search_multi(
                     fields=["data.win.eventdata.targetObject", "syscheck.path"],
@@ -1145,6 +1217,7 @@ class WazuhConnector:
                 else:
                     return None
             # case "Software":
+            # dpkg: package, version, arch
             case "Vulnerability":
                 return self.client.search_match(
                     {
@@ -1154,6 +1227,8 @@ class WazuhConnector:
                 )
             case "User-Account":
                 # search user_id too, perhaps also display_name(?)
+                # user_id search in SIDs, like data.win.eventdata.{targetSid,subjectUserSid}
+                # user_id: audit.{auid,uid,euid,suid,fsuid}, pam.{uid,euid}
                 return self.client.search_multi(
                     fields=[
                         "*.dstuser",
@@ -1161,6 +1236,10 @@ class WazuhConnector:
                         "*.user",
                         "*.userName",
                         "*.username",
+                        "*.source_user",
+                        "*.destination_user",
+                        "*.LoggedUser",
+                        "data.win.eventdata.samAccountname",
                         "data.gcp.protoPayload.authenticationInfo.principalEmail",
                         "data.gcp.resource.labels.email_id",
                         "data.office365.UserId",
