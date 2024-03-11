@@ -30,6 +30,8 @@ from functools import cache
 
 # TODO: find related observables for sighting and operate on those (match against pattern?, what does based-on mean?)
 # relate sightings to incident?
+#
+# Using automation, observables can be created from indicators. No need to enrich them?
 
 #
 # Populate agents using agent metadata?
@@ -416,7 +418,7 @@ def entity_name_value(entity: dict):
         case "StixFile" | "Artifact":
             value = oneof("name", "x_opencti_additional_names", within=entity)
         case "Directory":
-            value = oneof("path", "x_opencti_additional_names", within=entity)
+            value = oneof("path", within=entity)
         case "Software" | "Windows-Registry-Value-Type":
             value = oneof("name", within=entity)
         case "User-Account":
@@ -453,6 +455,19 @@ def incident_entity_relation_type(entity: dict):
             return "targets"
         case _:
             return "related-to"
+
+
+def list_or_empty(obj: dict, key: str):
+    return obj[key] if key in obj else []
+
+
+def lucene_regex_escape(string: str):
+    reg_chars = [".", "?", "+", "|", "{", "}", "[", "]", "(", ")", '"', "\\"]
+    return "".join("\\" + ch if ch in reg_chars else ch for ch in string)
+
+
+def escape_path(path: str, *, count: int = 2):
+    return re.sub(r"\\{2,}", "\\" * count, path)
 
 
 class WazuhConnector:
@@ -668,6 +683,12 @@ class WazuhConnector:
         # TODO: hit_abort_limit: abort if met
         # Ignore local addresses
         # Ignore too wide dirs? "/", "/usr" etc.
+        self.ignore_own_entities = get_config_variable(
+            "WAZUH_IGNORE_OWN_ENTITIES",
+            ["wazuh", "ignore_own_entities"],
+            config,
+            default=True,
+        )
 
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
@@ -734,8 +755,19 @@ class WazuhConnector:
             entity = self.helper.api.vulnerability.read(id=data["entity_id"])
             entity_type = "vulnerability"
             # It doesn't make sense to support indicators, having to parse all sorts of patterns:
-        # elif data["entity_id"].startswith("indicator--"):
-        #    entity = self.helper.api.indicator.read(id=data["entity_id"])
+        elif data["entity_id"].startswith("indicator--"):
+            ind = self.helper.api.indicator.read(id=data["entity_id"])
+            ind_obs = ind["observables"] if ind and "observables" in ind else []
+            # TODO: In some distant feature, with a STIX shifter implementation
+            # for Wazuh, look up the STIX pattern in the indicator and use that
+            # in a search.
+            if not ind_obs:
+                raise ValueError("Indicator is not based on any observables")
+            elif (count := len(ind_obs)) > 1:
+                self.helper.connector_logger.warning(
+                    f"Indicator is based on several observables; using the first out of {count}"
+                )
+            entity = self.helper.api.stix_cyber_observable.read(id=ind_obs[0]["id"])
         else:
             entity = self.helper.api.stix_cyber_observable.read(id=data["entity_id"])
 
@@ -748,6 +780,13 @@ class WazuhConnector:
         if not tlp_allowed(entity, self.max_tlp):
             self.helper.connector_logger.info(f"max tlp: {self.max_tlp}")
             raise ValueError("Entity ignored because TLP not allowed")
+
+        if (
+            self.ignore_own_entities
+            and has(entity, ["createdBy", "standard_id"])
+            and entity["createdBy"]["standard_id"] == self.author.id
+        ):
+            return f"Ignoring entity because it was created by {self.author.name}"
 
         # Figure out exactly what this does (change id format?);
         enrichment = self.helper.get_data_from_enrichment(data, entity)
@@ -782,6 +821,10 @@ class WazuhConnector:
             # searchable in Wazuh. There may also not be enough information to
             # perform a search that is targeted enough. This is not an error:
             return f"{entity['entity_type']} has no queryable data"
+
+        if result["_shards"]["failed"] > 0:
+            for failure in result["_shards"]["failures"]:
+                self.helper.connector_logger.error(f"Query failure: {failure}")
 
         hits = result["hits"]["hits"]
         # TODO: create note (optionally) if no hits found(?):
@@ -925,7 +968,6 @@ class WazuhConnector:
     def _query_alerts(self, entity, stix_entity) -> dict | None:
         match entity["entity_type"]:
             # TODO: Use name as well as hash if defined (optional, config)
-            # NOTE: Backslashes are execpted to not be escaped in OpenCTI
             case "StixFile" | "Artifact":
                 if (
                     entity["entity_type"] == "StixFile"
@@ -937,9 +979,9 @@ class WazuhConnector:
                     # size? use size too if so
                     filenames = list(
                         map(
-                            lambda a: re.escape(a),
+                            lambda a: escape_path(lucene_regex_escape(a)),
                             [stix_entity["name"]]
-                            + stix_entity["x_opencti_additional_names"],
+                            + list_or_empty(stix_entity, "x_opencti_additional_names"),
                         )
                     )
                     return self.client.search_multi_regex(
@@ -962,7 +1004,16 @@ class WazuhConnector:
                         # Search for paths ignoring case for better experience
                         # on Windows:
                         case_insensitive=True,
-                        regexp=f'.*[/\\\\]+({"|".join(filenames)})',
+                        regexp="|".join(
+                            [
+                                # Unless the filename starts with a separator,
+                                # assuming this is full path, prepend a regex
+                                # that ignores everything up to and including a
+                                # path separator before the filename:
+                                f if re.match(r"^[/\\]", f) else f".*[/\\\\]+{f}"
+                                for f in filenames
+                            ]
+                        ),
                     )
                 elif has(stix_entity, ["hashes", "SHA-256"]):
                     return self.client.search_multi(
@@ -1165,16 +1216,20 @@ class WazuhConnector:
                     value=entity["observable_value"],
                 )
             case "Directory":
-                # NOTE: Backslashes are execpted to not be escaped in OpenCTI
-                path = stix_entity["path"].replace("\\", "\\\\\\\\")
+                # TODO: go through current field list and organise into fields
+                # that expected and escaped path and those that don't:
+                path = lucene_regex_escape(stix_entity["path"])
+                escaped_path = escape_path(path, count=4)
+                double_escaped_path = escape_path(path, count=8)
                 # Search for the directory path also in filename/path fields
                 # that may be of intereset (not necessarily all the same fields
                 # as in File/StixFile:
+                # TODO: [mycustomobject:myvalue = 'asd'] possible?
                 filename_searches = [
                     {
                         "regexp": {
                             field: {
-                                "value": f"{path}[/\\\\]+.*",
+                                "value": f"{double_escaped_path}[/\\\\]+.*",
                                 # Search for paths ignoring case for better
                                 # experience on Windows:
                                 "case_insensitive": True,
@@ -1194,12 +1249,28 @@ class WazuhConnector:
                         "data.win.eventdata.sourceImage",
                         "data.win.eventdata.targetImage",
                     ]
+                ] + [
+                    {
+                        "regexp": {
+                            field: {
+                                "value": f"{escaped_path}[/\\\\]+.*",
+                                # "value": f"{stix_entity['path']}[/\\]+.*",
+                                # Search for paths ignoring case for better
+                                # experience on Windows:
+                                "case_insensitive": True,
+                            }
+                        }
+                    }
+                    # Do not add globs here; it will throw:
+                    for field in [
+                        "syscheck.path",
+                    ]
                 ]
                 return self.client.search(
                     should=[
                         {
                             "multi_match": {
-                                "query": path,
+                                "query": escaped_path,
                                 "fields": [
                                     "*.path",
                                     "*.pwd",
@@ -1251,7 +1322,10 @@ class WazuhConnector:
             # TODO: use wazuh API?:
             case "Process":
                 # search data.win.eventdata.(image,sourceImage,targetImage) (and check decoders again for more fields)
+                # search command line also in parentCommandLine + …
                 if "command_line" in stix_entity:
+                    # Split the string into tokens wrapped in quotes or
+                    # separated by whitespace:
                     tokens = re.findall(
                         r"""("[^"]*"|'[^']*'|\S+)""", stix_entity["command_line"]
                     )
@@ -1261,7 +1335,17 @@ class WazuhConnector:
                     self.helper.log_debug(tokens)
                     command = basename(tokens[0])
                     args = [
-                        re.sub(r"""^['"]|['"]$""", "", arg).replace("\\", "\\\\\\\\")
+                        # Escape lucene regex characters, remove any
+                        # non-escaped quotes in the beginning and end of each
+                        # argument, and escape any paths:
+                        escape_path(
+                            re.sub(
+                                r"""^(?:(?<!\\)"|')|(?:(?<!\\)"|')$""",
+                                "",
+                                lucene_regex_escape(arg),
+                            ),
+                            count=8,
+                        )
                         for arg in tokens[1:]
                     ]
                     # Todo: wildcard: case_insensitive: true
@@ -1294,6 +1378,7 @@ class WazuhConnector:
                 # search user_id too, perhaps also display_name(?)
                 # user_id search in SIDs, like data.win.eventdata.{targetSid,subjectUserSid}
                 # user_id: audit.{auid,uid,euid,suid,fsuid}, pam.{uid,euid}
+                # FIXME: ensure account_login is defined first
                 return self.client.search_multi(
                     fields=[
                         "*.dstuser",
@@ -1463,6 +1548,7 @@ class WazuhConnector:
             "|Key|Value|\n"
             "|---|---|\n"
             f"|Time|{run_time_string}|\n"
+            f"|Duration|{result['took']} ms|\n"
             f"|Hits returned|{hits_returned}|\n"
             f"|Total hits|{total_hits}|\n"
             f"|Max hits|{self.hits_limit}|\n"
@@ -1729,6 +1815,7 @@ class WazuhConnector:
                 id=AttackPattern.generate_id(mitre_id, mitre_id),
                 name=mitre_id,
                 allow_custom=True,
+                **self.stix_common_attrs,
                 x_mitre_id=mitre_id,
             )
             bundle += [
