@@ -469,6 +469,27 @@ def escape_path(path: str, *, count: int = 2):
     return re.sub(r"\\{2,}", "\\" * count, path)
 
 
+def parse_incident_create_threshold(threshold: str | int | None) -> int:
+    match threshold:
+        case "low":
+            return 2
+        case "medium":
+            return 7
+        case "high":
+            return 11
+        case "critical":
+            return 14
+        case threshold if (
+            isinstance(threshold, int)
+            or (isinstance(threshold, str) and threshold.isdigit())
+        ) and int(threshold) in range(1, 15):
+            return int(threshold)
+        case None:
+            return 1
+        case _:
+            raise ValueError(f"WAZUH_INCIDENT_CREATE_THRESHOLD is invalid: {threshold}")
+
+
 class WazuhConnector:
     class MetricHelper:
         def __init__(self, metric: OpenCTIMetricHandler):
@@ -687,6 +708,13 @@ class WazuhConnector:
             ["wazuh", "incident_create_mode"],
             config,
             default="per_sighting",
+        )
+        self.create_incident_threshold = parse_incident_create_threshold(
+            get_config_variable(
+                "WAZUH_INCIDENT_CREATE_THRESHOLD",
+                ["wazuh", "incident_create_threshold"],
+                config,
+            )
         )
         self.create_agent_ip_obs = get_config_variable(
             "WAZUH_CREATE_AGENT_IP_OBSERVABLE",
@@ -1586,6 +1614,7 @@ class WazuhConnector:
         hits_returned = len(result["hits"]["hits"])
         total_hits = result["hits"]["total"]["value"]
         # TODO: shards info
+        # TODO: link to query if a link to opensearch is possible
         content = (
             "## Wazuh enrichment summary\n"
             "\n\n"
@@ -1634,6 +1663,12 @@ class WazuhConnector:
         result: dict,
         sightings_meta: SightingsCollector,
     ):
+        def log_skipped_incident_creation(level: int):
+            self.helper.connector_logger.info(
+                f"Not creating incident because rule level below threshold: {level} < {self.create_incident_threshold}"
+            )
+            return True
+
         sightings = sightings_meta.collated()
         incidents = []
         bundle = []
@@ -1646,6 +1681,12 @@ class WazuhConnector:
         # severity = cvss3_to_severity(alert entity['entity_type'] == 'Vulnerability'
         match self.create_incident:
             case "per_query":
+                if (
+                    level := sightings_meta.max_rule_level()
+                ) < self.create_incident_threshold:
+                    log_skipped_incident_creation(level)
+                    return []
+
                 incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
                 incident = stix2.Incident(
                     id=Incident.generate_id(
@@ -1672,6 +1713,10 @@ class WazuhConnector:
 
             case "per_sighting":
                 for sighter_id, meta in sightings.items():
+                    if (level := meta.max_rule_level) < self.create_incident_threshold:
+                        log_skipped_incident_creation(level)
+                        continue
+
                     incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted in {meta.sighter_name}"
                     incident = stix2.Incident(
                         id=Incident.generate_id(incident_name, meta.last_seen),
@@ -1697,9 +1742,13 @@ class WazuhConnector:
 
             case "per_alert_rule":
                 for rule_id, meta in sightings_meta.alerts_by_rule_meta().items():
-                    incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
                     # Alerts are grouped by ID and all have the same level, so just pick one:
                     alerts_level = meta["alerts"][0]["_source"]["rule"]["level"]
+                    if alerts_level < self.create_incident_threshold:
+                        log_skipped_incident_creation(alerts_level)
+                        continue
+
+                    incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
                     # Alerts may have different description even if they have
                     # the same level. Pick the longest common prefix:
                     alerts_desc = common_prefix_string(
@@ -1752,6 +1801,11 @@ class WazuhConnector:
                         for rule_id in (alert["_source"]["rule"]["id"],)
                         for rule_desc in (alert["_source"]["rule"]["description"],)
                         for rule_level in (alert["_source"]["rule"]["level"],)
+                        if (
+                            rule_level >= self.create_incident_threshold
+                            # Just a hack to log some info:
+                            or not log_skipped_incident_creation(rule_level)
+                        )
                     ]
                     bundle += incidents
 
