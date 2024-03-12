@@ -28,23 +28,25 @@ from os.path import basename, commonprefix
 from pydantic import BaseModel
 from functools import cache
 
-# Using automation, observables can be created from indicators. No need to enrich them?
-#
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
+# TODO: Attach note to incident
 
+# ideas:
+# - Populate agents using agent metadata?
 #
-# Populate agents using agent metadata?
-# SETTING: agent_labels: comma-separated list of labels to attach to agents
-# SETTING: siem_labels: comma-separated list of labels to attach to wazuh identity
-# Search include/exclue in setting level (add wazuh-opencti as default)
-# Create wazuh integration that creates incidents in opencti
-# get_config_variable with required doesn't throw if not set
+# Notes:
+# - get_config_variable with required doesn't throw if not set. Resolved by
+#   using Field in the future
+# - Using automation, observables can be created from indicator
+# - for config, consider using pydanic and BaseSettings. Look at
+# https://github.com/OpenCTI-Platform/connectors/blob/abf07fb6bd423c104a10207626520c2836d7e586/internal-enrichment/shodan-internetdb/src/shodan_internetdb/config.py#L26.
+# If not, ensure empty values in required throws
+# - Experiment with custom STIX patterns, like [syscheck.path:value = …] to
+# create opensearch queries? Look into qualifiers in the STIX standard
 
 
 # UUID_RE = r"^a[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$"
 # STIX_ID_REGEX = re.compile(f".+--{UUID_RE}", re.IGNORECASE)
-
-# TODO: create indicator sighting? ask filigran?
 
 
 # TODO: Improve logic, avoid all recalculations (unless cache fixes this?)
@@ -507,7 +509,7 @@ class WazuhConnector:
 
     def __init__(self):
         self.CONNECTOR_VERSION: Final[str] = "0.0.1"
-        # TODO: it appears that the dummy indicator has to exist for external references to work:
+        # it appears that the dummy indicator has to exist for external references to work (probably not – random and inconsistent):
         self.DUMMY_INDICATOR_ID: Final[
             str
             # ] = "indicator--220d5816-3786-5421-a6d3-fb149a0df54e"  # "indicator--c1034564-a9fb-429b-a1c1-c80116cc8e1e"
@@ -526,7 +528,6 @@ class WazuhConnector:
             if isinstance(self.helper.connect_confidence_level, int)
             else None
         )
-        # TODO: for config, consider using pydanic and BaseSettings. Look at https://github.com/OpenCTI-Platform/connectors/blob/abf07fb6bd423c104a10207626520c2836d7e586/internal-enrichment/shodan-internetdb/src/shodan_internetdb/config.py#L26. If not, ensure empty values in required throws
         self.max_tlp = (
             re.sub(r"^(tlp:)?", "TLP:", tlp, flags=re.IGNORECASE).upper()
             if isinstance(
@@ -987,9 +988,6 @@ class WazuhConnector:
                 )
             ]
 
-        # TODO: PER_SIGHTING, PER_ALERT, PER_ALERT_RULE. Add mitre, other
-        # enrichments. Summary note. Add new first_seen/last_seen per rule id
-        # in summary note. Ensure summary note is at top (latest_hit timetamp?)
         if (
             self.require_indicator_for_incidents
             and entity_type == "observable"
@@ -1032,7 +1030,7 @@ class WazuhConnector:
             if ind is not None
         ]
 
-    # TODO: get help to write more targeted searches. If fields are used
+    # get help to write more targeted searches. If fields are used
     # differently by different decoders, search for that rule. Get help by
     # making issuers report their fields using something like 'GET
     # /wazuh-alerts-*/_field_caps?fields=*filename*'
@@ -1098,7 +1096,6 @@ class WazuhConnector:
                 else:
                     return None
 
-            # TODO: add setting that only looks up public addresses? (GeoLocation.countr_name exists?) Tested, not consistent enough
             case "IPv4-Addr" | "IPv6-Addr":
                 fields = [
                     "*.ip",
@@ -1289,14 +1286,13 @@ class WazuhConnector:
                 )
             case "Directory":
                 # TODO: go through current field list and organise into fields
-                # that expected and escaped path and those that don't:
+                # that expects an escaped path and those that don't:
                 path = lucene_regex_escape(stix_entity["path"])
                 escaped_path = escape_path(path, count=4)
                 double_escaped_path = escape_path(path, count=8)
                 # Search for the directory path also in filename/path fields
                 # that may be of intereset (not necessarily all the same fields
                 # as in File/StixFile:
-                # TODO: [mycustomobject:myvalue = 'asd'] possible?
                 filename_searches = [
                     {
                         "regexp": {
@@ -1391,7 +1387,7 @@ class WazuhConnector:
                     if hash
                     else None
                 )
-            # TODO: use wazuh API?:
+            # TODO: use wazuh API to list proceses too:
             case "Process":
                 # search data.win.eventdata.(image,sourceImage,targetImage) (and check decoders again for more fields)
                 # search command line also in parentCommandLine + …
@@ -1447,10 +1443,26 @@ class WazuhConnector:
                     }
                 )
             case "User-Account":
-                # search user_id too, perhaps also display_name(?)
-                # user_id search in SIDs, like data.win.eventdata.{targetSid,subjectUserSid}
-                # user_id: audit.{auid,uid,euid,suid,fsuid}, pam.{uid,euid}
-                # FIXME: ensure account_login is defined first
+                # uid = oneof('user_id', within=stix_entity)
+                login = str(oneof("account_login", within=stix_entity))
+                # Some logs provide a username that als consists of a UID in parenthesis:
+                if match := re.match(
+                    r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", login or ""
+                ):
+                    # uid = match.group('uid')
+                    login = match.group("name")
+
+                # TODO: Currently we only search usernames:
+                if not login:
+                    return None
+
+                # If we have uid, but no username, search for it, but only if it is expected to be unique (configurable?), i.e. not 1000, 1001 etc.
+                # If username and uid are both defined, only look for both in logs that provide both
+                # Not sure if any alerts provide display_name only
+                # Search also in other IDs:
+                # - SIDs, like data.win.eventdata.{targetSid,subjectUserSid}
+                # - audit.{auid,uid,euid,suid,fsuid}, pam.{uid,euid}
+
                 return self.client.search_multi(
                     fields=[
                         "*.dstuser",
@@ -1468,7 +1480,7 @@ class WazuhConnector:
                         "data.gcp.resource.labels.email_id",
                         "data.office365.UserId",
                     ],
-                    value=stix_entity["account_login"],
+                    value=login,
                 )
             case _:
                 raise ValueError(
@@ -1964,7 +1976,7 @@ class WazuhConnector:
     def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
         bundle = []
         for alert in alerts:
-            # Remove invalid usernames (like 'root(uid=0)', or just remove any (uid=…) part.
+            # FIXME: Remove invalid usernames (like 'root(uid=0)', or just remove any (uid=…) part.
             if has_any(alert, ["_source", "data"], ["dstuser", "srcuser"]):
                 accounts = [
                     stix2.UserAccount(
