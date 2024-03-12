@@ -28,10 +28,9 @@ from os.path import basename, commonprefix
 from pydantic import BaseModel
 from functools import cache
 
-# TODO: find related observables for sighting and operate on those (match against pattern?, what does based-on mean?)
-# relate sightings to incident?
-#
 # Using automation, observables can be created from indicators. No need to enrich them?
+#
+# TODO: Replace ValueError with a better named exception if it is no longer a value error
 
 #
 # Populate agents using agent metadata?
@@ -532,6 +531,34 @@ class WazuhConnector:
         self.hits_limit = get_config_variable(
             "WAZUH_MAX_HITS", ["wazuh", "max_hits"], config, isNumber=True, default=10
         )
+        self.hits_abort_limit = (
+            limit
+            if isinstance(
+                limit := get_config_variable(
+                    "WAZUH_MAX_HITS_ABORT",
+                    ["wazuh", "max_hits_abort"],
+                    config,
+                    isNumber=True,
+                    # default=1000,
+                ),
+                int,
+            )
+            else None
+        )
+        self.bundle_abort_limit = (
+            limit
+            if isinstance(
+                limit := get_config_variable(
+                    "WAZUH_MAX_BUNDLES_ABORT",
+                    ["wazuh", "max_bundles_abort"],
+                    config,
+                    isNumber=True,
+                    # default=200,
+                ),
+                int,
+            )
+            else None
+        )
         self.system_name = get_config_variable(
             "WAZUH_SYSTEM_NAME", ["wazuh", "system_name"], config, default="Wazuh SIEM"
         )
@@ -679,15 +706,17 @@ class WazuhConnector:
             config,
             default=False,
         )
-        # TODO: bundle_size_abort_limit
-        # TODO: hit_abort_limit: abort if met
-        # Ignore local addresses
-        # Ignore too wide dirs? "/", "/usr" etc.
         self.ignore_own_entities = get_config_variable(
             "WAZUH_IGNORE_OWN_ENTITIES",
             ["wazuh", "ignore_own_entities"],
             config,
             default=True,
+        )
+        self.order_by_rule_level = get_config_variable(
+            "WAZUH_ORDER_BY_RULE_LEVEL",
+            ["wazuh", "order_by_rule_level"],
+            config,
+            default=False,
         )
 
         self.stix_common_attrs = {
@@ -733,7 +762,7 @@ class WazuhConnector:
             search_after=self.search_after,
             include_match=parse_match_patterns(self.search_include),  # type: ignore
             exclude_match=parse_match_patterns(self.search_exclude),  # type: ignore
-            # TODO: optional sort on rule.level before time?
+            order_by=[{"rule.level": "desc"}] if self.order_by_rule_level else [],
             # TODO: Use Field to validate. Document that search_after is prepended if defined:
             # filters=[{"range": {"rule.level": {"gte": 8}}}],
             # filters=get_config_variable("WAZUH_SEARCH_FILTER", ["wazuh", "search_filter"], config),
@@ -754,7 +783,7 @@ class WazuhConnector:
         if data["entity_id"].startswith("vulnerability--"):
             entity = self.helper.api.vulnerability.read(id=data["entity_id"])
             entity_type = "vulnerability"
-            # It doesn't make sense to support indicators, having to parse all sorts of patterns:
+        # Support looking up observables based on indicatorss:
         elif data["entity_id"].startswith("indicator--"):
             ind = self.helper.api.indicator.read(id=data["entity_id"])
             ind_obs = ind["observables"] if ind and "observables" in ind else []
@@ -827,9 +856,16 @@ class WazuhConnector:
                 self.helper.connector_logger.error(f"Query failure: {failure}")
 
         hits = result["hits"]["hits"]
-        # TODO: create note (optionally) if no hits found(?):
         if not hits:
             return "No hits found"
+
+        if (
+            self.hits_abort_limit is not None
+            and (hit_count := result["hits"]["total"]["value"]) > self.hits_abort_limit
+        ):
+            raise ValueError(
+                f"Too many hits ({hit_count}) > {self.hits_abort_limit}): aborting"
+            )
 
         # The sigher is the Wazuh SIEM identity unless later overriden by
         # agents_as_systems:
@@ -943,6 +979,14 @@ class WazuhConnector:
             )
 
         bundle += list(agents.values())
+        if (
+            self.bundle_abort_limit is not None
+            and (bundle_count := len(bundle)) > self.bundle_abort_limit
+        ):
+            raise ValueError(
+                f"Bundle is too large ({bundle_count} > {self.bundle_abort_limit}): aborting"
+            )
+
         sent_count = len(
             self.helper.send_stix2_bundle(
                 self.helper.stix2_create_bundle(bundle), update=True

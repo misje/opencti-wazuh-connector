@@ -35,6 +35,7 @@ class OpenSearchClient:
         index: str,
         filters: list[dict[str, dict]] = [],
         search_after: datetime | None,
+        order_by: list[dict] = [],
         include_match: list[dict] | None,
         exclude_match: list[dict] | None,
     ) -> None:
@@ -46,10 +47,29 @@ class OpenSearchClient:
         self.helper = helper
         self.filters = filters
         self.search_after = search_after
+        self.order_by = self._parse_order_by(order_by)
         self.include_match = include_match
         self.exclude_match = exclude_match
 
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+    @staticmethod
+    def _parse_order_by(order_by: list[dict]):
+        def _validate_order(field, order):
+            if not isinstance(field, str):
+                raise OpenSearchClient.QueryError("order-by field must be a string")
+            if not (isinstance(order, str) and order.lower() in ["asc", "desc"]):
+                raise OpenSearchClient.QueryError("order-by order must be [ASC, DESC]")
+            return True
+
+        return [
+            {field: {"order": order}}
+            for item in order_by
+            # This dict should only have on key, but accept sevaral anyway
+            # since it works despite making less sense (no defined orer):
+            for field, order in item.items()
+            if _validate_order(field, order)
+        ]
 
     def _query(self, endpoint, query):
         adapter = HTTPAdapter(
@@ -87,8 +107,7 @@ class OpenSearchClient:
         query = {
             "query": query,
             "size": self.limit,
-            # TODO: order by rule id first( optional)
-            "sort": [{"timestamp": {"order": "desc"}}],
+            "sort": self.order_by + [{"timestamp": {"order": "desc"}}],
         }
         self.helper.connector_logger.debug(f'Sending query "{query}"')
 
