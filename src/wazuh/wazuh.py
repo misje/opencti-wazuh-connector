@@ -412,26 +412,26 @@ def oneof(*keys: str, within: dict, default=None):
     return next((within[key] for key in keys if key in within), default)
 
 
-def entity_name_value(entity: dict):
-    name = entity["entity_type"]
-    value = None
-    match name:
+def entity_value(entity: dict):
+    match entity["entity_type"]:
         case "StixFile" | "Artifact":
-            value = oneof("name", "x_opencti_additional_names", within=entity)
+            return oneof("name", "x_opencti_additional_names", within=entity)
         case "Directory":
-            value = oneof("path", within=entity)
+            return oneof("path", within=entity)
         case "Software" | "Windows-Registry-Value-Type":
-            value = oneof("name", within=entity)
+            return oneof("name", within=entity)
         case "User-Account":
-            value = oneof("account_login", "user_id", "display_name", within=entity)
+            return oneof("account_login", "user_id", "display_name", within=entity)
         case "Vulnerability":
-            value = oneof("name", within=entity)
+            return oneof("name", within=entity)
         case "Windows-Registry-Key":
-            value = oneof("key", within=entity)
+            return oneof("key", within=entity)
         case _:
-            value = oneof("value", within=entity)
+            return oneof("value", within=entity)
 
-    return " ".join(filter(None, [name, value]))
+
+def entity_name_value(entity: dict):
+    return " ".join(filter(None, [entity["entity_type"], entity_value(entity)]))
 
 
 def common_prefix_string(strings: list[str], elideString: str = "[…]"):
@@ -490,6 +490,25 @@ def parse_incident_create_threshold(threshold: str | int | None) -> int:
             return 1
         case _:
             raise ValueError(f"WAZUH_INCIDENT_CREATE_THRESHOLD is invalid: {threshold}")
+
+            # TODO: Rename to get_matches?
+
+
+def highlight_field_match(alert: dict, search_term: str, path: str = ""):
+    if isinstance(alert, dict):
+        return [
+            (path + "." + k if path else k, v)
+            for k, v in alert.items()
+            if isinstance(v, str) and search_term in v
+        ] + [
+            path_match
+            for k, v in alert.items()
+            for path_match in highlight_field_match(
+                v, search_term, path + "." + k if path else k
+            )
+        ]
+    else:
+        return []
 
 
 class WazuhConnector:
@@ -941,7 +960,7 @@ class WazuhConnector:
             sighting = self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)
             sighting_ids.append(sighting.id)
             bundle += [sighting] + self.create_sighting_alert_notes(
-                sighting_id=sighting.id, metadata=meta
+                entity=entity, sighting_id=sighting.id, metadata=meta
             )
 
         ###############
@@ -1563,12 +1582,15 @@ class WazuhConnector:
         )
 
     def create_sighting_alert_notes(
-        self, *, sighting_id: str, metadata: SightingsCollector.Meta
+        self, *, entity: dict, sighting_id: str, metadata: SightingsCollector.Meta
     ):
         note_count = 0
         return [
             self.create_note_stix(
-                sighting_id=sighting_id, alert=alert, limit_info=capped_at
+                entity=entity,
+                sighting_id=sighting_id,
+                alert=alert,
+                limit_info=capped_at,
             )
             for alerts in metadata.alerts.values()
             # In addition to limit the total number of external references,
@@ -1584,10 +1606,16 @@ class WazuhConnector:
         ]
 
     def create_note_stix(
-        self, *, sighting_id, alert, limit_info: tuple[int, int, int] | None
+        self,
+        *,
+        entity: dict,
+        sighting_id,
+        alert,
+        limit_info: tuple[int, int, int] | None,
     ):
         s = alert["_source"]
         sighted_at = s["@timestamp"]
+        obs_value = str(entity_value(entity))
         alert_json = json.dumps(s, indent=2)
         capped_info = (
             [
@@ -1607,9 +1635,25 @@ class WazuhConnector:
             created=sighted_at,
             **self.stix_common_attrs,
             abstract=f"""Wazuh alert "{s['rule']['description']}" for sighting at {sighted_at}""",
-            content=alert_md_table(alert, capped_info)
-            + "\n\n"
-            + f"```json\n{alert_json}\n",
+            content="## Summary\n\n"
+            + alert_md_table(alert, capped_info)
+            + (
+                "\n\n"
+                "## Matches\n"
+                "\n\n"
+                "|Field|Match|\n"
+                "|-----|-----|\n"
+                + "".join(
+                    f"|{field}|{match}|\n"
+                    for field, match in highlight_field_match(
+                        alert["_source"], obs_value
+                    )
+                )
+                + "\n\n"
+                "## Alert\n"
+                "\n\n"
+                f"```json\n{alert_json}]\n"
+            ),
             object_refs=sighting_id,
         )
 
@@ -1625,7 +1669,6 @@ class WazuhConnector:
         abstract = f"Wazuh enrichment at {run_time_string}"
         hits_returned = len(result["hits"]["hits"])
         total_hits = result["hits"]["total"]["value"]
-        # TODO: shards info
         # TODO: link to query if a link to opensearch is possible
         content = (
             "## Wazuh enrichment summary\n"
@@ -1841,7 +1884,6 @@ class WazuhConnector:
                 incident=incident, alerts=sightings_meta.alerts()
             )
         ]
-        # TODO: add note
         return bundle
 
     def create_incident_relationships(
