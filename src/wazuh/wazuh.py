@@ -24,7 +24,8 @@ from typing import Any, Callable, Final
 from hashlib import sha256
 from datetime import datetime
 from urllib.parse import urljoin
-from os.path import basename, commonprefix
+from os.path import commonprefix
+from ntpath import basename
 from pydantic import BaseModel
 from functools import cache
 
@@ -119,6 +120,7 @@ class SightingsCollector:
                 last_seen=timestamp,
                 count=1,
                 alerts={rule_id: [alert]},
+                max_rule_level=alert["_source"]["rule"]["level"],
             )
             self._latest = timestamp
 
@@ -425,22 +427,64 @@ def oneof(*keys: str, within: dict, default=None):
     return next((within[key] for key in keys if key in within), default)
 
 
+def oneof_nonempty(*keys: str, within: dict, default=None):
+    return next((within[key] for key in keys if key in within and within[key]), default)
+
+
+def allof_nonempty(*keys: str, within: dict):
+    values = []
+    for key in keys:
+        if key in within:
+            if isinstance(within[key], list):
+                values += [val for val in within[key] if val]
+            elif within[key]:
+                values.append(within[key])
+
+    return values
+
+
 def entity_value(entity: dict):
     match entity["entity_type"]:
         case "StixFile" | "Artifact":
-            return oneof("name", "x_opencti_additional_names", within=entity)
+            name = oneof_nonempty("name", "x_opencti_additional_names", within=entity)
+            if isinstance(name, list) and len(name):
+                return name[0]
+            else:
+                return str(name) if name is not None else None
         case "Directory":
             return oneof("path", within=entity)
         case "Software" | "Windows-Registry-Value-Type":
             return oneof("name", within=entity)
         case "User-Account":
-            return oneof("account_login", "user_id", "display_name", within=entity)
+            return oneof_nonempty(
+                "account_login", "user_id", "display_name", within=entity
+            )
         case "Vulnerability":
             return oneof("name", within=entity)
         case "Windows-Registry-Key":
             return oneof("key", within=entity)
         case _:
             return oneof("value", within=entity)
+
+
+def entity_values(entity: dict):
+    match entity["entity_type"]:
+        case "StixFile" | "Artifact":
+            return allof_nonempty("name", "x_opencti_additional_names", within=entity)
+        case "Directory":
+            return allof_nonempty("path", within=entity)
+        case "Software" | "Windows-Registry-Value-Type":
+            return allof_nonempty("name", within=entity)
+        case "User-Account":
+            return allof_nonempty(
+                "account_login", "user_id", "display_name", within=entity
+            )
+        case "Vulnerability":
+            return allof_nonempty("name", within=entity)
+        case "Windows-Registry-Key":
+            return allof_nonempty("key", within=entity)
+        case _:
+            return allof_nonempty("value", within=entity)
 
 
 def entity_name_value(entity: dict):
@@ -507,19 +551,27 @@ def parse_incident_create_threshold(threshold: str | int | None) -> int:
 
 def search_in_alert(alert: dict, search_term: str, path: str = ""):
     if isinstance(alert, dict):
-        return [
-            (path + "." + k if path else k, v)
+        return {
+            path + "." + k if path else k: v
             for k, v in alert.items()
             if isinstance(v, str) and search_term in v
-        ] + [
-            path_match
+        } | {
+            match_key: match_val
             for k, v in alert.items()
-            for path_match in search_in_alert(
+            for match_key, match_val in search_in_alert(
                 v, search_term, path + "." + k if path else k
-            )
-        ]
+            ).items()
+        }
     else:
-        return []
+        return {}
+
+
+def search_in_alert_multi(alert: dict, search_terms: list[str]):
+    return {
+        key: value
+        for results in [search_in_alert(alert, term) for term in search_terms]
+        for key, value in results.items()
+    }
 
 
 class WazuhConnector:
@@ -1445,9 +1497,8 @@ class WazuhConnector:
                     else None
                 )
             # TODO: use wazuh API to list proceses too:
+            # TODO: Create a guard against too simple search strings (one word?)
             case "Process":
-                # search data.win.eventdata.(image,sourceImage,targetImage) (and check decoders again for more fields)
-                # search command line also in parentCommandLine + …
                 if "command_line" in stix_entity:
                     # Split the string into tokens wrapped in quotes or
                     # separated by whitespace:
@@ -1459,10 +1510,10 @@ class WazuhConnector:
 
                     self.helper.log_debug(tokens)
                     command = basename(tokens[0])
+                    esc_command = lucene_regex_escape(command)
                     args = [
-                        # Escape lucene regex characters, remove any
-                        # non-escaped quotes in the beginning and end of each
-                        # argument, and escape any paths:
+                        # Remove any non-escaped quotes in the beginning and
+                        # end of each argument, and escape any paths:
                         escape_path(
                             re.sub(
                                 r"""^(?:(?<!\\)"|')|(?:(?<!\\)"|')$""",
@@ -1479,8 +1530,11 @@ class WazuhConnector:
                                 "bool": {
                                     "must": [
                                         {
-                                            "wildcard": {
-                                                "data.win.eventdata.commandLine": f"*{command}*"
+                                            "regexp": {
+                                                "data.win.eventdata.commandLine": {
+                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
+                                                    "case_insensitive": True,
+                                                }
                                             }
                                         }
                                     ]
@@ -1490,6 +1544,134 @@ class WazuhConnector:
                                                 "data.win.eventdata.commandLine": f"*{arg}*"
                                             }
                                         }
+                                        for arg in args
+                                    ]
+                                }
+                            },
+                            {
+                                "bool": {
+                                    "must": [
+                                        {
+                                            "regexp": {
+                                                "data.win.eventdata.parentCommandLine": {
+                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
+                                                    "case_insensitive": True,
+                                                }
+                                            }
+                                        }
+                                    ]
+                                    + [
+                                        {
+                                            "wildcard": {
+                                                "data.win.eventdata.parentCommandLine": f"*{arg}*"
+                                            }
+                                        }
+                                        for arg in args
+                                    ]
+                                }
+                            },
+                            {
+                                "bool": {
+                                    "must": [
+                                        {
+                                            "regexp": {
+                                                "data.win.eventdata.image": {
+                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
+                                                    "case_insensitive": True,
+                                                }
+                                            }
+                                        }
+                                    ]
+                                    + [
+                                        {
+                                            "wildcard": {
+                                                "data.win.eventdata.image": f"*{arg}*"
+                                            }
+                                        }
+                                        for arg in args
+                                    ]
+                                }
+                            },
+                            {
+                                "bool": {
+                                    "must": [
+                                        {
+                                            "regexp": {
+                                                "data.win.eventdata.sourceImage": {
+                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
+                                                    "case_insensitive": True,
+                                                }
+                                            }
+                                        }
+                                    ]
+                                    + [
+                                        {
+                                            "wildcard": {
+                                                "data.win.eventdata.sourceImage": f"*{arg}*"
+                                            }
+                                        }
+                                        for arg in args
+                                    ]
+                                }
+                            },
+                            {
+                                "bool": {
+                                    "must": [
+                                        {
+                                            "regexp": {
+                                                "data.win.eventdata.targetImage": {
+                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
+                                                    "case_insensitive": True,
+                                                }
+                                            }
+                                        }
+                                    ]
+                                    + [
+                                        {
+                                            "wildcard": {
+                                                "data.win.eventdata.targetImage": f"*{arg}*"
+                                            }
+                                        }
+                                        for arg in args
+                                    ]
+                                }
+                            },
+                            {
+                                "bool": {
+                                    "must": [
+                                        {
+                                            "regexp": {
+                                                "data.win.eventdata.details": {
+                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
+                                                    "case_insensitive": True,
+                                                }
+                                            }
+                                        }
+                                    ]
+                                    + [
+                                        {
+                                            "wildcard": {
+                                                "data.win.eventdata.details": f"*{arg}*"
+                                            }
+                                        }
+                                        for arg in args
+                                    ]
+                                }
+                            },
+                            {
+                                "bool": {
+                                    "must": [
+                                        {
+                                            "regexp": {
+                                                "data.command": {
+                                                    "value": f"(.+/)?{esc_command}.*",
+                                                    "case_insensitive": True,
+                                                }
+                                            }
+                                        }
+                                    ]
+                                    + [
+                                        {"wildcard": {"data.command": f"*{arg}*"}}
                                         for arg in args
                                     ]
                                 }
@@ -1525,45 +1707,70 @@ class WazuhConnector:
                     }
                 )
             case "User-Account":
-                # uid = oneof('user_id', within=stix_entity)
-                login = str(oneof("account_login", within=stix_entity))
+                # TODO: display name? Otherwise remove from entity_value*(?)
+                uid = oneof_nonempty("user_id", within=stix_entity)
+                username = oneof_nonempty("account_login", within=stix_entity)
                 # Some logs provide a username that als consists of a UID in parenthesis:
                 if match := re.match(
-                    r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", login or ""
+                    r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", username or ""
                 ):
-                    # uid = match.group('uid')
-                    login = match.group("name")
+                    uid = match.group("uid")
+                    username = match.group("name")
 
-                # TODO: Currently we only search usernames:
-                if not login:
+                username_fields = [
+                    "*.dstuser",
+                    "*.srcuser",
+                    "*.user",
+                    "*.userName",
+                    "*.username",
+                    "*.source_user",
+                    "*.sourceUser",
+                    "*.destination_user",
+                    "*.LoggedUser",
+                    "*.parentUser",
+                    "data.win.eventdata.samAccountname",
+                    "data.gcp.protoPayload.authenticationInfo.principalEmail",
+                    "data.gcp.resource.labels.email_id",
+                    "data.office365.UserId",
+                ]
+                # TODO: add more. Missing more from windows?
+                uid_fields = [
+                    "data.win.eventdata.targetSid",
+                    "data.win.eventdata.subjectUserSid",
+                    # For audit and pam:
+                    "*.uid",
+                    "*.euid",
+                    "*.auid",
+                    "*.fsuid",
+                    "*.inode_uid",
+                    "*.oauid",
+                    "*.ouid",
+                    "*.ouid",
+                    "*.obj_uid",
+                    "*.sauid",
+                    "*.suid",
+                    "data.userID",  # macOS
+                ]
+                if username and uid:
+                    return self.client.search(
+                        must=[
+                            {
+                                "multi_match": {
+                                    "query": username,
+                                    "fields": username_fields,
+                                }
+                            },
+                            {"multi_match": {"query": uid, "fields": uid_fields}},
+                        ]
+                    )
+                elif username:
+                    return self.client.search_multi(
+                        fields=username_fields, value=username
+                    )
+                elif uid:
+                    return self.client.search_multi(fields=uid_fields, value=uid)
+                else:
                     return None
-
-                # If we have uid, but no username, search for it, but only if it is expected to be unique (configurable?), i.e. not 1000, 1001 etc.
-                # If username and uid are both defined, only look for both in logs that provide both
-                # Not sure if any alerts provide display_name only
-                # Search also in other IDs:
-                # - SIDs, like data.win.eventdata.{targetSid,subjectUserSid}
-                # - audit.{auid,uid,euid,suid,fsuid}, pam.{uid,euid}
-
-                return self.client.search_multi(
-                    fields=[
-                        "*.dstuser",
-                        "*.srcuser",
-                        "*.user",
-                        "*.userName",
-                        "*.username",
-                        "*.source_user",
-                        "*.sourceUser",
-                        "*.destination_user",
-                        "*.LoggedUser",
-                        "*.parentUser",
-                        "data.win.eventdata.samAccountname",
-                        "data.gcp.protoPayload.authenticationInfo.principalEmail",
-                        "data.gcp.resource.labels.email_id",
-                        "data.office365.UserId",
-                    ],
-                    value=login,
-                )
             case _:
                 raise ValueError(
                     f'{entity["entity_type"]} is not a supported entity type'
@@ -1677,7 +1884,7 @@ class WazuhConnector:
     ):
         s = alert["_source"]
         sighted_at = s["@timestamp"]
-        obs_value = str(entity_value(entity))
+        obs_values = entity_values(entity)
         alert_json = json.dumps(s, indent=2)
         capped_info = (
             [
@@ -1707,12 +1914,14 @@ class WazuhConnector:
                 "|-----|-----|\n"
                 + "".join(
                     f"|{field}|{match}|\n"
-                    for field, match in search_in_alert(alert["_source"], obs_value)
+                    for field, match in search_in_alert_multi(
+                        alert["_source"], obs_values
+                    ).items()
                 )
                 + "\n\n"
                 "## Alert\n"
                 "\n\n"
-                f"```json\n{alert_json}]\n"
+                f"```json\n{alert_json}\n```"
             ),
             object_refs=sighting_id,
             allow_custom=True,
@@ -1832,7 +2041,6 @@ class WazuhConnector:
 
             case "per_sighting":
                 for sighter_id, meta in sightings.items():
-                    # FIXME: why is this sometimes 0? It shouldn't be possible:
                     if (level := meta.max_rule_level) < self.create_incident_threshold:
                         log_skipped_incident_creation(level)
                         continue
@@ -2073,9 +2281,22 @@ class WazuhConnector:
                     for tool in self.tools
                     if field_compare(
                         alert["_source"],
-                        # TODO: more fields:
-                        ["data.win.eventdata.commandLine", "data.audit.command"],
-                        lambda cmd_line: tool["name"].lower() in cmd_line,
+                        [
+                            "data.win.eventdata.commandLine",
+                            "data.win.eventdata.details",
+                            "data.win.eventdata.parentCommandLine",
+                            "data.win.eventdata.image",
+                            "data.win.eventdata.sourceImage",
+                            "data.win.eventdata.targetImage",
+                            "data.audit.command",
+                            "data.command",
+                        ],
+                        lambda cmd_line: isinstance(cmd_line, str)
+                        and tool["name"].lower()
+                        in map(
+                            lambda x: basename(x).lower(),
+                            re.split(r"\W+", cmd_line),
+                        ),
                     )
                 ]
 
