@@ -1531,7 +1531,7 @@ class WazuhConnector:
                                     "must": [
                                         {
                                             "regexp": {
-                                                "data.win.eventdata.commandLine": {
+                                                field: {
                                                     "value": f"(.+[\\\\/])?{esc_command}.*",
                                                     "case_insensitive": True,
                                                 }
@@ -1539,125 +1539,21 @@ class WazuhConnector:
                                         }
                                     ]
                                     + [
-                                        {
-                                            "wildcard": {
-                                                "data.win.eventdata.commandLine": f"*{arg}*"
-                                            }
-                                        }
+                                        {"wildcard": {field: f"*{arg}*"}}
                                         for arg in args
                                     ]
                                 }
-                            },
-                            {
-                                "bool": {
-                                    "must": [
-                                        {
-                                            "regexp": {
-                                                "data.win.eventdata.parentCommandLine": {
-                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
-                                                    "case_insensitive": True,
-                                                }
-                                            }
-                                        }
-                                    ]
-                                    + [
-                                        {
-                                            "wildcard": {
-                                                "data.win.eventdata.parentCommandLine": f"*{arg}*"
-                                            }
-                                        }
-                                        for arg in args
-                                    ]
-                                }
-                            },
-                            {
-                                "bool": {
-                                    "must": [
-                                        {
-                                            "regexp": {
-                                                "data.win.eventdata.image": {
-                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
-                                                    "case_insensitive": True,
-                                                }
-                                            }
-                                        }
-                                    ]
-                                    + [
-                                        {
-                                            "wildcard": {
-                                                "data.win.eventdata.image": f"*{arg}*"
-                                            }
-                                        }
-                                        for arg in args
-                                    ]
-                                }
-                            },
-                            {
-                                "bool": {
-                                    "must": [
-                                        {
-                                            "regexp": {
-                                                "data.win.eventdata.sourceImage": {
-                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
-                                                    "case_insensitive": True,
-                                                }
-                                            }
-                                        }
-                                    ]
-                                    + [
-                                        {
-                                            "wildcard": {
-                                                "data.win.eventdata.sourceImage": f"*{arg}*"
-                                            }
-                                        }
-                                        for arg in args
-                                    ]
-                                }
-                            },
-                            {
-                                "bool": {
-                                    "must": [
-                                        {
-                                            "regexp": {
-                                                "data.win.eventdata.targetImage": {
-                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
-                                                    "case_insensitive": True,
-                                                }
-                                            }
-                                        }
-                                    ]
-                                    + [
-                                        {
-                                            "wildcard": {
-                                                "data.win.eventdata.targetImage": f"*{arg}*"
-                                            }
-                                        }
-                                        for arg in args
-                                    ]
-                                }
-                            },
-                            {
-                                "bool": {
-                                    "must": [
-                                        {
-                                            "regexp": {
-                                                "data.win.eventdata.details": {
-                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
-                                                    "case_insensitive": True,
-                                                }
-                                            }
-                                        }
-                                    ]
-                                    + [
-                                        {
-                                            "wildcard": {
-                                                "data.win.eventdata.details": f"*{arg}*"
-                                            }
-                                        }
-                                        for arg in args
-                                    ]
-                                }
-                            },
+                            }
+                            for field in [
+                                "data.win.eventdata.commandLine",
+                                "data.win.eventdata.parentCommandLine",
+                                "data.win.eventdata.image",
+                                "data.win.eventdata.sourceImage",
+                                "data.win.eventdata.targetImage",
+                                "data.win.eventdata.details",
+                            ]
+                        ]
+                        + [
                             {
                                 "bool": {
                                     "must": [
