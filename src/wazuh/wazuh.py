@@ -321,6 +321,9 @@ def extract_fields(
 
         return obj
 
+    if any("*" in field for field in fields):
+        raise ValueError('Fields cannot contain "*"')
+
     return {field: traverse(obj, field.split(".")) for field in fields}
 
 
