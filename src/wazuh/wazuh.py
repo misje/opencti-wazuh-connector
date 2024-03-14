@@ -20,7 +20,7 @@ from pycti import (
     Tool,
     get_config_variable,
 )
-from typing import Final
+from typing import Any, Callable, Final
 from hashlib import sha256
 from datetime import datetime
 from urllib.parse import urljoin
@@ -107,14 +107,10 @@ class SightingsCollector:
             if timestamp > self._latest:
                 self._latest = timestamp
 
-            self._sightings[sighter.id].max_rule_level = max(
-                [self._sightings[sighter.id].max_rule_level]
-                + [
-                    alert["_source"]["rule"]["level"]
-                    for alerts in self._sightings[sighter.id].alerts.values()
-                    for alert in alerts
-                ]
-            )
+            if (level := alert["_source"]["rule"]["level"]) > self._sightings[
+                sighter.id
+            ].max_rule_level:
+                self._sightings[sighter.id].max_rule_level = level
         else:
             self._sightings[sighter.id] = SightingsCollector.Meta(
                 observable_id=self._observable_id,
@@ -241,7 +237,12 @@ class SightingsCollector:
         ]
 
 
-def has(obj: dict, spec: list[str], value=None):
+def has(
+    obj: dict,
+    spec: list[str],
+    value=None,
+    comp: Callable[[Any, Any], bool] | None = None,
+):
     """
     Test whether obj contains a specific structure
 
@@ -254,7 +255,10 @@ def has(obj: dict, spec: list[str], value=None):
     `has(obj, ['a', 'b'], 42)` returns true
     """
     if not spec:
-        return obj == value if value is not None else True
+        if comp is not None and value is not None:
+            return comp(obj, value)
+        else:
+            return obj == value if value is not None else True
     try:
         key, *rest = spec
         return has(obj[key], rest, value=value)
@@ -302,7 +306,9 @@ def parse_config_datetime(value, setting_name):
     return timestamp
 
 
-def extract_fields(obj: dict, fields: list[str], raise_if_missing: bool = True) -> dict:
+def extract_fields(
+    obj: dict, fields: list[str], *, raise_if_missing: bool = True
+) -> dict:
     def traverse(obj: dict, keys: list[str]):
         for key in keys:
             try:
@@ -315,10 +321,17 @@ def extract_fields(obj: dict, fields: list[str], raise_if_missing: bool = True) 
 
     return {field: traverse(obj, field.split(".")) for field in fields}
 
-    # return {
-    #    field: eval("obj" + "".join(f"['{key}']" for key in field.split(".")))
-    #    for field in fields
-    # }
+
+def field_compare(
+    obj: dict, fields: list[str], comp: Callable[[Any], bool] | Any = None
+):
+    def _comp(field):
+        return comp(field) if callable(comp) else field == comp
+
+    return any(
+        _comp(value)
+        for value in extract_fields(obj, fields, raise_if_missing=False).values()
+    )
 
 
 def parse_match_patterns(patterns: str):
@@ -491,10 +504,8 @@ def parse_incident_create_threshold(threshold: str | int | None) -> int:
         case _:
             raise ValueError(f"WAZUH_INCIDENT_CREATE_THRESHOLD is invalid: {threshold}")
 
-            # TODO: Rename to get_matches?
 
-
-def highlight_field_match(alert: dict, search_term: str, path: str = ""):
+def search_in_alert(alert: dict, search_term: str, path: str = ""):
     if isinstance(alert, dict):
         return [
             (path + "." + k if path else k, v)
@@ -503,7 +514,7 @@ def highlight_field_match(alert: dict, search_term: str, path: str = ""):
         ] + [
             path_match
             for k, v in alert.items()
-            for path_match in highlight_field_match(
+            for path_match in search_in_alert(
                 v, search_term, path + "." + k if path else k
             )
         ]
@@ -711,8 +722,14 @@ class WazuhConnector:
             else 1
         )
         self.create_sighting_summary = get_config_variable(
-            "WAZUH_SIGHTING_SUMMARY_NOTE",
+            "WAZUH_SIGHTING_CREATE_SUMMARY_NOTE",
             ["wazuh", "sighting_summary_note"],
+            config,
+            default=True,
+        )
+        self.create_incident_summary = get_config_variable(
+            "WAZUH_INCIDENT_CREATE_SUMMARY_NOTE",
+            ["wazuh", "incident_create_summary_note"],
             config,
             default=True,
         )
@@ -766,6 +783,18 @@ class WazuhConnector:
             config,
             default=False,
         )
+        self.enrich_mitre = get_config_variable(
+            "WAZUH_ENRICH_MITRE", ["wazuh", "enrich_mitre"], config, default=True
+        )
+        self.enrich_tool = get_config_variable(
+            "WAZUH_ENRICH_TOOL", ["wazuh", "enrich_tool"], config, default=False
+        )
+        self.enrich_account = get_config_variable(
+            "WAZUH_ENRICH_ACCOUNT", ["wazuh", "enrich_account"], config, default=False
+        )
+        self.enrich_url = get_config_variable(
+            "WAZUH_ENRICH_URL", ["wazuh", "enrich_url"], config, default=False
+        )
 
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
@@ -817,6 +846,10 @@ class WazuhConnector:
         )
 
     def start(self):
+        if self.enrich_tool:
+            self.helper.connector_logger.info("Building list of tools")
+            self.tools = self.helper.api.tool.list()
+
         self.helper.metric.state("idle")
         self.helper.listen(self.process_message)
 
@@ -998,15 +1031,6 @@ class WazuhConnector:
         counts = {rule_id: len(alerts) for rule_id, alerts in alerts_by_rule_id.items()}
         self.helper.log_debug(f"COUNTS: {counts}")
 
-        if self.create_sighting_summary:
-            bundle += [
-                self.create_summary_note(
-                    result=result,
-                    sightings_meta=sightings_collector,
-                    sightings_ids=sighting_ids,
-                )
-            ]
-
         if (
             self.require_indicator_for_incidents
             and entity_type == "observable"
@@ -1022,6 +1046,20 @@ class WazuhConnector:
                 result=result,
                 sightings_meta=sightings_collector,
             )
+
+        bundle += [
+            self.create_summary_note(
+                result=result,
+                sightings_meta=sightings_collector,
+                refs=[sightings_collector.observable_id()]
+                + (sighting_ids if self.create_sighting_summary else [])
+                + [
+                    obj.id
+                    for obj in bundle
+                    if self.create_incident_summary and obj.type == "incident"
+                ],
+            )
+        ]
 
         bundle += list(agents.values())
         if (
@@ -1429,26 +1467,51 @@ class WazuhConnector:
                             re.sub(
                                 r"""^(?:(?<!\\)"|')|(?:(?<!\\)"|')$""",
                                 "",
-                                lucene_regex_escape(arg),
+                                arg,
                             ),
                             count=8,
                         )
                         for arg in tokens[1:]
                     ]
-                    # Todo: wildcard: case_insensitive: true
-                    arg_queries = [
-                        {"wildcard": {"data.win.eventdata.commandLine": f"*{arg}*"}}
-                        for arg in args
-                    ]
                     return self.client.search(
-                        must=[
+                        should=[
                             {
-                                "wildcard": {
-                                    "data.win.eventdata.commandLine": f"*{command}*"
+                                "bool": {
+                                    "must": [
+                                        {
+                                            "wildcard": {
+                                                "data.win.eventdata.commandLine": f"*{command}*"
+                                            }
+                                        }
+                                    ]
+                                    + [
+                                        {
+                                            "wildcard": {
+                                                "data.win.eventdata.commandLine": f"*{arg}*"
+                                            }
+                                        }
+                                        for arg in args
+                                    ]
                                 }
-                            }
+                            },
+                            {
+                                "bool": {
+                                    "must": [
+                                        {"match": {"data.audit.command": command}}
+                                    ],
+                                    "should": [
+                                        {
+                                            "multi_match": {
+                                                "query": arg,
+                                                "fields": "data.audit.execve.a*",
+                                            }
+                                        }
+                                        for arg in args
+                                    ],
+                                    "minimum_should_match": len(args),
+                                }
+                            },
                         ]
-                        + arg_queries
                     )
                 else:
                     return None
@@ -1539,7 +1602,6 @@ class WazuhConnector:
             custom_properties={"x_opencti_sighting_of_ref": metadata.observable_id},
             external_references=self.create_sighting_ext_refs(metadata=metadata),
         )
-        # Add summary note?
         # Add alert as note: per alert, per ID
 
     def create_sighting_ext_refs(self, *, metadata: SightingsCollector.Meta):
@@ -1645,9 +1707,7 @@ class WazuhConnector:
                 "|-----|-----|\n"
                 + "".join(
                     f"|{field}|{match}|\n"
-                    for field, match in highlight_field_match(
-                        alert["_source"], obs_value
-                    )
+                    for field, match in search_in_alert(alert["_source"], obs_value)
                 )
                 + "\n\n"
                 "## Alert\n"
@@ -1655,6 +1715,8 @@ class WazuhConnector:
                 f"```json\n{alert_json}]\n"
             ),
             object_refs=sighting_id,
+            allow_custom=True,
+            note_types=["analysis"],
         )
 
     def create_summary_note(
@@ -1662,7 +1724,7 @@ class WazuhConnector:
         *,
         result: dict,
         sightings_meta: SightingsCollector,
-        sightings_ids: list[str],
+        refs: list[str],
     ):
         run_time = datetime.now()
         run_time_string = run_time.isoformat() + "Z"
@@ -1707,7 +1769,9 @@ class WazuhConnector:
             **self.stix_common_attrs,
             abstract=abstract,
             content=content,
-            object_refs=[sightings_meta.observable_id()] + sightings_ids,
+            object_refs=refs,
+            allow_custom=True,
+            note_types=["analysis"],
         )
 
     def create_incidents(
@@ -1768,6 +1832,7 @@ class WazuhConnector:
 
             case "per_sighting":
                 for sighter_id, meta in sightings.items():
+                    # FIXME: why is this sometimes 0? It shouldn't be possible:
                     if (level := meta.max_rule_level) < self.create_incident_threshold:
                         log_skipped_incident_creation(level)
                         continue
@@ -1942,15 +2007,18 @@ class WazuhConnector:
         )
 
     def enrich_incident(self, *, incident: stix2.Incident, alerts: list[dict]):
-        # TODO: enable based on a list (…ENRICH=mitre,tool,account)
-        return (
-            self.enrich_incident_mitre(incident=incident, alerts=alerts)
-            + self.enrich_incident_tool(incident=incident, alerts=alerts)
-            ## Perhaps not very useful:
-            # + self.enrich_accounts(incident=incident, alerts=alerts)
-            # Revisit:
-            # + self.enrich_uris(incident=incident, alerts=alerts)
-        )
+        bundle = []
+        # TODO: Create ObservedData too(?)
+        if self.enrich_mitre:
+            bundle += self.enrich_incident_mitre(incident=incident, alerts=alerts)
+        if self.enrich_tool:
+            bundle += self.enrich_incident_tool(incident=incident, alerts=alerts)
+        if self.enrich_account:
+            bundle += self.enrich_accounts(incident=incident, alerts=alerts)
+        if self.enrich_url:
+            bundle += self.enrich_uris(incident=incident, alerts=alerts)
+
+        return bundle
 
     def enrich_incident_mitre(self, *, incident: stix2.Incident, alerts: list[dict]):
         bundle = []
@@ -1989,29 +2057,39 @@ class WazuhConnector:
     def enrich_incident_tool(self, *, incident: stix2.Incident, alerts: list[dict]):
         bundle = []
         for alert in alerts:
-            tool = None
+            tools = []
             if (
                 has(alert, ["_source", "rule", "mitre", "id"])
                 and "T1053.005" in alert["_source"]["rule"]["mitre"]["id"]
             ):
-                tool = create_tool_stix("schtasks")
+                tools = [create_tool_stix("schtasks")]
+                bundle.append(tools[0])
             elif "psexec" in alert["_source"]["rule"]["description"].casefold():
-                tool = create_tool_stix("PsExec")
-
-            if tool:
-                bundle += [
-                    tool,
-                    stix2.Relationship(
-                        id=StixCoreRelationship.generate_id(
-                            "uses", incident.id, tool.id
-                        ),
-                        created=alert["_source"]["@timestamp"],
-                        **self.stix_common_attrs,
-                        relationship_type="uses",
-                        source_ref=incident.id,
-                        target_ref=tool.id,
-                    ),
+                tools = [create_tool_stix("PsExec")]
+                bundle.append(tools[0])
+            else:
+                tools = [
+                    create_tool_stix(tool["name"])
+                    for tool in self.tools
+                    if field_compare(
+                        alert["_source"],
+                        # TODO: more fields:
+                        ["data.win.eventdata.commandLine", "data.audit.command"],
+                        lambda cmd_line: tool["name"].lower() in cmd_line,
+                    )
                 ]
+
+            bundle += tools + [
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id("uses", incident.id, tool.id),
+                    created=alert["_source"]["@timestamp"],
+                    **self.stix_common_attrs,
+                    relationship_type="uses",
+                    source_ref=incident.id,
+                    target_ref=tool.id,
+                )
+                for tool in tools
+            ]
 
         return bundle
 
