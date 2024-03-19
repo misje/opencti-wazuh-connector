@@ -10,6 +10,8 @@ from .wazuh_api import WazuhAPIClient
 from pathlib import Path
 from pycti import (
     AttackPattern,
+    CaseIncident,
+    CustomObjectCaseIncident,
     CustomObservableHostname,
     Identity,
     Incident,
@@ -904,6 +906,12 @@ class WazuhConnector:
             config,
             default="hygiene",
         ).split(",")  # type: ignore
+        self.create_incident_response = get_config_variable(
+            "WAZUH_CREATE_INCIDENT_RESPONSE",
+            ["wazuh", "create_incident_response"],
+            config,
+            default=False,
+        )
 
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
@@ -984,6 +992,8 @@ class WazuhConnector:
                 ),
                 cache_filename="/var/cache/wazuh/state.json",
             )
+        else:
+            self.wazuh = None
 
     def start(self):
         if self.wazuh:
@@ -1201,6 +1211,25 @@ class WazuhConnector:
                 result=result,
                 sightings_meta=sightings_collector,
             )
+
+        if self.create_incident_response:
+            incidents = [obj for obj in bundle if isinstance(obj, stix2.Incident)]
+            # TODO: about time to correctly use max/min with lambda correctly, here and elsewere, instead of creating temporary lists:
+            timestamp = max([incident.created for incident in incidents])
+            # FIXME: add a func for max severity:
+            severity = max([incident.severity for incident in incidents])
+            name = "Test"  # obs observed N times(?)
+            bundle += [
+                CustomObjectCaseIncident(
+                    id=CaseIncident.generate_id(name, timestamp),
+                    name=name,
+                    description="FIXME",
+                    severity=severity,
+                    # TODO: priority from severity (https://github.com/OpenCTI-Platform/connectors/blob/a01fff5b0a1a39ccb4ebaebec5a82e9caadba6bd/stream/sentinel/src/sightings.py#L21)
+                    **self.stix_common_attrs,
+                    object_refs=[incident.id for incident in incidents],
+                )
+            ]
 
         bundle += [
             self.create_summary_note(
