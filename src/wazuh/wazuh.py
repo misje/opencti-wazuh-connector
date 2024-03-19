@@ -34,8 +34,6 @@ from functools import cache
 # TODO: Attach note to incident
 # TODO: Identities for AWS, GitHub, Office365, etc.
 # TODO: raise NewExecption from e
-# TODO: Ignore observables with label X (default: hygiene?)
-# TODO: Optionally create Systems from wazuhapi on boot
 # TODO: inconsistent use of _ in func. names. Fix when cleaning up, modularise and move utils into utils, stix into stix(?) modules
 
 # ideas:
@@ -902,6 +900,12 @@ class WazuhConnector:
         self.enrich_agent = get_config_variable(
             "WAZUH_ENRICH_AGENT", ["wazuh", "enrich_agent"], config, default=True
         )
+        self.label_ignore_list = get_config_variable(
+            "WAZUH_LABEL_IGNORE_LIST",
+            ["wazuh", "label_ignore_list"],
+            config,
+            default="hygiene",
+        ).split(",")  # type: ignore
 
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
@@ -1057,6 +1061,14 @@ class WazuhConnector:
         obs_indicators = self.entity_indicators(entity)
         # Remove:
         self.helper.log_debug(f"INDS: {obs_indicators}")
+
+        if self.label_ignore_list and "x_opencti_labels" in stix_entity:
+            matching_labels = [
+                label
+                for label in self.label_ignore_list
+                if label in stix_entity["x_opencti_labels"]
+            ]
+            return f"Ignoring observable because it has the following label(s): {', '.join(matching_labels)}"
 
         if (
             entity_type == "observable"
