@@ -30,14 +30,13 @@ from ntpath import basename
 from pydantic import BaseModel
 from functools import cache
 
+# TODO: Enrichment connector that uses snipeit to get system owner
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
 # TODO: Attach note to incident
-# TODO: Identities for AWS, GitHub, Office365, etc.
+# TODO: Identities for AWS, GitHub, Office365, etc.(?)
 # TODO: inconsistent use of _ in func. names. Fix when cleaning up, modularise and move utils into utils, stix into stix(?) modules
+# TODO: update wazuh api completely in background
 
-# ideas:
-# - Populate agents using agent metadata?
-#
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
 #   using Field in the future
@@ -1706,7 +1705,7 @@ class WazuhConnector:
                     {
                         "data.vulnerability.cve": stix_entity["name"],
                         # TODO: Include solved too, and ensure Sighting from:to represents duration of CVE present in the system. Doesn't work with the current architecture that groups alerts by id.
-                        "data.vulnerability.status": "Active",
+                        # "data.vulnerability.status": "Active",
                     }
                 )
             case "User-Account":
