@@ -99,9 +99,9 @@ class OpenSearchClient:
             return response.json()
 
         except requests.JSONDecodeError as e:
-            raise self.ParseError(f"Failed to parse JSON response: {e}")
+            raise self.ParseError(f"Failed to parse JSON response: {e}") from e
         except requests.exceptions.RequestException as e:
-            raise self.ConnectionError(f"Failed to connect to {self.url}: {e}")
+            raise self.ConnectionError(f"Failed to connect to {self.url}: {e}") from e
 
     def _search(self, query: dict):
         query = {
@@ -135,7 +135,9 @@ class OpenSearchClient:
             return r
 
         except (IndexError, KeyError):
-            raise self.ParseError("Failed to parse result: Unexpected JSON structure")
+            raise self.ParseError(
+                "Failed to parse result: Unexpected JSON structure"
+            ) from e
 
     def search(
         self,

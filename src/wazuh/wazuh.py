@@ -33,7 +33,6 @@ from functools import cache
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
 # TODO: Attach note to incident
 # TODO: Identities for AWS, GitHub, Office365, etc.
-# TODO: raise NewExecption from e
 # TODO: inconsistent use of _ in func. names. Fix when cleaning up, modularise and move utils into utils, stix into stix(?) modules
 
 # ideas:
@@ -1138,10 +1137,10 @@ class WazuhConnector:
                     alert=hit,
                 )
 
-            except (IndexError, KeyError):
+            except (IndexError, KeyError) as e:
                 raise OpenSearchClient.ParseError(
                     "Failed to parse _source: Unexpected JSON structure"
-                )
+                ) from e
 
         # TODO: Use in incident and add as targets(?):
         if self.create_agent_ip_obs:
