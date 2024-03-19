@@ -234,3 +234,12 @@ class OpenSearchClient:
         )
 
     # TODO: create an API that can chain "wildcard", "match" etc. to build should, must etc.?
+
+
+# def wildcard(fields: list[str], glob: str):
+#    if any("*" in field for field in fields):
+#        raise ValueError(
+#            "Fields in an OpenSearch wildcard query cannot contain globs"
+#        )
+#
+#    return [{"wildcard": {field: glob}} for field in fields]

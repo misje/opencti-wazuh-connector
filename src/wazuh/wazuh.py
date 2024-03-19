@@ -6,6 +6,7 @@ import re
 import bisect
 import ipaddress
 from .opensearch import OpenSearchClient
+from .wazuh_api import WazuhAPIClient
 from pathlib import Path
 from pycti import (
     AttackPattern,
@@ -31,6 +32,11 @@ from functools import cache
 
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
 # TODO: Attach note to incident
+# TODO: Identities for AWS, GitHub, Office365, etc.
+# TODO: raise NewExecption from e
+# TODO: Ignore observables with label X (default: hygiene?)
+# TODO: Optionally create Systems from wazuhapi on boot
+# TODO: inconsistent use of _ in func. names. Fix when cleaning up, modularise and move utils into utils, stix into stix(?) modules
 
 # ideas:
 # - Populate agents using agent metadata?
@@ -282,9 +288,14 @@ def has_any(obj: dict, spec1: list[str], spec2: list[str]):
     """
     Test whether an object contains a specific structure
 
-    Test whether spec1 contains a specific structure (a "JSON path"). Then, test whether the resulting object has any of the keys listed in spec2. Example:
+    Test whether obj contains a specific structure (a "JSON path") spec1. Then,
+    test whether the resulting object has any of the keys listed in spec2.
+    Example:
 
-    `has_any({"a": {"b": {"d": 1, "e": 2}}}, ["a", "b"], ["c", "d"])` returns true, because "b" exists in "a", and "a" exists in obj, and either "c" or "d" exists in "b".
+    `has_any({"a": {"b": {"d": 1, "e": 2}}}, ["a", "b"], ["c", "d"])` returns
+    # TODO incorrect:
+    true, because "b" exists in "a", and "a" exists in obj, and either "c" or
+    "d" exists in "b".
     """
     if not spec1:
         return any(key in obj for key in spec2)
@@ -311,6 +322,18 @@ def parse_config_datetime(value, setting_name):
 def extract_fields(
     obj: dict, fields: list[str], *, raise_if_missing: bool = True
 ) -> dict:
+    """
+    Extract values from a dict recursively using key paths
+
+    Example:
+    extract_fields({ "a": { "b": { "c": 1 }}}, ["a.b.c", "a.b"])
+    returns
+    { "a.b.c": 1, "a.b": { "c": 1 }}
+
+    If raise_if_missing is True, no KeyError will be raised if a key is not found.
+    ValueError will be raised if the path contains '*'.
+    """
+
     def traverse(obj: dict, keys: list[str]):
         for key in keys:
             try:
@@ -328,8 +351,23 @@ def extract_fields(
 
 
 def field_compare(
-    obj: dict, fields: list[str], comp: Callable[[Any], bool] | Any = None
-):
+    obj: dict, fields: list[str], comp: Callable[[Any], bool] | Any
+) -> bool:
+    """
+    Search for a value in a dict recursively using ey paths
+
+    Example:
+    field_compare({ "a": { "b": 1, }, "c": 2 }, ["a.b", "c"], lambda x: x > 1)
+    returns
+    true
+    because "c", 2, is > 1. "a.b", 1, is not.
+
+    field_compare({ "a": { "b": 1, }, "c": 2 }, ["a.b", "c"], 1)
+    returns
+    true
+    because "a.b" is 1
+    """
+
     def _comp(field):
         return comp(field) if callable(comp) else field == comp
 
@@ -418,7 +456,7 @@ def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] = []):
     s = alert["_source"]
     return (
         "|Key|Value|\n"
-        "|---|---|\n"
+        "|---|-----|\n"
         f"|Rule ID|{s['rule']['id']}|\n"
         f"|Rule desc.|{s['rule']['description']}|\n"
         f"|Rule level|{s['rule']['level']}|\n"
@@ -575,6 +613,17 @@ def search_in_alert_multi(alert: dict, search_terms: list[str]):
         for results in [search_in_alert(alert, term) for term in search_terms]
         for key, value in results.items()
     }
+
+
+def api_searchable_entity_type(entity_type: str):
+    match entity_type:
+        # case "IPv4-Addr" | "IPv6-Addr":
+        # case "Network-Traffic":
+        # case "Process":
+        case "Software":
+            return True
+        case _:
+            return False
 
 
 class WazuhConnector:
@@ -850,6 +899,9 @@ class WazuhConnector:
         self.enrich_url = get_config_variable(
             "WAZUH_ENRICH_URL", ["wazuh", "enrich_url"], config, default=False
         )
+        self.enrich_agent = get_config_variable(
+            "WAZUH_ENRICH_AGENT", ["wazuh", "enrich_agent"], config, default=True
+        )
 
         self.stix_common_attrs = {
             "object_marking_refs": self.tlps,
@@ -873,23 +925,32 @@ class WazuhConnector:
         self.app_url = get_config_variable(
             "WAZUH_APP_URL", ["wazuh", "app_url"], config, required=True
         )
-        self.client = OpenSearchClient(
+        self.opensearch = OpenSearchClient(
             helper=self.helper,
             url=get_config_variable(  # type: ignore
                 "WAZUH_OPENSEARCH_URL",
-                ["wazuh", "opensearch_url"],
+                ["wazuh", "opensearch", "url"],
                 config,
                 required=True,
             ),
             username=get_config_variable(  # type: ignore
-                "WAZUH_USERNAME", ["wazuh", "username"], config, required=True
+                "WAZUH_OPENSEARCH_USERNAME",
+                ["wazuh", "opensearch", "username"],
+                config,
+                required=True,
             ),
             password=get_config_variable(  # type: ignore
-                "WAZUH_PASSWORD", ["wazuh", "password"], config, required=True
+                "WAZUH_OPENSEARCH_PASSWORD",
+                ["wazuh", "opensearch", "password"],
+                config,
+                required=True,
             ),
             limit=self.hits_limit if isinstance(self.hits_limit, int) else 10,
             index=get_config_variable(  # type: ignore
-                "WAZUH_INDEX", ["wazuh", "index"], config, default="wazuh-alerts-*"
+                "WAZUH_OPENSEARCH_INDEX",
+                ["wazuh", "opensearch", "index"],
+                config,
+                default="wazuh-alerts-*",
             ),
             search_after=self.search_after,
             include_match=parse_match_patterns(self.search_include),  # type: ignore
@@ -899,8 +960,35 @@ class WazuhConnector:
             # filters=[{"range": {"rule.level": {"gte": 8}}}],
             # filters=get_config_variable("WAZUH_SEARCH_FILTER", ["wazuh", "search_filter"], config),
         )
+        if get_config_variable(
+            "WAZUH_API_USE", ["wazuh", "api", "use"], config, default=False
+        ):
+            self.wazuh = WazuhAPIClient(
+                helper=self.helper,
+                url=get_config_variable(  # type: ignore
+                    "WAZUH_API_URL", ["wazuh", "api", "url"], config, required=True
+                ),
+                username=get_config_variable(  # type: ignore
+                    "WAZUH_API_USERNAME",
+                    ["wazuh", "api", "username"],
+                    config,
+                    required=True,
+                ),
+                password=get_config_variable(  # type: ignore
+                    "WAZUH_API_PASSWORD",
+                    ["wazuh", "api", "password"],
+                    config,
+                    required=True,
+                ),
+                cache_filename="/var/cache/wazuh/state.json",
+            )
 
     def start(self):
+        if self.wazuh:
+            self.wazuh.load_cache()
+            self.wazuh.query_packages()
+            self.wazuh.save_cache()
+
         if self.enrich_tool:
             self.helper.connector_logger.info("Building list of tools")
             self.tools = self.helper.api.tool.list()
@@ -951,6 +1039,7 @@ class WazuhConnector:
             and has(entity, ["createdBy", "standard_id"])
             and entity["createdBy"]["standard_id"] == self.author.id
         ):
+            # TODO: How to allow manual enrichments? Any way to separate automatic enrichments from manual?
             return f"Ignoring entity because it was created by {self.author.name}"
 
         # Figure out exactly what this does (change id format?);
@@ -978,6 +1067,14 @@ class WazuhConnector:
                 "Observable has no indicators and WAZUH_CREATE_OBSERVABLE_SIGHTINGS is false"
             )
             return "Observable has no indicators"
+
+        if api_searchable_entity_type(entity["entity_type"]):
+            if not self.wazuh:
+                self.helper.log_info(
+                    f'Cannot search for {entity["entity_type"]} because WAZUH_API_USE is false'
+                )
+            else:
+                self._query_api(entity, stix_entity)
 
         result = self._query_alerts(entity, stix_entity)
         if result is None:
@@ -1075,13 +1172,6 @@ class WazuhConnector:
         # Look through wazuh rules to find occurances of usernames, addresses etc.
         ###############
 
-        # Group alerts by ID and see how many are unique. Setting: inncident per rule id?
-        # Add an enrichment function that creates mitre, tools etc for either
-        # when relevant fields are present or per rule id/group. Add a setting
-        # for each one (yaml only?)?
-        # tool:
-        #   uses → attack pattern
-
         alerts_by_rule_id = sightings_collector.alerts_by_rule_id()
         counts = {rule_id: len(alerts) for rule_id, alerts in alerts_by_rule_id.items()}
         self.helper.log_debug(f"COUNTS: {counts}")
@@ -1149,6 +1239,7 @@ class WazuhConnector:
 
     def _query_alerts(self, entity, stix_entity) -> dict | None:
         match entity["entity_type"]:
+            # TODO: wazuh_api: syscheck/id/{file,sha256}
             # TODO: Use name as well as hash if defined (optional, config)
             case "StixFile" | "Artifact":
                 if (
@@ -1166,7 +1257,7 @@ class WazuhConnector:
                             + list_or_empty(stix_entity, "x_opencti_additional_names"),
                         )
                     )
-                    return self.client.search_multi_regex(
+                    return self.opensearch.search_multi_regex(
                         fields=[
                             "data.ChildPath",
                             "data.ParentPath",
@@ -1198,16 +1289,17 @@ class WazuhConnector:
                         ),
                     )
                 elif has(stix_entity, ["hashes", "SHA-256"]):
-                    return self.client.search_multi(
+                    return self.opensearch.search_multi(
                         fields=["*sha256*"], value=stix_entity["hashes"]["SHA-256"]
                     )
                 elif has(stix_entity, ["hashes", "SHA-1"]):
-                    return self.client.search_multi(
+                    return self.opensearch.search_multi(
                         fields=["*sha1*"], value=stix_entity["hashes"]["SHA-1"]
                     )
                 else:
                     return None
 
+            # TODO: wazuh_api: syscollector/id/netaddr?proto={ipv4,ipv6}
             case "IPv4-Addr" | "IPv6-Addr":
                 fields = [
                     "*.ip",
@@ -1247,12 +1339,12 @@ class WazuhConnector:
                     return None
 
                 if self.search_agent_ip:
-                    return self.client.search_multi(
+                    return self.opensearch.search_multi(
                         fields=fields,
                         value=address,
                     )
                 else:
-                    return self.client.search(
+                    return self.opensearch.search(
                         must={
                             "multi_match": {
                                 "query": address,
@@ -1261,8 +1353,9 @@ class WazuhConnector:
                         },
                         must_not={"match": {"agent.ip": address}},
                     )
+            # TODO: wazuh_api: syscollector/id/netiface
             case "Mac-Addr":
-                return self.client.search_multi(
+                return self.opensearch.search_multi(
                     fields=[
                         "*.src_mac",
                         "*.srcmac",
@@ -1349,11 +1442,11 @@ class WazuhConnector:
                     )
 
                 if query:
-                    return self.client.search(query)
+                    return self.opensearch.search(query)
                 else:
                     return None
             case "Email-Addr":
-                return self.client.search_multi(
+                return self.opensearch.search_multi(
                     fields=[
                         "*email",
                         "*Email",
@@ -1374,12 +1467,12 @@ class WazuhConnector:
                 ]
                 hostname = entity["observable_value"]
                 if self.search_agent_name:
-                    return self.client.search_multi(
+                    return self.opensearch.search_multi(
                         fields=fields,
                         value=hostname,
                     )
                 else:
-                    return self.client.search(
+                    return self.opensearch.search(
                         must={
                             "multi_match": {
                                 "query": hostname,
@@ -1392,7 +1485,7 @@ class WazuhConnector:
                         # must_not={"match": {"predecoder.hostname": hostname}},
                     )
             case "Url":
-                return self.client.search_multi(
+                return self.opensearch.search_multi(
                     fields=["*url", "*Url", "*.URL", "*.uri"],
                     value=entity["observable_value"],
                 )
@@ -1446,7 +1539,7 @@ class WazuhConnector:
                         "syscheck.path",
                     ]
                 ]
-                return self.client.search(
+                return self.opensearch.search(
                     should=[
                         {
                             "multi_match": {
@@ -1459,6 +1552,7 @@ class WazuhConnector:
                                     "data.home",
                                     "data.SourceFilePath",
                                     "data.TargetPath",
+                                    "data.pwd",
                                 ],
                             }
                         }
@@ -1467,7 +1561,7 @@ class WazuhConnector:
                 )
 
             case "Windows-Registry-Key":
-                return self.client.search_multi(
+                return self.opensearch.search_multi(
                     fields=["data.win.eventdata.targetObject", "syscheck.path"],
                     value=stix_entity["key"],
                 )
@@ -1493,7 +1587,7 @@ class WazuhConnector:
                         return None
 
                 return (
-                    self.client.search_multi(
+                    self.opensearch.search_multi(
                         fields=["syscheck.sha256_after"], value=hash
                     )
                     if hash
@@ -1527,7 +1621,7 @@ class WazuhConnector:
                         )
                         for arg in tokens[1:]
                     ]
-                    return self.client.search(
+                    return self.opensearch.search(
                         should=[
                             {
                                 "bool": {
@@ -1596,12 +1690,11 @@ class WazuhConnector:
                     )
                 else:
                     return None
-            # case "Software":
-            # dpkg: package, version, arch
             case "Vulnerability":
-                return self.client.search_match(
+                return self.opensearch.search_match(
                     {
                         "data.vulnerability.cve": stix_entity["name"],
+                        # TODO: Include solved too, and ensure Sighting from:to represents duration of CVE present in the system. Doesn't work with the current architecture that groups alerts by id.
                         "data.vulnerability.status": "Active",
                     }
                 )
@@ -1651,7 +1744,7 @@ class WazuhConnector:
                     "data.userID",  # macOS
                 ]
                 if username and uid:
-                    return self.client.search(
+                    return self.opensearch.search(
                         must=[
                             {
                                 "multi_match": {
@@ -1663,17 +1756,33 @@ class WazuhConnector:
                         ]
                     )
                 elif username:
-                    return self.client.search_multi(
+                    return self.opensearch.search_multi(
                         fields=username_fields, value=username
                     )
                 elif uid:
-                    return self.client.search_multi(fields=uid_fields, value=uid)
+                    return self.opensearch.search_multi(fields=uid_fields, value=uid)
                 else:
                     return None
             case _:
                 raise ValueError(
                     f'{entity["entity_type"]} is not a supported entity type'
                 )
+
+    def _query_api(self, entity: dict, stix_entity: dict):
+        # TODO: Ideally log a message that WAZUH_API_USE is false if a
+        # supported, and raise ValueError if non-supported entity is passed
+        if not self.wazuh:
+            return None
+        match entity["entity_type"]:
+            case "Software":
+                results = self.wazuh.find_package(
+                    stix_entity["name"], stix_entity.get("version")
+                )
+                self.helper.log_debug(results)
+                # for (agent, package) in results:
+
+            case _:
+                return None
 
     def create_agent_stix(self, alert):
         s = alert["_source"]
@@ -1685,8 +1794,25 @@ class WazuhConnector:
             **self.stix_common_attrs,
             name=name,
             identity_class="system",
-            description=f"Wazuh agent ID {id}",
+            description=self.generate_agent_md_tables(id),
         )
+
+    def generate_agent_md_tables(self, agent_id: str):
+        if self.wazuh and agent_id in self.wazuh.state.agents and self.enrich_agent:
+            agent = self.wazuh.state.agents[agent_id]
+            return (
+                "|Key|Value|\n"
+                "|---|-----|\n"
+                f"|ID|{agent.id}|\n"
+                f"|Name|{agent.name}|\n"
+                f"|Status|{agent.status if agent.status is not None else ''}|\n"
+                f"|OS name|{agent.os.name if agent.os is not None else ''}|\n"
+                f"|OS version|{agent.os.version if agent.os is not None else ''}|\n"
+                f"|Agent version|{agent.version}|\n"
+                f"|IP address|{agent.ip}|\n"
+            )
+        else:
+            return "|Key|Value|\n" "|---|-----|\n" f"|ID|{agent_id}|\n"
 
     def create_sighting_stix(
         self, *, sighter_id: str, metadata: SightingsCollector.Meta
@@ -1807,6 +1933,7 @@ class WazuhConnector:
             + alert_md_table(alert, capped_info)
             + (
                 "\n\n"
+                # These matches do not reflect how the query matched, but it is still useful:
                 "## Matches\n"
                 "\n\n"
                 "|Field|Match|\n"
@@ -1852,8 +1979,8 @@ class WazuhConnector:
             f"|Max hits|{self.hits_limit}|\n"
             f"|**Dropped**|**{total_hits - hits_returned}**|\n"
             f"|Search since|{self.search_after.isoformat() + 'Z' if self.search_after else '–'}|\n"
-            f"|Include filter|{json.dumps(self.search_include) if self.client.include_match else ''}|\n"
-            f"|Exclude filter|{json.dumps(self.search_exclude) if self.client.exclude_match else ''}|\n"
+            f"|Include filter|{json.dumps(self.search_include) if self.opensearch.include_match else ''}|\n"
+            f"|Exclude filter|{json.dumps(self.search_exclude) if self.opensearch.exclude_match else ''}|\n"
             f"|Connector v.|{self.CONNECTOR_VERSION}|\n"
             "\n"
             "### Alerts overview\n"
@@ -2177,6 +2304,7 @@ class WazuhConnector:
             else:
                 tools = [
                     create_tool_stix(tool["name"])
+                    # TODO: filter commmon words, like "at":
                     for tool in self.tools
                     if field_compare(
                         alert["_source"],
@@ -2292,8 +2420,30 @@ class WazuhConnector:
             }
             for alert in alerts
             for agent in (alert["_source"]["agent"],)
+            if "ip" in agent
         }
+        if self.wazuh and self.enrich_agent:
+            for id, agent in agents.copy().items():
+                if id in self.wazuh.state.agents:
+                    api_agent = self.wazuh.state.agents[id].model_dump(
+                        include={"name", "ip", "scan_time"}
+                    )
+                    # The agent has changed its address at some point in time.
+                    # Add the new address as well:
+                    if api_agent["ip"] != agent["ip"]:
+                        # Createa new key to be able to add the new agent metadata:
+                        agents[id + str(api_agent["ip"])] = api_agent | {
+                            "standard_id": agent["standard_id"],
+                            "is_new": True,
+                        }
+                    else:
+                        # Add new metadata:
+                        agents[id] |= api_agent
+
         bundle = []
+        timestamps = [alert["_source"]["@timestamp"] for alert in alerts]
+        earliest = min(timestamps)
+        latest = max(timestamps)
         for agent in agents.values():
             SCO = (
                 stix2.IPv4Address
@@ -2313,6 +2463,17 @@ class WazuhConnector:
                 relationship_type="related-to",
                 source_ref=agent["standard_id"],
                 target_ref=addr.id,
+                # If this is a new entry based off of the Wazuh API, don't use
+                # the alert timestamp:
+                start_time=(None if agent.get("is_new") else earliest),
+                # If the agent was recently queried using the API, use the query time:
+                stop_time=(
+                    api_latest
+                    if "scan_time" in agent
+                    and (api_latest := agent["scan_time"].isoformat() + "Z") > latest
+                    else latest
+                ),
+                description="The Wazuh agent had this IP address in the given time frame",
             )
             bundle.append(addr)
             bundle.append(rel)
@@ -2328,7 +2489,27 @@ class WazuhConnector:
             for alert in alerts
             for agent in (alert["_source"]["agent"],)
         }
+        if self.wazuh and self.enrich_agent:
+            for id, agent in agents.copy().items():
+                if id in self.wazuh.state.agents:
+                    api_agent = self.wazuh.state.agents[id].model_dump(
+                        include={"name", "scan_time"}
+                    )
+                    # The agent has changed hostname at some point in time. Add
+                    # the new hostname as well:
+                    if api_agent["name"] != agent["name"]:
+                        # Createa new key to be able to add the new agent metadata:
+                        agents[id + api_agent["name"]] = api_agent | {
+                            "standard_id": agent["standard_id"]
+                        }
+                    else:
+                        # Add new metadata:
+                        agents[id] |= api_agent
+
         bundle = []
+        timestamps = [alert["_source"]["@timestamp"] for alert in alerts]
+        earliest = min(timestamps)
+        latest = max(timestamps)
         for agent in agents.values():
             hostname = CustomObservableHostname(
                 value=agent["name"],
@@ -2343,6 +2524,17 @@ class WazuhConnector:
                 relationship_type="related-to",
                 source_ref=agent["standard_id"],
                 target_ref=hostname.id,
+                # If this is a new entry based off of the Wazuh API, don't use
+                # the alert timestamp:
+                start_time=(None if agent.get("is_new") else earliest),
+                # If the agent was recently queried using the API, use the query time:
+                stop_time=(
+                    api_latest
+                    if "scan_time" in agent
+                    and (api_latest := agent["scan_time"].isoformat() + "Z") > latest
+                    else latest
+                ),
+                description="The Wazuh agent had this hostname in the given time frame",
             )
             bundle.append(hostname)
             bundle.append(rel)

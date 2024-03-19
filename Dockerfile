@@ -12,5 +12,6 @@ RUN apk --no-cache add git build-base libmagic libffi-dev && \
 RUN rm -rf /opt/opencti-connector-wazuh
 COPY src /opt/opencti-connector-wazuh
 COPY entrypoint.sh /
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh && \
+   mkdir -p /var/cache/wazuh
 ENTRYPOINT ["/entrypoint.sh"]
