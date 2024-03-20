@@ -30,7 +30,7 @@ from urllib.parse import urljoin
 from os.path import commonprefix
 from ntpath import basename
 from pydantic import BaseModel
-from functools import cache
+from functools import cache, reduce
 
 # TODO: Enrichment connector that uses snipeit to get system owner
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
@@ -450,6 +450,12 @@ def cvss3_to_severity(score: float):
             return "low"
 
 
+def priority_from_severity(severity: str):
+    return {"critical": "P1", "high": "P2", "medium": "P3", "low": "P4"}.get(
+        severity, "P3"
+    )
+
+
 def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] = []):
     s = alert["_source"]
     return (
@@ -622,6 +628,23 @@ def api_searchable_entity_type(entity_type: str):
             return True
         case _:
             return False
+
+
+def severity_to_int(severity: str) -> int:
+    match severity:
+        case "medium":
+            return 1
+        case "high":
+            return 2
+        case "critical":
+            return 3
+        # Put unknown severities in the same category as "low":
+        case _:
+            return 0
+
+
+def max_severity(severities: list[str]):
+    return max(severities, key=lambda s: severity_to_int(s))
 
 
 class WazuhConnector:
@@ -1212,25 +1235,6 @@ class WazuhConnector:
                 sightings_meta=sightings_collector,
             )
 
-        if self.create_incident_response:
-            incidents = [obj for obj in bundle if isinstance(obj, stix2.Incident)]
-            # TODO: about time to correctly use max/min with lambda correctly, here and elsewere, instead of creating temporary lists:
-            timestamp = max([incident.created for incident in incidents])
-            # FIXME: add a func for max severity:
-            severity = max([incident.severity for incident in incidents])
-            name = "Test"  # obs observed N times(?)
-            bundle += [
-                CustomObjectCaseIncident(
-                    id=CaseIncident.generate_id(name, timestamp),
-                    name=name,
-                    description="FIXME",
-                    severity=severity,
-                    # TODO: priority from severity (https://github.com/OpenCTI-Platform/connectors/blob/a01fff5b0a1a39ccb4ebaebec5a82e9caadba6bd/stream/sentinel/src/sightings.py#L21)
-                    **self.stix_common_attrs,
-                    object_refs=[incident.id for incident in incidents],
-                )
-            ]
-
         bundle += [
             self.create_summary_note(
                 result=result,
@@ -1246,6 +1250,16 @@ class WazuhConnector:
         ]
 
         bundle += list(agents.values())
+
+        # NOTE: This must be the lastly created bundle, because it references
+        # all other objects in the bundle list:
+        if self.create_incident_response and any(
+            isinstance(obj, stix2.Incident) for obj in bundle
+        ):
+            self.create_incident_response_case(
+                entity=entity, result=result, bundle=bundle
+            )
+
         if (
             self.bundle_abort_limit is not None
             and (bundle_count := len(bundle)) > self.bundle_abort_limit
@@ -2579,3 +2593,33 @@ class WazuhConnector:
             bundle.append(rel)
 
         return bundle
+
+    def create_incident_response_case(
+        self, *, entity: dict, result: dict, bundle: list[Any]
+    ):
+        incidents = [obj for obj in bundle if isinstance(obj, stix2.Incident)]
+        # TODO: about time to correctly use max/min with lambda correctly, here and elsewere, instead of creating temporary lists:
+        # The key here is that the return result is the object, not the key!
+        timestamp = max([incident.created for incident in incidents])
+        severity = max_severity([incident.severity for incident in incidents])
+        sightings_count = reduce(
+            lambda sum, sighting: sum + sighting.count,
+            [obj for obj in bundle if isinstance(obj, stix2.Sighting)],
+            0,
+        )
+        hits_dropped = result["hits"]["total"]["value"] > len(result["hits"]["hits"])
+        name = f"{entity_name_value(entity)} sighted {sightings_count}{'+' if hits_dropped else ''} time(s)"
+        bundle.remove(self.author)
+        bundle += [
+            CustomObjectCaseIncident(
+                id=CaseIncident.generate_id(name, timestamp),
+                name=name,
+                description="FIXME",
+                severity=severity,
+                priority=priority_from_severity(severity),
+                **self.stix_common_attrs,
+                # This should be okay, because these refs can be any of SCO, SDO and SRO:
+                object_refs=bundle,
+            ),
+        ]
+        # TODO: ideally remove wazuh siem identity if not used
