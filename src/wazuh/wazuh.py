@@ -38,6 +38,7 @@ from functools import cache, reduce
 # TODO: Identities for AWS, GitHub, Office365, etc.(?)
 # TODO: inconsistent use of _ in func. names. Fix when cleaning up, modularise and move utils into utils, stix into stix(?) modules
 # TODO: update wazuh api completely in background
+# FIXME: Ignoring obs. from Wazuh is not a good solution. Manual enrichment must be allowed, if so.
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -1755,7 +1756,7 @@ class WazuhConnector:
                 # TODO: display name? Otherwise remove from entity_value*(?)
                 uid = oneof_nonempty("user_id", within=stix_entity)
                 username = oneof_nonempty("account_login", within=stix_entity)
-                # Some logs provide a username that als consists of a UID in parenthesis:
+                # Some logs provide a username that also consists of a UID in parenthesis:
                 if match := re.match(
                     r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", username or ""
                 ):
@@ -2109,6 +2110,7 @@ class WazuhConnector:
                     severity=rule_level_to_severity(sightings_meta.max_rule_level()),
                     first_seen=sightings_meta.first_seen(),
                     last_seen=sightings_meta.last_seen(),
+                    source=self.system_name,
                 )
                 incidents = [incident]
                 bundle = incidents + self.create_incident_relationships(
@@ -2394,22 +2396,23 @@ class WazuhConnector:
 
         return bundle
 
+    # TODO: sightings instead of related-to?
     def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
         bundle = []
+        accounts_added = set()
         for alert in alerts:
-            # FIXME: Remove invalid usernames (like 'root(uid=0)', or just remove any (uid=…) part.
             if has_any(alert, ["_source", "data"], ["dstuser", "srcuser"]):
                 accounts = [
-                    stix2.UserAccount(
-                        account_login=username,
-                        allow_custom=True,
-                        **self.stix_common_attrs,
+                    (
+                        field,
+                        self.stix_account_from_username(username),
                     )
                     for data in (alert["_source"]["data"],)
                     for field, username in data.items()
                     if field in {"dstuser", "srcuser"}
+                    and username not in accounts_added
                 ]
-                bundle += accounts + [
+                bundle += [account_obj for _, account_obj in accounts] + [
                     stix2.Relationship(
                         id=StixCoreRelationship.generate_id(
                             "related-to", incident.id, account.id
@@ -2417,10 +2420,11 @@ class WazuhConnector:
                         created=alert["_source"]["@timestamp"],
                         **self.stix_common_attrs,
                         relationship_type="related-to",
+                        description=f"account_login found in {field} in an alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
                         source_ref=incident.id,
                         target_ref=account.id,
                     )
-                    for account in accounts
+                    for field, account in accounts
                 ]
 
         return bundle
@@ -2606,6 +2610,7 @@ class WazuhConnector:
         hits_dropped = result["hits"]["total"]["value"] > len(result["hits"]["hits"])
         name = f"{entity_name_value(entity)} sighted {sightings_count}{'+' if hits_dropped else ''} time(s)"
         bundle.remove(self.author)
+        # TODO: add observable as well (it will need to be created, which possibly requires a lot of work)
         bundle += [
             CustomObjectCaseIncident(
                 id=CaseIncident.generate_id(name, timestamp),
@@ -2618,3 +2623,17 @@ class WazuhConnector:
                 object_refs=bundle,
             ),
         ]
+
+    def stix_account_from_username(self, username: str):
+        uid = None
+        # Some logs provide a username that also consists of a UID in parenthesis:
+        if match := re.match(r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", username or ""):
+            uid = int(match.group("uid"))
+            username = match.group("name")
+
+        return stix2.UserAccount(
+            account_login=username,
+            user_id=uid,
+            allow_custom=True,
+            **self.stix_common_attrs,
+        )
