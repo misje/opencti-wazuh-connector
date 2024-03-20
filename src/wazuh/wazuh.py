@@ -139,19 +139,19 @@ class SightingsCollector:
 
     @cache
     def max_rule_level(self):
-        return max([sighting.max_rule_level for sighting in self._sightings.values()])
+        return max(sighting.max_rule_level for sighting in self._sightings.values())
 
     @cache
     def first_seen(self, rule_id: str | None = None):
         if rule_id is None:
-            return min([sighting.first_seen for sighting in self._sightings.values()])
+            return min(sighting.first_seen for sighting in self._sightings.values())
         else:
             return min(self._alerts_timestamps_sorted(rule_id))
 
     @cache
     def last_seen(self, rule_id: str | None = None):
         if rule_id is None:
-            return max([sighting.last_seen for sighting in self._sightings.values()])
+            return max(sighting.last_seen for sighting in self._sightings.values())
         else:
             return max(self._alerts_timestamps_sorted(rule_id))
 
@@ -194,8 +194,8 @@ class SightingsCollector:
                     alerts,
                     key=lambda a: a["_source"]["@timestamp"],
                 ),
-                "first_seen": min([alert["_source"]["@timestamp"] for alert in alerts]),
-                "last_seen": max([alert["_source"]["@timestamp"] for alert in alerts]),
+                "first_seen": min(alert["_source"]["@timestamp"] for alert in alerts),
+                "last_seen": max(alert["_source"]["@timestamp"] for alert in alerts),
                 "sighters": [
                     sighter
                     for sighter, sighting in self._sightings.items()
@@ -2494,9 +2494,8 @@ class WazuhConnector:
                         agents[id] |= api_agent
 
         bundle = []
-        timestamps = [alert["_source"]["@timestamp"] for alert in alerts]
-        earliest = min(timestamps)
-        latest = max(timestamps)
+        earliest = min(alert["_source"]["@timestamp"] for alert in alerts)
+        latest = max(alert["_source"]["@timestamp"] for alert in alerts)
         for agent in agents.values():
             SCO = (
                 stix2.IPv4Address
@@ -2560,9 +2559,8 @@ class WazuhConnector:
                         agents[id] |= api_agent
 
         bundle = []
-        timestamps = [alert["_source"]["@timestamp"] for alert in alerts]
-        earliest = min(timestamps)
-        latest = max(timestamps)
+        earliest = min(alert["_source"]["@timestamp"] for alert in alerts)
+        latest = max(alert["_source"]["@timestamp"] for alert in alerts)
         for agent in agents.values():
             hostname = CustomObservableHostname(
                 value=agent["name"],
@@ -2598,9 +2596,7 @@ class WazuhConnector:
         self, *, entity: dict, result: dict, bundle: list[Any]
     ):
         incidents = [obj for obj in bundle if isinstance(obj, stix2.Incident)]
-        # TODO: about time to correctly use max/min with lambda correctly, here and elsewere, instead of creating temporary lists:
-        # The key here is that the return result is the object, not the key!
-        timestamp = max([incident.created for incident in incidents])
+        timestamp = max(incident.created for incident in incidents)
         severity = max_severity([incident.severity for incident in incidents])
         sightings_count = reduce(
             lambda sum, sighting: sum + sighting.count,
@@ -2622,4 +2618,3 @@ class WazuhConnector:
                 object_refs=bundle,
             ),
         ]
-        # TODO: ideally remove wazuh siem identity if not used
