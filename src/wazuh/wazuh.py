@@ -340,20 +340,28 @@ def extract_fields(
             except KeyError as e:
                 if raise_if_missing:
                     raise e
+                else:
+                    return None
 
         return obj
 
     if any("*" in field for field in fields):
         raise ValueError('Fields cannot contain "*"')
 
-    return {field: traverse(obj, field.split(".")) for field in fields}
+    results = {field: traverse(obj, field.split(".")) for field in fields}
+    # Remove Nones:
+    return {k: v for k, v in results.items() if v is not None}
+
+
+def search_fields(obj: dict, fields: list[str]) -> dict:
+    return extract_fields(obj, fields, raise_if_missing=False)
 
 
 def field_compare(
     obj: dict, fields: list[str], comp: Callable[[Any], bool] | Any
 ) -> bool:
     """
-    Search for a value in a dict recursively using ey paths
+    Search for a value in a dict recursively using key paths
 
     Example:
     field_compare({ "a": { "b": 1, }, "c": 2 }, ["a.b", "c"], lambda x: x > 1)
