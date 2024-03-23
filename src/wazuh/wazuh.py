@@ -2009,7 +2009,7 @@ class WazuhConnector:
                 "\n\n"
                 f"```json\n{alert_json}\n```"
             ),
-            object_refs=sighting_id,
+            object_refs=[entity["standard_id"], sighting_id],
             external_references=[self.create_alert_ext_ref(alert=alert)],
             allow_custom=True,
             note_types=["analysis"],
