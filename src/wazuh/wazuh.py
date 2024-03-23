@@ -39,6 +39,7 @@ from functools import cache, reduce
 # TODO: inconsistent use of _ in func. names. Fix when cleaning up, modularise and move utils into utils, stix into stix(?) modules
 # TODO: update wazuh api completely in background
 # FIXME: Ignoring obs. from Wazuh is not a good solution. Manual enrichment must be allowed, if so.
+# TODO: escape_md() function (for use in all text going into opencti)
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -620,11 +621,12 @@ def search_in_alert(alert: dict, search_term: str, path: str = ""):
         return {}
 
 
-def search_in_alert_multi(alert: dict, search_terms: list[str]):
+def search_in_alert_multi(alert: dict, *search_terms: str, exclude: list[str] = []):
     return {
         key: value
         for results in [search_in_alert(alert, term) for term in search_terms]
         for key, value in results.items()
+        if key not in exclude
     }
 
 
@@ -654,6 +656,14 @@ def severity_to_int(severity: str) -> int:
 
 def max_severity(severities: list[str]):
     return max(severities, key=lambda s: severity_to_int(s))
+
+
+def note_with_new_ref(note: stix2.Note, obj: Any):
+    # Don't use new_version(), because that requires a new modified timestamp:
+    return stix2.Note(
+        **{prop: getattr(note, prop) for prop in note if prop != "get_attrs"},
+        object_refs=note.object_refs + [obj.id],
+    )
 
 
 class WazuhConnector:
@@ -757,12 +767,6 @@ class WazuhConnector:
         self.alerts_as_notes = get_config_variable(
             "WAZUH_ALERTS_AS_NOTES",
             ["wazuh", "alerts_as_notes"],
-            config,
-            default=True,
-        )
-        self.create_obs_note = get_config_variable(
-            "WAZUH_CREATE_OBSERVABLE_NOTE",
-            ["wazuh", "create_observable_note"],
             config,
             default=True,
         )
@@ -1087,7 +1091,9 @@ class WazuhConnector:
             return f"Ignoring entity because it was created by {self.author.name}"
 
         # Figure out exactly what this does (change id format?);
-        enrichment = self.helper.get_data_from_enrichment(data, entity)
+        enrichment = self.helper.get_data_from_enrichment(
+            data, entity["standard_id"], entity
+        )
         stix_entity = enrichment["stix_entity"]
         # Remove:
         self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
@@ -1160,6 +1166,7 @@ class WazuhConnector:
         sightings_collector = SightingsCollector(observable_id=entity["standard_id"])
         agents = {}
         # The complete STIX bundle to send:
+        # TODO: Only add if used (siem_system):
         bundle = [self.author, self.siem_system]
         for hit in hits:
             try:
@@ -1265,7 +1272,7 @@ class WazuhConnector:
         if self.create_incident_response and any(
             isinstance(obj, stix2.Incident) for obj in bundle
         ):
-            self.create_incident_response_case(
+            bundle += self.create_incident_response_case(
                 entity=entity, result=result, bundle=bundle
             )
 
@@ -1279,7 +1286,8 @@ class WazuhConnector:
 
         sent_count = len(
             self.helper.send_stix2_bundle(
-                self.helper.stix2_create_bundle(bundle), update=True
+                self.helper.stix2_create_bundle(bundle),  # type: ignore
+                update=True,
             )
         )
         return f"Sent {sent_count} STIX bundle(s) for worker import"
@@ -1761,6 +1769,7 @@ class WazuhConnector:
                     }
                 )
             case "User-Account":
+                # TODO: what about DOMAIN\username?
                 # TODO: display name? Otherwise remove from entity_value*(?)
                 uid = oneof_nonempty("user_id", within=stix_entity)
                 username = oneof_nonempty("account_login", within=stix_entity)
@@ -1777,6 +1786,8 @@ class WazuhConnector:
                     "*.user",
                     "*.userName",
                     "*.username",
+                    "syscheck.uname_before",
+                    "syscheck.uname_after",
                     "*.source_user",
                     "*.sourceUser",
                     "*.destination_user",
@@ -1791,6 +1802,8 @@ class WazuhConnector:
                 uid_fields = [
                     "data.win.eventdata.targetSid",
                     "data.win.eventdata.subjectUserSid",
+                    "syscheck.uid_before",
+                    "syscheck.uid_after",
                     # For audit and pam:
                     "*.uid",
                     "*.euid",
@@ -1894,43 +1907,26 @@ class WazuhConnector:
             # Use a dummy indicator since this field is required:
             sighting_of_ref=self.DUMMY_INDICATOR_ID,
             custom_properties={"x_opencti_sighting_of_ref": metadata.observable_id},
+            # FIXME: External references has stopped working (takes a second enrichment run):
             external_references=self.create_sighting_ext_refs(metadata=metadata),
         )
-        # Add alert as note: per alert, per ID
 
     def create_sighting_ext_refs(self, *, metadata: SightingsCollector.Meta):
         ext_ref_count = 0
         return [
-            self.create_sighting_ext_ref(alert=alert, limit_info=capped_at)
+            self.create_alert_ext_ref(alert=alert)
             for alerts in metadata.alerts.values()
             # In addition to limit the total number of external references,
             # also limit them per alert rule (pick the last N alerts to get
             # the latest alerts):
-            for i, alert in enumerate(alerts[-self.max_extrefs_per_alert_rule :])
-            for capped_at in (
-                (i + 1, len(alerts), self.max_extrefs_per_alert_rule)
-                if len(alerts) > self.max_extrefs_per_alert_rule
-                else None,
-            )
+            for alert in alerts[-self.max_extrefs_per_alert_rule :]
             if (ext_ref_count := ext_ref_count + 1) <= self.max_extrefs
         ]
 
-    def create_sighting_ext_ref(
-        self, *, alert, limit_info: tuple[int, int, int] | None
-    ):
-        capped_info = (
-            [
-                (
-                    str("Count"),
-                    f"{limit_info[0]} of {limit_info[1]} (limited to {limit_info[2]})",
-                )
-            ]
-            if limit_info
-            else []
-        )
+    def create_alert_ext_ref(self, *, alert):
         return stix2.ExternalReference(
             source_name="Wazuh alert",
-            description=alert_md_table(alert, capped_info),
+            description=alert_md_table(alert),
             url=urljoin(
                 self.app_url,  # type: ignore
                 f'app/discover#/context/wazuh-alerts-*/{alert["_id"]}?_a=(columns:!(_source),filters:!())',
@@ -1942,7 +1938,7 @@ class WazuhConnector:
     ):
         note_count = 0
         return [
-            self.create_note_stix(
+            self.create_alert_note(
                 entity=entity,
                 sighting_id=sighting_id,
                 alert=alert,
@@ -1961,7 +1957,7 @@ class WazuhConnector:
             if (note_count := note_count + 1) <= self.max_notes
         ]
 
-    def create_note_stix(
+    def create_alert_note(
         self,
         *,
         entity: dict,
@@ -2003,7 +1999,7 @@ class WazuhConnector:
                 + "".join(
                     f"|{field}|{match}|\n"
                     for field, match in search_in_alert_multi(
-                        alert["_source"], obs_values
+                        alert["_source"], *obs_values, exclude=["full_log"]
                     ).items()
                 )
                 + "\n\n"
@@ -2012,6 +2008,7 @@ class WazuhConnector:
                 f"```json\n{alert_json}\n```"
             ),
             object_refs=sighting_id,
+            external_references=[self.create_alert_ext_ref(alert=alert)],
             allow_custom=True,
             note_types=["analysis"],
         )
@@ -2224,6 +2221,7 @@ class WazuhConnector:
                             or not log_skipped_incident_creation(rule_level)
                         )
                     ]
+
                     bundle += incidents
 
                     for incident in incidents:
@@ -2238,6 +2236,14 @@ class WazuhConnector:
                 raise ValueError(
                     f'WAZUH_INCIDENT_CREATE_MODE "{self.create_incident}" is invalid'
                 )
+
+        ## Update (replace) all notes in bundle with instatnces that now also
+        ## references the incidents:
+        # bundle = [
+        #    note_with_new_ref(obj, incident) if isinstance(obj, stix2.Note) else obj
+        #    for incident in incidents
+        #    for obj in bundle
+        # ]
 
         bundle += [
             obj
@@ -2406,36 +2412,37 @@ class WazuhConnector:
 
     # TODO: sightings instead of related-to?
     def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
-        bundle = []
-        accounts_added = set()
-        for alert in alerts:
-            if has_any(alert, ["_source", "data"], ["dstuser", "srcuser"]):
-                accounts = [
-                    (
-                        field,
-                        self.stix_account_from_username(username),
-                    )
-                    for data in (alert["_source"]["data"],)
-                    for field, username in data.items()
-                    if field in {"dstuser", "srcuser"}
-                    and username not in accounts_added
-                ]
-                bundle += [account_obj for _, account_obj in accounts] + [
-                    stix2.Relationship(
-                        id=StixCoreRelationship.generate_id(
-                            "related-to", incident.id, account.id
-                        ),
-                        created=alert["_source"]["@timestamp"],
-                        **self.stix_common_attrs,
-                        relationship_type="related-to",
-                        description=f"account_login found in {field} in an alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
-                        source_ref=incident.id,
-                        target_ref=account.id,
-                    )
-                    for field, account in accounts
-                ]
-
-        return bundle
+        accounts = {
+            username: {
+                "field": field,
+                "account": self.stix_account_from_username(username),
+                "alert": alert,
+            }
+            for alert in alerts
+            for field, username in search_fields(
+                alert["_source"],
+                ["data.dstuser", "data.srcuser"],
+            ).items()
+        }
+        return [
+            stix
+            for username, result in accounts.items()
+            for alert in (result["alert"],)
+            for stix in (
+                result["account"],
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "related-to", incident.id, result["account"].id
+                    ),
+                    created=alert["_source"]["@timestamp"],
+                    **self.stix_common_attrs,
+                    relationship_type="related-to",
+                    description=f"account_login {username} found in {result['field']} in relevant alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+                    source_ref=incident.id,
+                    target_ref=result["account"].id,
+                ),
+            )
+        ]
 
     def enrich_uris(self, *, incident: stix2.Incident, alerts: list[dict]):
         bundle = []
@@ -2617,9 +2624,9 @@ class WazuhConnector:
         )
         hits_dropped = result["hits"]["total"]["value"] > len(result["hits"]["hits"])
         name = f"{entity_name_value(entity)} sighted {sightings_count}{'+' if hits_dropped else ''} time(s)"
-        bundle.remove(self.author)
-        # TODO: add observable as well (it will need to be created, which possibly requires a lot of work)
-        bundle += [
+        refs = bundle + [entity["standard_id"]]
+        refs.remove(self.author)
+        return (
             CustomObjectCaseIncident(
                 id=CaseIncident.generate_id(name, timestamp),
                 name=name,
@@ -2628,10 +2635,11 @@ class WazuhConnector:
                 priority=priority_from_severity(severity),
                 **self.stix_common_attrs,
                 # This should be okay, because these refs can be any of SCO, SDO and SRO:
-                object_refs=bundle,
+                object_refs=refs,
             ),
-        ]
+        )
 
+    # TODO: what about DOMAIN\username?
     def stix_account_from_username(self, username: str):
         uid = None
         # Some logs provide a username that also consists of a UID in parenthesis:
