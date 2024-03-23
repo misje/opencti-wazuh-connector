@@ -2346,7 +2346,7 @@ class WazuhConnector:
         if self.enrich_account:
             bundle += self.enrich_accounts(incident=incident, alerts=alerts)
         if self.enrich_url:
-            bundle += self.enrich_uris(incident=incident, alerts=alerts)
+            bundle += self.enrich_urls(incident=incident, alerts=alerts)
 
         return bundle
 
@@ -2473,45 +2473,51 @@ class WazuhConnector:
             )
         ]
 
-    def enrich_uris(self, *, incident: stix2.Incident, alerts: list[dict]):
-        bundle = []
-        for alert in alerts:
-            urls = [
-                stix2.URL(
-                    value=uri,
+    def enrich_urls(self, *, incident: stix2.Incident, alerts: list[dict]):
+        urls = {
+            url: {
+                "field": field,
+                "url": stix2.URL(
+                    value=url,
                     allow_custom=True,
                     **self.stix_common_attrs,
                     labels=self.enrich_labels,
-                )
-                for data in (alert["_source"]["data"],)
-                for uri in extract_fields(
-                    data,
-                    [
-                        # NOTE: globs not supported:
-                        "data.url",
-                        "data.osquery.columns.update_url",
-                        "data.office365.MeetingURL",
-                        "data.office365.MessageURLs",
-                        "data.office365.RemoteItemWebUrl",
-                    ],
-                    raise_if_missing=False,
-                ).values()
-            ]
-            bundle += urls + [
+                ),
+                "alert": alert,
+            }
+            for alert in alerts
+            for field, url in search_fields(
+                alert["_source"],
+                [
+                    "data.url",
+                    "data.osquery.columns.update_url",
+                    "data.office365.MeetingURL",
+                    "data.office365.MessageURLs",
+                    "data.office365.RemoteItemWebUrl",
+                ],
+            ).items()
+        }
+        return [
+            stix
+            for url, result in urls.items()
+            for alert in (result["alert"],)
+            for stix in (
+                result["url"],
                 stix2.Relationship(
                     id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, url.id
+                        "related-to", incident.id, result["url"].id
                     ),
                     created=alert["_source"]["@timestamp"],
                     **self.stix_common_attrs,
                     relationship_type="related-to",
+                    description=f"url {url} found in {result['field']} in relevant alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
                     source_ref=incident.id,
-                    target_ref=url.id,
-                )
-                for url in urls
-            ]
+                    target_ref=result["url"].id,
+                ),
+            )
+        ]
 
-        return bundle
+    # TODO: enrich_file (smbd.filename ++++)
 
     def create_agent_addr_obs(self, *, alerts: list[dict]):
         agents = {
