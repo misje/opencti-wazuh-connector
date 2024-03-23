@@ -363,6 +363,10 @@ def search_fields(obj: dict, fields: list[str]) -> dict:
     return extract_fields(obj, fields, raise_if_missing=False)
 
 
+def search_field(obj: dict, field: str) -> str | None:
+    return extract_fields(obj, [field], raise_if_missing=False).get(field)
+
+
 def field_compare(
     obj: dict, fields: list[str], comp: Callable[[Any], bool] | Any
 ) -> bool:
@@ -661,6 +665,22 @@ def severity_to_int(severity: str) -> int:
 
 def max_severity(severities: list[str]):
     return max(severities, key=lambda s: severity_to_int(s))
+
+
+def regex_transform(obj: dict[str, Any], map: dict[str, str]) -> dict[str, Any]:
+    """
+    Apply a regex tranformation to each key in object
+    Example:
+
+    `regex_transform{'one.two': 1, 'three.one': 2}, {'^.+\\.(.+)$': r'\1'})` returns
+    `{'two': 1, 'one': 2}`
+    """
+    return {
+        re.sub(pattern, replacement, key): value
+        for key, value in obj.items()
+        for pattern, replacement in map.items()
+        if re.match(pattern, key)
+    }
 
 
 # : Remove?
@@ -2491,31 +2511,97 @@ class WazuhConnector:
         )
 
     def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
-        return self.create_enrichment_obs_from_search(
-            incident=incident,
-            alerts=alerts,
-            type="StixFile",
-            fields=[
-                "data.ChildPath",
-                "data.ParentPath",
-                "data.Path",
-                "data.TargetFileName",
-                "data.TargetPath",
-                "data.audit.file.name",
-                "data.audit.file.name",
-                "data.file",
-                "data.osquery.columns.path",
-                "data.sca.check.file",
-                "data.smbd.filename",
-                "data.smbd.new_filename",
-                "data.virustotal.source.file",
-                "data.win.eventdata.file",
-                "data.win.eventdata.filePath",
-                "syscheck.path",
-            ],
-        )
+        # First search for fields that may contain filenames/paths, but without hashes:
+        results = {
+            match: {
+                "field": field,
+                "sco": self.create_sco("StixFile", value=match),
+                "alert": alert,
+            }
+            for alert in alerts
+            for field, match in search_fields(
+                alert["_source"],
+                [
+                    "data.ChildPath",
+                    "data.ParentPath",
+                    "data.Path",
+                    "data.TargetFileName",
+                    "data.TargetPath",
+                    "data.audit.file.name",
+                    "data.audit.file.name",
+                    "data.file",
+                    "data.sca.check.file",
+                    "data.smbd.filename",
+                    "data.smbd.new_filename",
+                    "data.virustotal.source.file",
+                    "data.win.eventdata.file",
+                    "data.win.eventdata.filePath",
+                ],
+            ).items()
+        }
 
-    def create_sco(self, type: str, value: str):
+        # Then search in fields that also may contain hashes:
+        for alert in alerts:
+            for name_field, hash_fields in {
+                "data.osquery.columns.path": [
+                    "data.osquery.columns.md5",
+                    "data.osquery.columns.sha1",
+                    "data.osquery.columns.sha256",
+                ],
+                "syscheck.path": [
+                    "syscheck.md5_after",
+                    "syscheck.sha1_after",
+                    "syscheck.sha256_after",
+                ],
+            }.items():
+                name = search_field(alert["_source"], name_field)
+                hashes = regex_transform(
+                    search_fields(
+                        alert["_source"],
+                        hash_fields,
+                    ),
+                    {
+                        ".+md5.*": "MD5",
+                        ".+sha1$.*": "SHA-1",
+                        ".+sha256.*": "SHA-256",
+                    },
+                )
+                if name is not None:
+                    results[name] = {
+                        "field": name_field,
+                        "sco": self.create_sco(
+                            "StixFile",
+                            value=name,
+                            # Only one hash should be populated in stix, according to the
+                            # standard, in order of preference: md5, sha-1, sha-256.
+                            # OpenCTI doesn't seem to care about this, and why not keep
+                            # them all:
+                            hashes=hashes,
+                        ),
+                        "alert": alert,
+                    }
+        return [
+            stix
+            for match, meta in results.items()
+            for alert in (meta["alert"],)
+            for sco in (meta["sco"],)
+            for stix in (
+                sco,
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "related-to", incident.id, sco.id
+                    ),
+                    created=alert["_source"]["@timestamp"],
+                    **self.stix_common_attrs,
+                    relationship_type="related-to",
+                    description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+                    source_ref=incident.id,
+                    target_ref=sco.id,
+                ),
+            )
+        ]
+
+    def create_sco(self, type: str, value: str, **properties):
         common_attrs = {
             "allow_custom": True,
             **self.stix_common_attrs,
@@ -2523,13 +2609,15 @@ class WazuhConnector:
         }
         match type:
             case "Directory":
-                return stix2.Directory(path=value, **common_attrs)
+                return stix2.Directory(path=value, **common_attrs, **properties)
             case "User-Account":
-                return self.stix_account_from_username(value, labels=self.enrich_labels)
+                return self.stix_account_from_username(
+                    value, labels=self.enrich_labels, **properties
+                )
             case "Url":
-                return stix2.URL(value=value, **common_attrs)
+                return stix2.URL(value=value, **common_attrs, **properties)
             case "StixFile":
-                return stix2.File(name=value, **common_attrs)
+                return stix2.File(name=value, **common_attrs, **properties)
             # case "Windows-Registry-Key":
             #    return oneof("key", within=entity)
             case _:
@@ -2572,6 +2660,55 @@ class WazuhConnector:
                 ),
             )
         ]
+
+    # def create_enrichment_obs_from_search_multi(
+    #    self,
+    #    *,
+    #    incident: stix2.Incident,
+    #    alerts: list[dict],
+    #    type: str,
+    #    fields: list[str],
+    #    field_property_map: dict[str, str],
+    # ):
+    #    results = {
+    #        match: {
+    #            "field": field,
+    #            "sco": self.create_sco(
+    #                type,
+    #                value=match,
+    #                **{
+    #                    field_property_map[context_field]: context_val
+    #                    for context_field, context_val in search_fields(
+    #                        alert["_source"], list(field_property_map.keys())
+    #                    ).items()
+    #                    if field in field_property_map
+    #                },
+    #            ),
+    #            "alert": alert,
+    #        }
+    #        for alert in alerts
+    #        for field, match in search_fields(alert["_source"], fields).items()
+    #    }
+    #    return [
+    #        stix
+    #        for match, meta in results.items()
+    #        for alert in (meta["alert"],)
+    #        for sco in (meta["sco"],)
+    #        for stix in (
+    #            sco,
+    #            stix2.Relationship(
+    #                id=StixCoreRelationship.generate_id(
+    #                    "related-to", incident.id, sco.id
+    #                ),
+    #                created=alert["_source"]["@timestamp"],
+    #                **self.stix_common_attrs,
+    #                relationship_type="related-to",
+    #                description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+    #                source_ref=incident.id,
+    #                target_ref=sco.id,
+    #            ),
+    #        )
+    #    ]
 
     def create_agent_addr_obs(self, *, alerts: list[dict]):
         agents = {
