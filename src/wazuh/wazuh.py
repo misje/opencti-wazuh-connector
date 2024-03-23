@@ -660,6 +660,7 @@ def max_severity(severities: list[str]):
     return max(severities, key=lambda s: severity_to_int(s))
 
 
+# : Remove?
 def note_with_new_ref(note: stix2.Note, obj: Any):
     # Don't use new_version(), because that requires a new modified timestamp:
     return stix2.Note(
@@ -2238,14 +2239,6 @@ class WazuhConnector:
                 raise ValueError(
                     f'WAZUH_INCIDENT_CREATE_MODE "{self.create_incident}" is invalid'
                 )
-
-        ## Update (replace) all notes in bundle with instatnces that now also
-        ## references the incidents:
-        # bundle = [
-        #    note_with_new_ref(obj, incident) if isinstance(obj, stix2.Note) else obj
-        #    for incident in incidents
-        #    for obj in bundle
-        # ]
 
         bundle += [
             obj
