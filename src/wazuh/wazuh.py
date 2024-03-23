@@ -2661,55 +2661,6 @@ class WazuhConnector:
             )
         ]
 
-    # def create_enrichment_obs_from_search_multi(
-    #    self,
-    #    *,
-    #    incident: stix2.Incident,
-    #    alerts: list[dict],
-    #    type: str,
-    #    fields: list[str],
-    #    field_property_map: dict[str, str],
-    # ):
-    #    results = {
-    #        match: {
-    #            "field": field,
-    #            "sco": self.create_sco(
-    #                type,
-    #                value=match,
-    #                **{
-    #                    field_property_map[context_field]: context_val
-    #                    for context_field, context_val in search_fields(
-    #                        alert["_source"], list(field_property_map.keys())
-    #                    ).items()
-    #                    if field in field_property_map
-    #                },
-    #            ),
-    #            "alert": alert,
-    #        }
-    #        for alert in alerts
-    #        for field, match in search_fields(alert["_source"], fields).items()
-    #    }
-    #    return [
-    #        stix
-    #        for match, meta in results.items()
-    #        for alert in (meta["alert"],)
-    #        for sco in (meta["sco"],)
-    #        for stix in (
-    #            sco,
-    #            stix2.Relationship(
-    #                id=StixCoreRelationship.generate_id(
-    #                    "related-to", incident.id, sco.id
-    #                ),
-    #                created=alert["_source"]["@timestamp"],
-    #                **self.stix_common_attrs,
-    #                relationship_type="related-to",
-    #                description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
-    #                source_ref=incident.id,
-    #                target_ref=sco.id,
-    #            ),
-    #        )
-    #    ]
-
     def create_agent_addr_obs(self, *, alerts: list[dict]):
         agents = {
             agent["id"]: {
