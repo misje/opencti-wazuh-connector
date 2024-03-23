@@ -2163,6 +2163,7 @@ class WazuhConnector:
                         severity=rule_level_to_severity(meta.max_rule_level),
                         first_seen=meta.first_seen,
                         last_seen=meta.last_seen,
+                        source=self.system_name,
                     )
                     incidents.append(incident)
                     bundle.append(incident)
@@ -2202,6 +2203,7 @@ class WazuhConnector:
                         severity=rule_level_to_severity(alerts_level),
                         first_seen=meta["first_seen"],
                         last_seen=meta["last_seen"],
+                        source=self.system_name,
                     )
                     incidents.append(incident)
                     bundle.append(incident)
@@ -2228,6 +2230,7 @@ class WazuhConnector:
                             severity=rule_level_to_severity(rule_level),
                             first_seen=sighted_at,
                             last_seen=sighted_at,
+                            source=self.system_name,
                         )
                         for alert in meta["alerts"]
                         for sighted_at in (alert["_source"]["@timestamp"],)
