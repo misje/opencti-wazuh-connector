@@ -44,6 +44,7 @@ from functools import cache, reduce
 # TODO: Add search options to prevent too many hits, like: search_{file::name}
 # TODO: Use TypeAlias (from typing) for things like Bundle etc.
 # TODO: create helper function for creating stix objects, like stix2.Relationship that needs several references to the same variable. Add in a module that can be initied with common_args?
+# TODO: customiseable author name?
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -945,7 +946,13 @@ class WazuhConnector:
             "WAZUH_LABEL_IGNORE_LIST",
             ["wazuh", "label_ignore_list"],
             config,
-            default="hygiene",
+            default="hygiene,wazuh",
+        ).split(",")  # type: ignore
+        self.enrich_labels = get_config_variable(
+            "WAZUH_ENRICH_LABEL_ADD_LIST",
+            ["wazuh", "enrich_label_add_list"],
+            config,
+            default="wazuh",
         ).split(",")  # type: ignore
         self.create_incident_response = get_config_variable(
             "WAZUH_CREATE_INCIDENT_RESPONSE",
@@ -960,9 +967,14 @@ class WazuhConnector:
         }
         # Add moe useful meta to author?
         self.author = stix2.Identity(
-            id=Identity.generate_id("Wazuh", "organization"),
+            id=Identity.generate_id("Wazuh", "system"),
             **self.stix_common_attrs,
-            name="Wazuh",
+            name=get_config_variable(
+                "WAZUH_AUTHOR_NAME",
+                ["wazuh", "author_name"],
+                config,
+                default="Wazuh",
+            ),
             identity_class="organization",
             description="Wazuh",
         )
@@ -1119,7 +1131,8 @@ class WazuhConnector:
                 for label in self.label_ignore_list
                 if label in stix_entity["x_opencti_labels"]
             ]
-            return f"Ignoring observable because it has the following label(s): {', '.join(matching_labels)}"
+            if matching_labels:
+                return f"Ignoring observable because it has the following label(s): {', '.join(matching_labels)}"
 
         if (
             entity_type == "observable"
@@ -2429,7 +2442,9 @@ class WazuhConnector:
         accounts = {
             username: {
                 "field": field,
-                "account": self.stix_account_from_username(username),
+                "account": self.stix_account_from_username(
+                    username, labels=self.enrich_labels
+                ),
                 "alert": alert,
             }
             for alert in alerts
@@ -2466,6 +2481,7 @@ class WazuhConnector:
                     value=uri,
                     allow_custom=True,
                     **self.stix_common_attrs,
+                    labels=self.enrich_labels,
                 )
                 for data in (alert["_source"]["data"],)
                 for uri in extract_fields(
@@ -2539,6 +2555,7 @@ class WazuhConnector:
                 value=agent["ip"],
                 allow_custom=True,
                 **self.stix_common_attrs,
+                labels=self.enrich_labels,
             )
             rel = stix2.Relationship(
                 id=StixCoreRelationship.generate_id(
@@ -2599,6 +2616,7 @@ class WazuhConnector:
                 value=agent["name"],
                 allow_custom=True,
                 **self.stix_common_attrs,
+                labels=self.enrich_labels,
             )
             rel = stix2.Relationship(
                 id=StixCoreRelationship.generate_id(
@@ -2654,7 +2672,7 @@ class WazuhConnector:
         )
 
     # TODO: what about DOMAIN\username?
-    def stix_account_from_username(self, username: str):
+    def stix_account_from_username(self, username: str, **stix_properties):
         uid = None
         # Some logs provide a username that also consists of a UID in parenthesis:
         if match := re.match(r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", username or ""):
@@ -2666,4 +2684,5 @@ class WazuhConnector:
             user_id=uid,
             allow_custom=True,
             **self.stix_common_attrs,
+            **stix_properties,
         )
