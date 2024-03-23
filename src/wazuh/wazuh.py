@@ -42,6 +42,8 @@ from functools import cache, reduce
 # TODO: escape_md() function (for use in all text going into opencti)
 # TODO: Create label for every created observable, can be ignored in WAZUH_LABEL_IGNORE_LIST.
 # TODO: Add search options to prevent too many hits, like: search_{file::name}
+# TODO: Use TypeAlias (from typing) for things like Bundle etc.
+# TODO: create helper function for creating stix objects, like stix2.Relationship that needs several references to the same variable. Add in a module that can be initied with common_args?
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
