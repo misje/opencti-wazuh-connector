@@ -40,6 +40,8 @@ from functools import cache, reduce
 # TODO: update wazuh api completely in background
 # FIXME: Ignoring obs. from Wazuh is not a good solution. Manual enrichment must be allowed, if so.
 # TODO: escape_md() function (for use in all text going into opencti)
+# TODO: Create label for every created observable, can be ignored in WAZUH_LABEL_IGNORE_LIST.
+# TODO: Add search options to prevent too many hits, like: search_{file::name}
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
