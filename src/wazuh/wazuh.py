@@ -42,7 +42,7 @@ from functools import cache, reduce
 # TODO: escape_md() function (for use in all text going into opencti)
 # TODO: Create label for every created observable, can be ignored in WAZUH_LABEL_IGNORE_LIST.
 # TODO: Add search options to prevent too many hits, like: search_{file::name}
-# TODO: Use TypeAlias (from typing) for things like Bundle etc.
+# TODO: Use TypeAlias (from typing) for things like Bundle, SCO etc.
 # TODO: create helper function for creating stix objects, like stix2.Relationship that needs several references to the same variable. Add in a module that can be initied with common_args?
 # TODO: customiseable author name?
 
@@ -939,6 +939,15 @@ class WazuhConnector:
         self.enrich_url = get_config_variable(
             "WAZUH_ENRICH_URL", ["wazuh", "enrich_url"], config, default=False
         )
+        self.enrich_file = get_config_variable(
+            "WAZUH_ENRICH_FILE", ["wazuh", "enrich_file"], config, default=False
+        )
+        self.enrich_dir = get_config_variable(
+            "WAZUH_ENRICH_DIRECTORY",
+            ["wazuh", "enrich_directory"],
+            config,
+            default=False,
+        )
         self.enrich_agent = get_config_variable(
             "WAZUH_ENRICH_AGENT", ["wazuh", "enrich_agent"], config, default=True
         )
@@ -1354,7 +1363,9 @@ class WazuhConnector:
                             "data.TargetFileName",
                             "data.TargetPath",
                             "data.audit.file.name",
+                            "data.audit.file.name",
                             "data.file",
+                            "data.osquery.columns.path",
                             "data.sca.check.file",
                             "data.smbd.filename",
                             "data.smbd.new_filename",
@@ -1391,29 +1402,29 @@ class WazuhConnector:
             # TODO: wazuh_api: syscollector/id/netaddr?proto={ipv4,ipv6}
             case "IPv4-Addr" | "IPv6-Addr":
                 fields = [
-                    "*.ip",
-                    "*.IP",
-                    "*.dest_ip",
-                    "*.dstip",
-                    "*.src_ip",
-                    "*.srcip",
-                    "*.ClientIP",
                     "*.ActorIpAddress",
+                    "*.ClientIP",
+                    "*.IP",
+                    "*.IPAddress",
+                    "*.LocalIp",
+                    "*.callerIp",
+                    "*.dest_ip",
+                    "*.destination_address",
+                    "*.dstip",
+                    "*.ip",
+                    "*.ipAddress",
+                    "*.ipv*.address",
+                    "*.local_address",
+                    "*.nat_destination_ip",
+                    "*.nat_source_ip",
+                    "*.remote_address",
                     "*.remote_ip",
                     "*.remote_ip_address",
-                    "*.remote_address",
-                    "*.destination_address",
-                    "*.nat_destination_ip",
                     "*.sourceIPAddress",
-                    "*.source_ip_address",
                     "*.source_address",
-                    "*.local_address",
-                    "*.LocalIp",
-                    "*.nat_source_ip",
-                    "*.callerIp",
-                    "*.ipAddress",
-                    "*.IPAddress",
-                    "*.ipv*.address",
+                    "*.source_ip_address",
+                    "*.src_ip",
+                    "*.srcip",
                     "data.win.eventdata.queryName",
                 ]
                 address = entity["observable_value"]
@@ -1446,13 +1457,13 @@ class WazuhConnector:
             case "Mac-Addr":
                 return self.opensearch.search_multi(
                     fields=[
-                        "*.src_mac",
-                        "*.srcmac",
-                        "*.smac",
+                        "*.dmac",
                         "*.dst_mac",
                         "*.dstmac",
-                        "*.dmac",
                         "*.mac",
+                        "*.smac",
+                        "*.src_mac",
+                        "*.srcmac",
                         "data.osquery.columns.interface",
                     ],
                     value=entity["observable_value"],
@@ -1469,12 +1480,12 @@ class WazuhConnector:
                                 "multi_match": {
                                     "query": src_ip["value"],
                                     "fields": [
+                                        "*.LocalIp",
+                                        "*.local_address",
+                                        "*.nat_source_ip",
+                                        "*.source_address",
                                         "*.src_ip",
                                         "*.srcip",
-                                        "*.local_address",
-                                        "*.source_address",
-                                        "*.nat_source_ip",
-                                        "*.LocalIp",
                                     ],
                                 }
                             }
@@ -1485,11 +1496,11 @@ class WazuhConnector:
                             "multi_match": {
                                 "query": stix_entity["src_port"],
                                 "fields": [
+                                    "*.local_port",
+                                    "*.nat_source_port",
+                                    "*.spt",
                                     "*.src_port",
                                     "*.srcport",
-                                    "*.local_port",
-                                    "*.spt",
-                                    "*.nat_source_port",
                                     "data.IP",
                                 ],
                             }
@@ -1506,10 +1517,10 @@ class WazuhConnector:
                                     "query": dest_ip["value"],
                                     "fields": [
                                         "*.dest_ip",
-                                        "*.dstip",
-                                        "*.remote_address",
                                         "*.destination_address",
+                                        "*.dstip",
                                         "*.nat_destination_ip",
+                                        "*.remote_address",
                                     ],
                                 }
                             }
@@ -1521,10 +1532,10 @@ class WazuhConnector:
                                 "query": stix_entity["dst_port"],
                                 "fields": [
                                     "*.dest_port",
-                                    "*.dstport",
-                                    "*.remote_port",
                                     "*.dpt",
+                                    "*.dstport",
                                     "*.nat_destination_port",
+                                    "*.remote_port",
                                 ],
                             }
                         }
@@ -1537,22 +1548,22 @@ class WazuhConnector:
             case "Email-Addr":
                 return self.opensearch.search_multi(
                     fields=[
-                        "*email",
                         "*Email",
+                        "*email",
                         "data.office365.UserId",
                     ],
                     value=stix_entity["account_login"],
                 )
             case "Domain-Name" | "Hostname":
                 fields = [
-                    "data.win.eventdata.queryName",
-                    "data.dns.question.name",
-                    "*.hostname",
-                    "*.domain",
-                    "*.netbios_hostname",
-                    "*.dns_hostname",
                     "*.HostName",
+                    "*.dns_hostname",
+                    "*.domain",
                     "*.host",
+                    "*.hostname",
+                    "*.netbios_hostname",
+                    "data.dns.question.name",
+                    "data.win.eventdata.queryName",
                 ]
                 hostname = entity["observable_value"]
                 if self.search_agent_name:
@@ -1634,13 +1645,14 @@ class WazuhConnector:
                             "multi_match": {
                                 "query": escaped_path,
                                 "fields": [
-                                    "*.path",
-                                    "*.pwd",
                                     "*.currentDirectory",
                                     "*.directory",
-                                    "data.home",
+                                    "*.path",
+                                    "*.pwd",
                                     "data.SourceFilePath",
                                     "data.TargetPath",
+                                    "data.audit.directory.name",
+                                    "data.home",
                                     "data.pwd",
                                 ],
                             }
@@ -1732,11 +1744,11 @@ class WazuhConnector:
                             }
                             for field in [
                                 "data.win.eventdata.commandLine",
-                                "data.win.eventdata.parentCommandLine",
+                                "data.win.eventdata.details",
                                 "data.win.eventdata.image",
+                                "data.win.eventdata.parentCommandLine",
                                 "data.win.eventdata.sourceImage",
                                 "data.win.eventdata.targetImage",
-                                "data.win.eventdata.details",
                             ]
                         ]
                         + [
@@ -1800,42 +1812,42 @@ class WazuhConnector:
                     username = match.group("name")
 
                 username_fields = [
+                    "*.LoggedUser",
+                    "*.destination_user",
                     "*.dstuser",
+                    "*.parentUser",
+                    "*.sourceUser",
+                    "*.source_user",
                     "*.srcuser",
                     "*.user",
                     "*.userName",
                     "*.username",
-                    "syscheck.uname_before",
-                    "syscheck.uname_after",
-                    "*.source_user",
-                    "*.sourceUser",
-                    "*.destination_user",
-                    "*.LoggedUser",
-                    "*.parentUser",
-                    "data.win.eventdata.samAccountname",
                     "data.gcp.protoPayload.authenticationInfo.principalEmail",
                     "data.gcp.resource.labels.email_id",
                     "data.office365.UserId",
+                    "data.win.eventdata.samAccountname",
+                    "syscheck.uname_after",
+                    "syscheck.uname_before",
                 ]
                 # TODO: add more. Missing more from windows?
                 uid_fields = [
-                    "data.win.eventdata.targetSid",
+                    "data.userID",  # macOS
                     "data.win.eventdata.subjectUserSid",
-                    "syscheck.uid_before",
+                    "data.win.eventdata.targetSid",
                     "syscheck.uid_after",
+                    "syscheck.uid_before",
                     # For audit and pam:
-                    "*.uid",
-                    "*.euid",
                     "*.auid",
+                    "*.euid",
                     "*.fsuid",
                     "*.inode_uid",
                     "*.oauid",
-                    "*.ouid",
-                    "*.ouid",
                     "*.obj_uid",
+                    "*.ouid",
+                    "*.ouid",
                     "*.sauid",
                     "*.suid",
-                    "data.userID",  # macOS
+                    "*.uid",
                 ]
                 if username and uid:
                     return self.opensearch.search(
@@ -2339,6 +2351,7 @@ class WazuhConnector:
     def enrich_incident(self, *, incident: stix2.Incident, alerts: list[dict]):
         bundle = []
         # TODO: Create ObservedData too(?)
+        # TODO: All of the searched fields in these enrichment functions need a lot of QA
         if self.enrich_mitre:
             bundle += self.enrich_incident_mitre(incident=incident, alerts=alerts)
         if self.enrich_tool:
@@ -2347,6 +2360,10 @@ class WazuhConnector:
             bundle += self.enrich_accounts(incident=incident, alerts=alerts)
         if self.enrich_url:
             bundle += self.enrich_urls(incident=incident, alerts=alerts)
+        if self.enrich_file:
+            bundle += self.enrich_files(incident=incident, alerts=alerts)
+        if self.enrich_dir:
+            bundle += self.enrich_dirs(incident=incident, alerts=alerts)
 
         return bundle
 
@@ -2439,85 +2456,122 @@ class WazuhConnector:
 
     # TODO: sightings instead of related-to?
     def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
-        accounts = {
-            username: {
-                "field": field,
-                "account": self.stix_account_from_username(
-                    username, labels=self.enrich_labels
-                ),
-                "alert": alert,
-            }
-            for alert in alerts
-            for field, username in search_fields(
-                alert["_source"],
-                ["data.dstuser", "data.srcuser"],
-            ).items()
-        }
-        return [
-            stix
-            for username, result in accounts.items()
-            for alert in (result["alert"],)
-            for stix in (
-                result["account"],
-                stix2.Relationship(
-                    id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, result["account"].id
-                    ),
-                    created=alert["_source"]["@timestamp"],
-                    **self.stix_common_attrs,
-                    relationship_type="related-to",
-                    description=f"account_login {username} found in {result['field']} in relevant alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
-                    source_ref=incident.id,
-                    target_ref=result["account"].id,
-                ),
-            )
-        ]
+        return self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            type="User-Account",
+            fields=["data.srcuser", "data.dstuser"],
+        )
 
     def enrich_urls(self, *, incident: stix2.Incident, alerts: list[dict]):
-        urls = {
-            url: {
+        return self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            type="Url",
+            fields=[
+                "data.url",
+                "data.osquery.columns.update_url",
+                "data.office365.MeetingURL",
+                "data.office365.MessageURLs",
+                "data.office365.RemoteItemWebUrl",
+            ],
+        )
+
+    def enrich_dirs(self, *, incident: stix2.Incident, alerts: list[dict]):
+        return self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            type="Directory",
+            fields=[
+                "data.audit.directory.name",
+                "data.home",
+                "data.osquery.columns.directory",
+                "data.pwd",
+            ],
+        )
+
+    def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
+        return self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            type="StixFile",
+            fields=[
+                "data.ChildPath",
+                "data.ParentPath",
+                "data.Path",
+                "data.TargetFileName",
+                "data.TargetPath",
+                "data.audit.file.name",
+                "data.audit.file.name",
+                "data.file",
+                "data.osquery.columns.path",
+                "data.sca.check.file",
+                "data.smbd.filename",
+                "data.smbd.new_filename",
+                "data.virustotal.source.file",
+                "data.win.eventdata.file",
+                "data.win.eventdata.filePath",
+                "syscheck.path",
+            ],
+        )
+
+    def create_sco(self, type: str, value: str):
+        common_attrs = {
+            "allow_custom": True,
+            **self.stix_common_attrs,
+            "labels": self.enrich_labels,
+        }
+        match type:
+            case "Directory":
+                return stix2.Directory(path=value, **common_attrs)
+            case "User-Account":
+                return self.stix_account_from_username(value, labels=self.enrich_labels)
+            case "Url":
+                return stix2.URL(value=value, **common_attrs)
+            case "StixFile":
+                return stix2.File(name=value, **common_attrs)
+            # case "Windows-Registry-Key":
+            #    return oneof("key", within=entity)
+            case _:
+                raise ValueError(f"Enrichment SCO {type} not supported")
+
+    def create_enrichment_obs_from_search(
+        self,
+        *,
+        incident: stix2.Incident,
+        alerts: list[dict],
+        type: str,
+        fields: list[str],
+    ):
+        results = {
+            match: {
                 "field": field,
-                "url": stix2.URL(
-                    value=url,
-                    allow_custom=True,
-                    **self.stix_common_attrs,
-                    labels=self.enrich_labels,
-                ),
+                "sco": self.create_sco(type, value=match),
                 "alert": alert,
             }
             for alert in alerts
-            for field, url in search_fields(
-                alert["_source"],
-                [
-                    "data.url",
-                    "data.osquery.columns.update_url",
-                    "data.office365.MeetingURL",
-                    "data.office365.MessageURLs",
-                    "data.office365.RemoteItemWebUrl",
-                ],
-            ).items()
+            for field, match in search_fields(alert["_source"], fields).items()
         }
         return [
             stix
-            for url, result in urls.items()
-            for alert in (result["alert"],)
+            for match, meta in results.items()
+            for alert in (meta["alert"],)
+            for sco in (meta["sco"],)
             for stix in (
-                result["url"],
+                sco,
                 stix2.Relationship(
                     id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, result["url"].id
+                        "related-to", incident.id, sco.id
                     ),
                     created=alert["_source"]["@timestamp"],
                     **self.stix_common_attrs,
                     relationship_type="related-to",
-                    description=f"url {url} found in {result['field']} in relevant alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+                    description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
                     source_ref=incident.id,
-                    target_ref=result["url"].id,
+                    target_ref=sco.id,
                 ),
             )
         ]
-
-    # TODO: enrich_file (smbd.filename ++++)
 
     def create_agent_addr_obs(self, *, alerts: list[dict]):
         agents = {
@@ -2551,6 +2605,10 @@ class WazuhConnector:
         bundle = []
         earliest = min(alert["_source"]["@timestamp"] for alert in alerts)
         latest = max(alert["_source"]["@timestamp"] for alert in alerts)
+        # STIX doesn't accept start == stop, so remove stop if they are the same:
+        if latest == earliest:
+            latest = None
+
         for agent in agents.values():
             SCO = (
                 stix2.IPv4Address
@@ -2578,6 +2636,7 @@ class WazuhConnector:
                 stop_time=(
                     api_latest
                     if "scan_time" in agent
+                    and latest
                     and (api_latest := agent["scan_time"].isoformat() + "Z") > latest
                     else latest
                 ),
@@ -2617,6 +2676,10 @@ class WazuhConnector:
         bundle = []
         earliest = min(alert["_source"]["@timestamp"] for alert in alerts)
         latest = max(alert["_source"]["@timestamp"] for alert in alerts)
+        # STIX doesn't accept start == stop, so remove stop if they are the same:
+        if latest == earliest:
+            latest = None
+
         for agent in agents.values():
             hostname = CustomObservableHostname(
                 value=agent["name"],
@@ -2639,6 +2702,7 @@ class WazuhConnector:
                 stop_time=(
                     api_latest
                     if "scan_time" in agent
+                    and latest
                     and (api_latest := agent["scan_time"].isoformat() + "Z") > latest
                     else latest
                 ),
