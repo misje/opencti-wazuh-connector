@@ -1271,6 +1271,7 @@ class WazuhConnector:
         ]
 
         bundle += list(agents.values())
+        bundle += self.relate_agents_to_siem(list(agents.values()), self.siem_system)
 
         # NOTE: This must be the lastly created bundle, because it references
         # all other objects in the bundle list:
@@ -1876,6 +1877,19 @@ class WazuhConnector:
             identity_class="system",
             description=self.generate_agent_md_tables(id),
         )
+
+    def relate_agents_to_siem(self, agents: list[stix2.Identity], siem: stix2.Identity):
+        return [
+            stix2.Relationship(
+                id=StixCoreRelationship.generate_id("relates-to", siem.id, agent.id),
+                created=agent.created,
+                **self.stix_common_attrs,
+                relationship_type="related-to",
+                source_ref=agent.id,
+                target_ref=siem.id,
+            )
+            for agent in agents
+        ]
 
     def generate_agent_md_tables(self, agent_id: str):
         if self.wazuh and agent_id in self.wazuh.state.agents and self.enrich_agent:
