@@ -330,10 +330,10 @@ def first_or_empty(values: list[str]) -> str:
     return values[0] if values else ""
 
 
-def re_match_or_none(pattern: str, string: str):
+def re_search_or_none(pattern: str, string: str):
     if not pattern:
         return string
-    elif match := re.match(pattern, string):
+    elif match := re.search(pattern, string):
         return match.group(0)
     else:
         return None
@@ -378,7 +378,7 @@ def search_fields(obj: dict, fields: list[str], *, regex: str = ""):
     return {
         k: match
         for k, v in extract_fields(obj, fields, raise_if_missing=False).items()
-        for match in (re_match_or_none(regex, v),)
+        for match in (re_search_or_none(regex, v),)
         if match is not None
     }
 
