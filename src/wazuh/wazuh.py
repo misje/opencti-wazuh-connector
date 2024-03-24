@@ -324,6 +324,15 @@ def parse_config_datetime(value, setting_name):
     return timestamp
 
 
+def re_match_or_none(pattern: str, string: str, flags=0):
+    if not pattern:
+        return string
+    elif match := re.match(pattern, string, flags):
+        return match.group(0)
+    else:
+        return None
+
+
 def extract_fields(
     obj: dict, fields: list[str], *, raise_if_missing: bool = True
 ) -> dict:
@@ -359,12 +368,17 @@ def extract_fields(
     return {k: v for k, v in results.items() if v is not None}
 
 
-def search_fields(obj: dict, fields: list[str]) -> dict:
-    return extract_fields(obj, fields, raise_if_missing=False)
+def search_fields(obj: dict, fields: list[str], *, regex: str = "", re_flags=0):
+    return {
+        k: match
+        for k, v in extract_fields(obj, fields, raise_if_missing=False).items()
+        for match in (re_match_or_none(regex, v, re_flags),)
+        if match is not None
+    }
 
 
-def search_field(obj: dict, field: str) -> str | None:
-    return extract_fields(obj, [field], raise_if_missing=False).get(field)
+def search_field(obj: dict, field: str, *, regex: str = "", re_flags=0) -> str | None:
+    return search_fields(obj, [field], regex=regex, re_flags=re_flags).get(field)
 
 
 def field_compare(
@@ -968,6 +982,12 @@ class WazuhConnector:
             config,
             default=False,
         )
+        self.enrich_registry_key = get_config_variable(
+            "WAZUH_ENRICH_REGISTRY_KEY",
+            ["wauzh", "enrich_registry_key"],
+            config,
+            default=False,
+        )
         self.enrich_agent = get_config_variable(
             "WAZUH_ENRICH_AGENT", ["wazuh", "enrich_agent"], config, default=True
         )
@@ -1359,6 +1379,7 @@ class WazuhConnector:
         match entity["entity_type"]:
             # TODO: wazuh_api: syscheck/id/{file,sha256}
             # TODO: Use name as well as hash if defined (optional, config)
+            # TODO: if the hash is found in a reg.key value, that is also returned as a match. Okay? An enriched reg.key will be creaeted anyway.
             case "StixFile" | "Artifact":
                 if (
                     entity["entity_type"] == "StixFile"
@@ -2384,6 +2405,8 @@ class WazuhConnector:
             bundle += self.enrich_files(incident=incident, alerts=alerts)
         if self.enrich_dir:
             bundle += self.enrich_dirs(incident=incident, alerts=alerts)
+        if self.enrich_registry_key:
+            bundle += self.enrich_reg_keys(incident=incident, alerts=alerts)
 
         return bundle
 
@@ -2474,13 +2497,12 @@ class WazuhConnector:
 
         return bundle
 
-    # TODO: sightings instead of related-to?
     def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
         return self.create_enrichment_obs_from_search(
             incident=incident,
             alerts=alerts,
             type="User-Account",
-            fields=["data.srcuser", "data.dstuser"],
+            fields=["data.srcuser", "data.dstuser", "data.uname_after"],
         )
 
     def enrich_urls(self, *, incident: stix2.Incident, alerts: list[dict]):
@@ -2511,6 +2533,7 @@ class WazuhConnector:
         )
 
     def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
+        # FIXME: add a re_negate to search_fields and exclude HKEY_:
         # First search for fields that may contain filenames/paths, but without hashes:
         results = {
             match: {
@@ -2566,7 +2589,7 @@ class WazuhConnector:
                         ".+sha256.*": "SHA-256",
                     },
                 )
-                if name is not None:
+                if name and hashes and not name.startswith("HKEY_"):
                     results[name] = {
                         "field": name_field,
                         "sco": self.create_sco(
@@ -2580,6 +2603,58 @@ class WazuhConnector:
                         ),
                         "alert": alert,
                     }
+        return [
+            stix
+            for match, meta in results.items()
+            for alert in (meta["alert"],)
+            for sco in (meta["sco"],)
+            for stix in (
+                sco,
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "related-to", incident.id, sco.id
+                    ),
+                    created=alert["_source"]["@timestamp"],
+                    **self.stix_common_attrs,
+                    relationship_type="related-to",
+                    description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+                    source_ref=incident.id,
+                    target_ref=sco.id,
+                ),
+            )
+        ]
+
+    def enrich_reg_keys(self, *, incident: stix2.Incident, alerts: list[dict]):
+        results = {
+            "/".join([path, value]) if value else path: {
+                "field": field,
+                "sco": self.create_sco(
+                    "Windows-Registry-Key",
+                    value=path,
+                    # NOTE: This produces the correct output, but due to
+                    # https://github.com/OpenCTI-Platform/opencti/issues/2574,
+                    # the values are not imported:
+                    values=[stix2.WindowsRegistryValueType(name=value, data_type=type)]
+                    if value is not None
+                    else [],
+                ),
+                "alert": alert,
+            }
+            for alert in alerts
+            for field in (
+                "syscheck.path",
+                "data.win.eventdata.targetObject",
+            )
+            for path in (
+                search_field(
+                    alert["_source"], field, regex="^(?:HKEY_|HK(?:LM|CU|CR|U|CC)).+"
+                ),
+            )
+            if path is not None
+            for type in (search_field(alert["_source"], "syscheck.value_type"),)
+            for value in (search_field(alert["_source"], "syscheck.value_name"),)
+        }
+        self.helper.log_info(f"ENRICHMENT: {results}")
         return [
             stix
             for match, meta in results.items()
@@ -2618,8 +2693,8 @@ class WazuhConnector:
                 return stix2.URL(value=value, **common_attrs, **properties)
             case "StixFile":
                 return stix2.File(name=value, **common_attrs, **properties)
-            # case "Windows-Registry-Key":
-            #    return oneof("key", within=entity)
+            case "Windows-Registry-Key":
+                return stix2.WindowsRegistryKey(key=value, **common_attrs, **properties)
             case _:
                 raise ValueError(f"Enrichment SCO {type} not supported")
 
