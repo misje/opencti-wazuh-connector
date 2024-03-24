@@ -34,14 +34,12 @@ from functools import cache, reduce
 
 # TODO: Enrichment connector that uses snipeit to get system owner
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
-# TODO: Attach note to incident
 # TODO: Identities for AWS, GitHub, Office365, etc.(?)
 # TODO: inconsistent use of _ in func. names. Fix when cleaning up, modularise and move utils into utils, stix into stix(?) modules
 # TODO: update wazuh api completely in background
 # FIXME: Ignoring obs. from Wazuh is not a good solution. Manual enrichment must be allowed, if so.
 # TODO: escape_md() function (for use in all text going into opencti)
-# TODO: Create label for every created observable, can be ignored in WAZUH_LABEL_IGNORE_LIST.
-# TODO: Add search options to prevent too many hits, like: search_{file::name}
+# TODO: Add search options to prevent too many hits, like: search_{file::name}. Hæ?
 # TODO: Use TypeAlias (from typing) for things like Bundle, SCO etc.
 # TODO: create helper function for creating stix objects, like stix2.Relationship that needs several references to the same variable. Add in a module that can be initied with common_args?
 # TODO: create issue for getting type of enrichment (manual or automatic)
@@ -1970,6 +1968,7 @@ class WazuhConnector:
                 )
 
     def _query_api(self, entity: dict, stix_entity: dict):
+        # TODO: handle results. Refactor this file first
         # TODO: Ideally log a message that WAZUH_API_USE is false if a
         # supported, and raise ValueError if non-supported entity is passed
         if not self.wazuh:
