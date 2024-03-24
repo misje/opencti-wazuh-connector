@@ -44,7 +44,7 @@ from functools import cache, reduce
 # TODO: Add search options to prevent too many hits, like: search_{file::name}
 # TODO: Use TypeAlias (from typing) for things like Bundle, SCO etc.
 # TODO: create helper function for creating stix objects, like stix2.Relationship that needs several references to the same variable. Add in a module that can be initied with common_args?
-# TODO: customiseable author name?
+# TODO: create issue for getting type of enrichment (manual or automatic)
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -1439,21 +1439,24 @@ class WazuhConnector:
                         stix_entity, ["hashes"], ["SHA-256", "SHA-1", "MD5"]
                     )
                 ):
-                    # size? use size too if so
+                    # size? use size too if so.
+                    # ideally drop regex if path is an absolute path. A bit
+                    # complicated if x_opencti_additional_names
                     filenames = list(
                         map(
-                            lambda a: escape_path(lucene_regex_escape(a)),
+                            # Escape any regex characters and normalise path
+                            # escape characters:
+                            lambda a: lucene_regex_escape(escape_path(a)),
                             [stix_entity["name"]]
                             + list_or_empty(stix_entity, "x_opencti_additional_names"),
                         )
                     )
                     return self.opensearch.search_multi_regex(
                         fields=[
-                            "data.ChildPath",
-                            "data.ParentPath",
-                            "data.Path",
-                            "data.TargetFileName",
-                            "data.TargetPath",
+                            "data.ChildPath",  # panda paps
+                            "data.ParentPath",  # panda paps
+                            "data.Path",  # panda paps
+                            "data.TargetPath",  # panda paps
                             "data.audit.file.name",
                             "data.audit.file.name",
                             "data.file",
@@ -1462,6 +1465,7 @@ class WazuhConnector:
                             "data.smbd.filename",
                             "data.smbd.new_filename",
                             "data.virustotal.source.file",
+                            "data.win.eventdata.targetFilename",
                             "data.win.eventdata.file",
                             "data.win.eventdata.filePath",
                             "syscheck.path",
@@ -1471,12 +1475,19 @@ class WazuhConnector:
                         case_insensitive=True,
                         regexp="|".join(
                             [
-                                # Unless the filename starts with a separator,
-                                # assuming this is full path, prepend a regex
-                                # that ignores everything up to and including a
-                                # path separator before the filename:
-                                f if re.match(r"^[/\\]", f) else f".*[/\\\\]+{f}"
-                                for f in filenames
+                                # Unless the filename starts with a separator
+                                # or drive letter (simple approximation, but it
+                                # should cover most paths in alerts), assuming
+                                # this is full path, prepend a regex that
+                                # ignores everything up to and including a path
+                                # separator before the filename:
+                                f
+                                if re.match(r"^(?:[/\\]|[A-Za-z]:)", f)
+                                else f".*[/\\\\]+{f}"
+                                for filename in filenames
+                                # Support any number of backslash escapes in
+                                # paths (many variants are seen in the wild):
+                                for f in (filename.replace(r"\\", r"\\{2,}"),)
                             ]
                         ),
                     )
@@ -1688,9 +1699,11 @@ class WazuhConnector:
             case "Directory":
                 # TODO: go through current field list and organise into fields
                 # that expects an escaped path and those that don't:
-                path = lucene_regex_escape(stix_entity["path"])
-                escaped_path = escape_path(path, count=4)
-                double_escaped_path = escape_path(path, count=8)
+                path = escape_path(stix_entity["path"])
+                # Support any number of backslash escapes in paths (many
+                # variants are seen in the wild):
+                regex_path = lucene_regex_escape(path).replace(r"\\", r"\\{2,}")
+                regex_path = f"{regex_path}[/\\\\]+.*"
                 # Search for the directory path also in filename/path fields
                 # that may be of intereset (not necessarily all the same fields
                 # as in File/StixFile:
@@ -1698,7 +1711,7 @@ class WazuhConnector:
                     {
                         "regexp": {
                             field: {
-                                "value": f"{double_escaped_path}[/\\\\]+.*",
+                                "value": regex_path,
                                 # Search for paths ignoring case for better
                                 # experience on Windows:
                                 "case_insensitive": True,
@@ -1717,21 +1730,6 @@ class WazuhConnector:
                         "data.win.eventdata.image",
                         "data.win.eventdata.sourceImage",
                         "data.win.eventdata.targetImage",
-                    ]
-                ] + [
-                    {
-                        "regexp": {
-                            field: {
-                                "value": f"{escaped_path}[/\\\\]+.*",
-                                # "value": f"{stix_entity['path']}[/\\]+.*",
-                                # Search for paths ignoring case for better
-                                # experience on Windows:
-                                "case_insensitive": True,
-                            }
-                        }
-                    }
-                    # Do not add globs here; it will throw:
-                    for field in [
                         "syscheck.path",
                     ]
                 ]
@@ -1739,7 +1737,7 @@ class WazuhConnector:
                     should=[
                         {
                             "multi_match": {
-                                "query": escaped_path,
+                                "query": path,
                                 "fields": [
                                     "*.currentDirectory",
                                     "*.directory",
@@ -2610,7 +2608,7 @@ class WazuhConnector:
                     "data.ChildPath",
                     "data.ParentPath",
                     "data.Path",
-                    "data.TargetFileName",
+                    "data.TargetFilename",
                     "data.TargetPath",
                     "data.audit.file.name",
                     "data.audit.file.name",
