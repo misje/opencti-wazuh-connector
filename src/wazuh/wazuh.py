@@ -724,6 +724,24 @@ def ip_protos(*addrs: str) -> list[str]:
     ]
 
 
+def connection_string(
+    *, src_ref=None, src_port=None, dst_ref=None, dst_port=None, protos=[]
+):
+    return (
+        f"{':'.join(protos)} "
+        f"{src_ref.value if src_ref else '?'}:{src_port if src_port is not None else '?'}"
+        " → "
+        f"{dst_ref.value if dst_ref else '?'}:{dst_port if dst_port is not None else '?'}"
+    )
+
+
+def non_none(*args, threshold: int = 1) -> bool:
+    """
+    Require at least some of the arguments to be something other than None
+    """
+    return sum(arg is not None for arg in args) >= threshold
+
+
 # : Remove?
 def note_with_new_ref(note: stix2.Note, obj: Any):
     # Don't use new_version(), because that requires a new modified timestamp:
@@ -2742,65 +2760,82 @@ class WazuhConnector:
         results = {
             sco.id: {"sco": sco, "alert": alert}
             for alert in alerts
-            for sco in (
-                stix2.NetworkTraffic(
-                    src_ref=addrs.get(
-                        first_or_empty(
-                            list(
-                                search_fields(
-                                    alert["_source"], from_addr_fields
-                                ).values()
-                            )
-                        )
-                    ),
-                    dst_ref=addrs.get(
-                        first_or_empty(
-                            list(
-                                search_fields(alert["_source"], to_addr_fields).values()
-                            )
-                        )
-                    ),
-                    src_port=first_or_none(
-                        list(
-                            search_fields(
-                                alert["_source"],
-                                [
-                                    "data.src_port",
-                                    "data.srcport",
-                                    "data.win.eventdata.sourcePort",
-                                ],
-                            ).values()
-                        )
-                    ),
-                    dst_port=first_or_none(
-                        list(
-                            search_fields(
-                                alert["_source"],
-                                [
-                                    "data.dest_port",
-                                    "data.dstport",
-                                    "data.win.eventdata.destinationPort",
-                                ],
-                            ).values()
-                        )
-                    ),
-                    protocols=ip_protos(
-                        *search_fields(
-                            alert["_source"], from_addr_fields + to_addr_fields
+            for src_ref in (
+                addrs.get(
+                    first_or_empty(
+                        list(search_fields(alert["_source"], from_addr_fields).values())
+                    )
+                ),
+            )
+            for dst_ref in (
+                addrs.get(
+                    first_or_empty(
+                        list(search_fields(alert["_source"], to_addr_fields).values())
+                    )
+                ),
+            )
+            for src_port in (
+                first_or_none(
+                    list(
+                        search_fields(
+                            alert["_source"],
+                            [
+                                "data.src_port",
+                                "data.srcport",
+                                "data.win.eventdata.sourcePort",
+                            ],
                         ).values()
                     )
-                    + list(
+                ),
+            )
+            for dst_port in (
+                first_or_none(
+                    list(
                         search_fields(
-                            alert["_source"], ["data.win.eventdata.protocol"]
+                            alert["_source"],
+                            [
+                                "data.dest_port",
+                                "data.dstport",
+                                "data.win.eventdata.destinationPort",
+                            ],
                         ).values()
-                    ),
+                    )
+                ),
+            )
+            for protocols in (
+                ip_protos(
+                    *search_fields(
+                        alert["_source"], from_addr_fields + to_addr_fields
+                    ).values()
+                )
+                + list(
+                    search_fields(
+                        alert["_source"], ["data.win.eventdata.protocol"]
+                    ).values()
+                ),
+            )
+            for sco in (
+                stix2.NetworkTraffic(
+                    src_ref=src_ref,
+                    dst_ref=dst_ref,
+                    src_port=src_port,
+                    dst_port=dst_port,
+                    protocols=protocols,
                     # TOOD: add ssh, smb, ldap  protocol etc.
-                    # description=f{
+                    description=connection_string(
+                        src_ref=src_ref,
+                        src_port=src_port,
+                        dst_ref=dst_ref,
+                        dst_port=dst_port,
+                        protos=protocols,
+                    ),
                     allow_custom=True,
                     **self.stix_common_attrs,
                     labels=self.enrich_labels,
                 ),
             )
+            # A NetworkTraffic object isn't interesting if we have a least two addresses or ports:
+            if non_none(src_ref, src_port, dst_ref, dst_port, threshold=2)
         }
         return list(addrs.values()) + [
             stix
