@@ -330,10 +330,10 @@ def first_or_empty(values: list[str]) -> str:
     return values[0] if values else ""
 
 
-def re_match_or_none(pattern: str, string: str, flags=0):
+def re_match_or_none(pattern: str, string: str):
     if not pattern:
         return string
-    elif match := re.match(pattern, string, flags):
+    elif match := re.match(pattern, string):
         return match.group(0)
     else:
         return None
@@ -374,18 +374,17 @@ def extract_fields(
     return {k: v for k, v in results.items() if v is not None}
 
 
-# Remove re_flags? Flags can be inline
-def search_fields(obj: dict, fields: list[str], *, regex: str = "", re_flags=0):
+def search_fields(obj: dict, fields: list[str], *, regex: str = ""):
     return {
         k: match
         for k, v in extract_fields(obj, fields, raise_if_missing=False).items()
-        for match in (re_match_or_none(regex, v, re_flags),)
+        for match in (re_match_or_none(regex, v),)
         if match is not None
     }
 
 
-def search_field(obj: dict, field: str, *, regex: str = "", re_flags=0) -> str | None:
-    return search_fields(obj, [field], regex=regex, re_flags=re_flags).get(field)
+def search_field(obj: dict, field: str, *, regex: str = "") -> str | None:
+    return search_fields(obj, [field], regex=regex).get(field)
 
 
 def field_compare(
