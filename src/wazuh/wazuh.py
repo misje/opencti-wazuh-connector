@@ -369,13 +369,14 @@ def extract_fields(
         return obj
 
     if any("*" in field for field in fields):
-        raise ValueError('Fields cannot contain "*"')
+        raise ValueError('Field cannot contain "*"')
 
     results = {field: traverse(obj, field.split(".")) for field in fields}
     # Remove Nones:
     return {k: v for k, v in results.items() if v is not None}
 
 
+# Remove re_flags? Flags can be inline
 def search_fields(obj: dict, fields: list[str], *, regex: str = "", re_flags=0):
     return {
         k: match
@@ -2553,16 +2554,33 @@ class WazuhConnector:
         return bundle
 
     def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
-        return self.create_enrichment_obs_from_search(
+        return self.create_enrichment_obs_from_search_context(
             incident=incident,
             alerts=alerts,
             type="User-Account",
-            fields=[
-                "data.srcuser",
-                "data.dstuser",
-                "data.uname_after",
-                "data.win.eventdata.user",
-            ],
+            SCO=stix2.UserAccount,
+            property_field_map={
+                "account_login": {
+                    r"^[^(]+": ["data.srcuser", "data.dstuser"],
+                    ".+": [
+                        "syscheck.uname_after",
+                        "syscheck.uname_before",
+                        "data.wineventdata.user",
+                        "data.win.eventdata.samAccountname",
+                    ],
+                },
+                "user_id": {
+                    r"(?<=\(uid=)\d+(?=\)$)": ["data.srcuser", "data.dstuser"],
+                    ".+": [
+                        "data.audit.auid",
+                        "data.audit.euid",
+                        "data.audit.uid",
+                        "data.userId",
+                        "data.uid",
+                        "data.eid",
+                    ],
+                },
+            },
         )
 
     def enrich_urls(self, *, incident: stix2.Incident, alerts: list[dict]):
@@ -2920,6 +2938,59 @@ class WazuhConnector:
                     **self.stix_common_attrs,
                     relationship_type="related-to",
                     description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+                    source_ref=incident.id,
+                    target_ref=sco.id,
+                ),
+            )
+        ]
+
+    def create_enrichment_obs_from_search_context(
+        self,
+        *,
+        incident: stix2.Incident,
+        alerts: list[dict],
+        type,
+        SCO: Any,
+        property_field_map: dict[str, dict[str, list[str]]],
+    ):
+        results = {
+            sco.id: {
+                "sco": sco,
+                "alert": alert,
+            }
+            for alert in alerts
+            for sco in (
+                SCO(
+                    **{
+                        property: match
+                        for property, map in property_field_map.items()
+                        for pattern, fields in map.items()
+                        for match in search_fields(
+                            alert["_source"], fields, regex=pattern
+                        ).values()
+                    },
+                    allow_custom=True,
+                    **self.stix_common_attrs,
+                    labels=self.enrich_labels,
+                ),
+            )
+        }
+        self.helper.log_info(results)
+        return [
+            stix
+            for meta in results.values()
+            for alert in (meta["alert"],)
+            for sco in (meta["sco"],)
+            for stix in (
+                sco,
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "related-to", incident.id, sco.id
+                    ),
+                    created=alert["_source"]["@timestamp"],
+                    **self.stix_common_attrs,
+                    relationship_type="related-to",
+                    description=f"{type} found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
                     source_ref=incident.id,
                     target_ref=sco.id,
                 ),
