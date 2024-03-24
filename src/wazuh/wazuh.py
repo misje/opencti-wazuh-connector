@@ -23,7 +23,7 @@ from pycti import (
     Tool,
     get_config_variable,
 )
-from typing import Any, Callable, Final
+from typing import Any, Callable, Final, Literal
 from hashlib import sha256
 from datetime import datetime
 from urllib.parse import urljoin
@@ -322,6 +322,14 @@ def parse_config_datetime(value, setting_name):
         )
 
     return timestamp
+
+
+def first_or_none(values: list[Any]) -> Any | None:
+    return values[0] if values else None
+
+
+def first_or_empty(values: list[str]) -> str:
+    return values[0] if values else ""
 
 
 def re_match_or_none(pattern: str, string: str, flags=0):
@@ -697,6 +705,25 @@ def regex_transform(obj: dict[str, Any], map: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def ip_proto(addr: str) -> Literal["ipv4", "ipv6"] | None:
+    try:
+        ip = ipaddress.ip_address(addr)
+        if isinstance(ip, ipaddress.IPv4Address):
+            return "ipv4"
+        elif isinstance(ip, ipaddress.IPv6Address):
+            return "ipv6"
+        else:
+            return None
+    except ValueError:
+        return None
+
+
+def ip_protos(*addrs: str) -> list[str]:
+    return [
+        result for result in {ip_proto(addr) for addr in addrs} if result is not None
+    ]
+
+
 # : Remove?
 def note_with_new_ref(note: stix2.Note, obj: Any):
     # Don't use new_version(), because that requires a new modified timestamp:
@@ -985,6 +1012,12 @@ class WazuhConnector:
         self.enrich_registry_key = get_config_variable(
             "WAZUH_ENRICH_REGISTRY_KEY",
             ["wauzh", "enrich_registry_key"],
+            config,
+            default=False,
+        )
+        self.enrich_network_traffic = get_config_variable(
+            "WAZUH_ENRICH_NETWORK_TRAFFIC",
+            ["wazuh", "enrich_network_traffic"],
             config,
             default=False,
         )
@@ -1524,6 +1557,7 @@ class WazuhConnector:
                                         "*.LocalIp",
                                         "*.local_address",
                                         "*.nat_source_ip",
+                                        "*.sourceIp",
                                         "*.source_address",
                                         "*.src_ip",
                                         "*.srcip",
@@ -1539,6 +1573,7 @@ class WazuhConnector:
                                 "fields": [
                                     "*.local_port",
                                     "*.nat_source_port",
+                                    "*.sourcePort",
                                     "*.spt",
                                     "*.src_port",
                                     "*.srcport",
@@ -1558,6 +1593,7 @@ class WazuhConnector:
                                     "query": dest_ip["value"],
                                     "fields": [
                                         "*.dest_ip",
+                                        "*.destinationIp",
                                         "*.destination_address",
                                         "*.dstip",
                                         "*.nat_destination_ip",
@@ -1573,6 +1609,7 @@ class WazuhConnector:
                                 "query": stix_entity["dst_port"],
                                 "fields": [
                                     "*.dest_port",
+                                    "*.destinationPort",
                                     "*.dpt",
                                     "*.dstport",
                                     "*.nat_destination_port",
@@ -2407,6 +2444,8 @@ class WazuhConnector:
             bundle += self.enrich_dirs(incident=incident, alerts=alerts)
         if self.enrich_registry_key:
             bundle += self.enrich_reg_keys(incident=incident, alerts=alerts)
+        if self.enrich_network_traffic:
+            bundle += self.enrich_traffic(incident=incident, alerts=alerts)
 
         return bundle
 
@@ -2502,7 +2541,12 @@ class WazuhConnector:
             incident=incident,
             alerts=alerts,
             type="User-Account",
-            fields=["data.srcuser", "data.dstuser", "data.uname_after"],
+            fields=[
+                "data.srcuser",
+                "data.dstuser",
+                "data.uname_after",
+                "data.win.eventdata.user",
+            ],
         )
 
     def enrich_urls(self, *, incident: stix2.Incident, alerts: list[dict]):
@@ -2617,7 +2661,7 @@ class WazuhConnector:
                     created=alert["_source"]["@timestamp"],
                     **self.stix_common_attrs,
                     relationship_type="related-to",
-                    description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+                    description=f"StixFile {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
                     source_ref=incident.id,
                     target_ref=sco.id,
                 ),
@@ -2654,7 +2698,6 @@ class WazuhConnector:
             for type in (search_field(alert["_source"], "syscheck.value_type"),)
             for value in (search_field(alert["_source"], "syscheck.value_name"),)
         }
-        self.helper.log_info(f"ENRICHMENT: {results}")
         return [
             stix
             for match, meta in results.items()
@@ -2669,12 +2712,126 @@ class WazuhConnector:
                     created=alert["_source"]["@timestamp"],
                     **self.stix_common_attrs,
                     relationship_type="related-to",
-                    description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+                    description=f"Windows-Registry-Key {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
                     source_ref=incident.id,
                     target_ref=sco.id,
                 ),
             )
         ]
+
+    def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):
+        from_addr_fields = [
+            "data.srcip",
+            "data.src_ip",
+            "data.win.eventdata.sourceIp",
+        ]
+        to_addr_fields = [
+            "data.dstip",
+            "data.dest_ip",
+            "data.win.eventdata.destinationIp",
+            "agent.ip",
+        ]
+        addrs = {
+            addr: sco
+            for alert in alerts
+            for addr in search_fields(
+                alert["_source"], from_addr_fields + to_addr_fields
+            ).values()
+            for sco in (self.create_addr_sco(addr),)
+        }
+        results = {
+            sco.id: {"sco": sco, "alert": alert}
+            for alert in alerts
+            for sco in (
+                stix2.NetworkTraffic(
+                    src_ref=addrs.get(
+                        first_or_empty(
+                            list(
+                                search_fields(
+                                    alert["_source"], from_addr_fields
+                                ).values()
+                            )
+                        )
+                    ),
+                    dst_ref=addrs.get(
+                        first_or_empty(
+                            list(
+                                search_fields(alert["_source"], to_addr_fields).values()
+                            )
+                        )
+                    ),
+                    src_port=first_or_none(
+                        list(
+                            search_fields(
+                                alert["_source"],
+                                [
+                                    "data.src_port",
+                                    "data.srcport",
+                                    "data.win.eventdata.sourcePort",
+                                ],
+                            ).values()
+                        )
+                    ),
+                    dst_port=first_or_none(
+                        list(
+                            search_fields(
+                                alert["_source"],
+                                [
+                                    "data.dest_port",
+                                    "data.dstport",
+                                    "data.win.eventdata.destinationPort",
+                                ],
+                            ).values()
+                        )
+                    ),
+                    protocols=ip_protos(
+                        *search_fields(
+                            alert["_source"], from_addr_fields + to_addr_fields
+                        ).values()
+                    )
+                    + list(
+                        search_fields(
+                            alert["_source"], ["data.win.eventdata.protocol"]
+                        ).values()
+                    ),
+                    # TOOD: add ssh, smb, ldap  protocol etc.
+                    # description=f{
+                    allow_custom=True,
+                    **self.stix_common_attrs,
+                    labels=self.enrich_labels,
+                ),
+            )
+        }
+        return list(addrs.values()) + [
+            stix
+            for meta in results.values()
+            for alert in (meta["alert"],)
+            for sco in (meta["sco"],)
+            for stix in (
+                sco,
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "related-to", incident.id, sco.id
+                    ),
+                    created=alert["_source"]["@timestamp"],
+                    **self.stix_common_attrs,
+                    relationship_type="related-to",
+                    description=f"Network-Traffic found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+                    source_ref=incident.id,
+                    target_ref=sco.id,
+                ),
+            )
+        ]
+
+    def create_addr_sco(self, address: str, **properties):
+        SCO = stix2.IPv4Address if ip_proto(address) == "ipv6" else stix2.IPv4Address
+        return SCO(
+            value=address,
+            allow_custom=True,
+            **self.stix_common_attrs,
+            labels=self.enrich_labels,
+            **properties,
+        )
 
     def create_sco(self, type: str, value: str, **properties):
         common_attrs = {
