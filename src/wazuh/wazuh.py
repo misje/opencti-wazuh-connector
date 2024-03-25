@@ -79,7 +79,7 @@ from .stix_helper import (
 # FIXME: Try search for obs-qt sha 94aba9d072a735caafbef4845433fda5afc87a0dfcbb4996ced2df6c5591ec3c:
 # - A number of IP addresses are created without relaitonships
 # - haakon is related to fjomp-lin sighting?
-# TODO: external_references must probably be added separately to be parsed correctly by openct?
+# FIXME: double marking_refs and double labels for enriched obs
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -1876,11 +1876,17 @@ class WazuhConnector:
                     source=self.system_name,
                 )
                 incidents = [incident]
-                bundle = incidents + self.create_incident_relationships(
-                    incident=incident,
-                    entity=entity,
-                    obs_indicators=obs_indicators,
-                    sighters=list(sightings.keys()),
+                bundle = (
+                    incidents
+                    + self.create_incident_relationships(
+                        incident=incident,
+                        entity=entity,
+                        obs_indicators=obs_indicators,
+                        sighters=list(sightings.keys()),
+                    )
+                    + self.enrich_incident(
+                        incident=incident, alerts=sightings_meta.alerts()
+                    )
                 )
 
             case "per_sighting":
@@ -1911,6 +1917,12 @@ class WazuhConnector:
                         entity=entity,
                         obs_indicators=obs_indicators,
                         sighters=[sighter_id],
+                    )
+                    bundle += self.enrich_incident(
+                        incident=incident,
+                        alerts=[
+                            alert for alerts in meta.alerts.values() for alert in alerts
+                        ],
                     )
 
             case "per_alert_rule":
@@ -1951,6 +1963,9 @@ class WazuhConnector:
                         entity=entity,
                         obs_indicators=obs_indicators,
                         sighters=meta["sighters"],
+                    )
+                    bundle += self.enrich_incident(
+                        incident=incident, alerts=[alert for alert in meta["alerts"]]
                     )
 
             case "per_alert":
@@ -1993,18 +2008,27 @@ class WazuhConnector:
                             sighters=[sighter_id],
                         )
 
+                    # TODO: Implement (this solution doesn't work):
+                    # bundle += [
+                    #    enrichment
+                    #    for filtered_alerts in [
+                    #        alert
+                    #        for alert in meta["alerts"]
+                    #        if alert["_source"]["rule"]["level"]
+                    #        >= self.create_incident_threshold
+                    #    ]
+                    #    for pair in zip(incidents, filtered_alerts, strict=True)
+                    #    for incident, alerts in (pair,)
+                    #    for enrichment in self.enrich_incident(
+                    #        incident=incident, alerts=alerts
+                    #    )
+                    # ]
+
             case _:
                 raise ValueError(
                     f'WAZUH_INCIDENT_CREATE_MODE "{self.create_incident}" is invalid'
                 )
 
-        bundle += [
-            obj
-            for incident in incidents
-            for obj in self.enrich_incident(
-                incident=incident, alerts=sightings_meta.alerts()
-            )
-        ]
         return bundle
 
     def create_incident_relationships(
