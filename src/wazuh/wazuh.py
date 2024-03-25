@@ -22,15 +22,12 @@ from pycti import (
     get_config_variable,
 )
 from typing import Any, Final
-from hashlib import sha256
 from datetime import datetime
 from urllib.parse import urljoin
 from ntpath import basename
 from functools import reduce
 from .utils import (
     has,
-    has_any,
-    oneof_nonempty,
     first_or_none,
     first_or_empty,
     search_fields,
@@ -40,10 +37,7 @@ from .utils import (
     priority_from_severity,
     max_severity,
     common_prefix_string,
-    list_or_empty,
     non_none,
-    escape_lucene_regex,
-    escape_path,
     search_in_object_multi,
     regex_transform,
     ip_protos,
@@ -63,6 +57,7 @@ from .stix_helper import (
     StixHelper,
 )
 from .sightings import SightingsCollector
+from .search import AlertSearcher
 
 # TODO: Enrichment connector that uses snipeit to get system owner
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
@@ -79,6 +74,7 @@ from .sightings import SightingsCollector
 # - A number of IP addresses are created without relaitonships
 # - haakon is related to fjomp-lin sighting?
 # FIXME: double marking_refs and double labels for enriched obs
+# FIXME: andreas with user_id=0 created if searching for 192.168.12.1
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -517,40 +513,46 @@ class WazuhConnector:
         self.app_url = get_config_variable(
             "WAZUH_APP_URL", ["wazuh", "app_url"], config, required=True
         )
-        self.opensearch = OpenSearchClient(
+        self.alert_searcher = AlertSearcher(
             helper=self.helper,
-            url=get_config_variable(  # type: ignore
-                "WAZUH_OPENSEARCH_URL",
-                ["wazuh", "opensearch", "url"],
-                config,
-                required=True,
+            opensearch=OpenSearchClient(
+                helper=self.helper,
+                url=get_config_variable(  # type: ignore
+                    "WAZUH_OPENSEARCH_URL",
+                    ["wazuh", "opensearch", "url"],
+                    config,
+                    required=True,
+                ),
+                username=get_config_variable(  # type: ignore
+                    "WAZUH_OPENSEARCH_USERNAME",
+                    ["wazuh", "opensearch", "username"],
+                    config,
+                    required=True,
+                ),
+                password=get_config_variable(  # type: ignore
+                    "WAZUH_OPENSEARCH_PASSWORD",
+                    ["wazuh", "opensearch", "password"],
+                    config,
+                    required=True,
+                ),
+                limit=self.hits_limit if isinstance(self.hits_limit, int) else 10,
+                index=get_config_variable(  # type: ignore
+                    "WAZUH_OPENSEARCH_INDEX",
+                    ["wazuh", "opensearch", "index"],
+                    config,
+                    default="wazuh-alerts-*",
+                ),
+                search_after=self.search_after,
+                include_match=parse_match_patterns(self.search_include),  # type: ignore
+                exclude_match=parse_match_patterns(self.search_exclude),  # type: ignore
+                order_by=[{"rule.level": "desc"}] if self.order_by_rule_level else [],
+                # TODO: Use Field to validate. Document that search_after is prepended if defined:
+                # filters=[{"range": {"rule.level": {"gte": 8}}}],
+                # filters=get_config_variable("WAZUH_SEARCH_FILTER", ["wazuh", "search_filter"], config),
             ),
-            username=get_config_variable(  # type: ignore
-                "WAZUH_OPENSEARCH_USERNAME",
-                ["wazuh", "opensearch", "username"],
-                config,
-                required=True,
-            ),
-            password=get_config_variable(  # type: ignore
-                "WAZUH_OPENSEARCH_PASSWORD",
-                ["wazuh", "opensearch", "password"],
-                config,
-                required=True,
-            ),
-            limit=self.hits_limit if isinstance(self.hits_limit, int) else 10,
-            index=get_config_variable(  # type: ignore
-                "WAZUH_OPENSEARCH_INDEX",
-                ["wazuh", "opensearch", "index"],
-                config,
-                default="wazuh-alerts-*",
-            ),
-            search_after=self.search_after,
-            include_match=parse_match_patterns(self.search_include),  # type: ignore
-            exclude_match=parse_match_patterns(self.search_exclude),  # type: ignore
-            order_by=[{"rule.level": "desc"}] if self.order_by_rule_level else [],
-            # TODO: Use Field to validate. Document that search_after is prepended if defined:
-            # filters=[{"range": {"rule.level": {"gte": 8}}}],
-            # filters=get_config_variable("WAZUH_SEARCH_FILTER", ["wazuh", "search_filter"], config),
+            ignore_private_addrs=self.ignore_private_addrs,
+            search_agent_ip=self.search_agent_ip,
+            search_agent_name=self.search_agent_name,
         )
         if get_config_variable(
             "WAZUH_API_USE", ["wazuh", "api", "use"], config, default=False
@@ -681,7 +683,7 @@ class WazuhConnector:
             else:
                 self._query_api(entity, stix_entity)
 
-        result = self._query_alerts(entity, stix_entity)
+        result = self.alert_searcher.search(entity=entity, stix_entity=stix_entity)
         if result is None:
             # Even though the entity is supported (an exception is throuwn
             # otherwise), not all entities contains information that is
@@ -849,553 +851,6 @@ class WazuhConnector:
             if (ind := self.helper.api.indicator.read(id=obj["id"])) is not None
             if ind is not None
         ]
-
-    # get help to write more targeted searches. If fields are used
-    # differently by different decoders, search for that rule. Get help by
-    # making issuers report their fields using something like 'GET
-    # /wazuh-alerts-*/_field_caps?fields=*filename*'
-
-    def _query_alerts(self, entity, stix_entity) -> dict | None:
-        match entity["entity_type"]:
-            # TODO: wazuh_api: syscheck/id/{file,sha256}
-            # TODO: Use name as well as hash if defined (optional, config)
-            # TODO: if the hash is found in a reg.key value, that is also returned as a match. Okay? An enriched reg.key will be creaeted anyway.
-            case "StixFile" | "Artifact":
-                if (
-                    entity["entity_type"] == "StixFile"
-                    and "name" in stix_entity
-                    and not has_any(
-                        stix_entity, ["hashes"], ["SHA-256", "SHA-1", "MD5"]
-                    )
-                ):
-                    # size? use size too if so.
-                    # ideally drop regex if path is an absolute path. A bit
-                    # complicated if x_opencti_additional_names
-                    filenames = list(
-                        map(
-                            # Escape any regex characters and normalise path
-                            # escape characters:
-                            lambda a: escape_lucene_regex(escape_path(a)),
-                            [stix_entity["name"]]
-                            + list_or_empty(stix_entity, "x_opencti_additional_names"),
-                        )
-                    )
-                    return self.opensearch.search_multi_regex(
-                        fields=[
-                            "data.ChildPath",  # panda paps
-                            "data.ParentPath",  # panda paps
-                            "data.Path",  # panda paps
-                            "data.TargetPath",  # panda paps
-                            "data.audit.file.name",
-                            "data.audit.file.name",
-                            "data.file",
-                            "data.osquery.columns.path",
-                            "data.sca.check.file",
-                            "data.smbd.filename",
-                            "data.smbd.new_filename",
-                            "data.virustotal.source.file",
-                            "data.win.eventdata.targetFilename",
-                            "data.win.eventdata.file",
-                            "data.win.eventdata.filePath",
-                            "syscheck.path",
-                        ],
-                        # Search for paths ignoring case for better experience
-                        # on Windows:
-                        case_insensitive=True,
-                        regexp="|".join(
-                            [
-                                # Unless the filename starts with a separator
-                                # or drive letter (simple approximation, but it
-                                # should cover most paths in alerts), assuming
-                                # this is full path, prepend a regex that
-                                # ignores everything up to and including a path
-                                # separator before the filename:
-                                f
-                                if re.match(r"^(?:[/\\]|[A-Za-z]:)", f)
-                                else f".*[/\\\\]+{f}"
-                                for filename in filenames
-                                # Support any number of backslash escapes in
-                                # paths (many variants are seen in the wild):
-                                for f in (filename.replace(r"\\", r"\\{2,}"),)
-                            ]
-                        ),
-                    )
-                elif has(stix_entity, ["hashes", "SHA-256"]):
-                    return self.opensearch.search_multi(
-                        fields=["*sha256*"], value=stix_entity["hashes"]["SHA-256"]
-                    )
-                elif has(stix_entity, ["hashes", "SHA-1"]):
-                    return self.opensearch.search_multi(
-                        fields=["*sha1*"], value=stix_entity["hashes"]["SHA-1"]
-                    )
-                else:
-                    return None
-
-            # TODO: wazuh_api: syscollector/id/netaddr?proto={ipv4,ipv6}
-            case "IPv4-Addr" | "IPv6-Addr":
-                fields = [
-                    "*.ActorIpAddress",
-                    "*.ClientIP",
-                    "*.IP",
-                    "*.IPAddress",
-                    "*.LocalIp",
-                    "*.callerIp",
-                    "*.dest_ip",
-                    "*.destination_address",
-                    "*.dstip",
-                    "*.ip",
-                    "*.ipAddress",
-                    "*.ipv*.address",
-                    "*.local_address",
-                    "*.nat_destination_ip",
-                    "*.nat_source_ip",
-                    "*.remote_address",
-                    "*.remote_ip",
-                    "*.remote_ip_address",
-                    "*.sourceIPAddress",
-                    "*.source_address",
-                    "*.source_ip_address",
-                    "*.src_ip",
-                    "*.srcip",
-                    "data.win.eventdata.queryName",
-                ]
-                address = entity["observable_value"]
-                # This throws if the value is not an IP address. Accept this:
-                if (
-                    self.ignore_private_addrs
-                    and ipaddress.ip_address(address).is_private
-                ):
-                    self.helper.connector_logger.info(
-                        f"Ignoring private IP address {address}"
-                    )
-                    return None
-
-                if self.search_agent_ip:
-                    return self.opensearch.search_multi(
-                        fields=fields,
-                        value=address,
-                    )
-                else:
-                    return self.opensearch.search(
-                        must={
-                            "multi_match": {
-                                "query": address,
-                                "fields": fields,
-                            }
-                        },
-                        must_not={"match": {"agent.ip": address}},
-                    )
-            # TODO: wazuh_api: syscollector/id/netiface
-            case "Mac-Addr":
-                return self.opensearch.search_multi(
-                    fields=[
-                        "*.dmac",
-                        "*.dst_mac",
-                        "*.dstmac",
-                        "*.mac",
-                        "*.smac",
-                        "*.src_mac",
-                        "*.srcmac",
-                        "data.osquery.columns.interface",
-                    ],
-                    value=entity["observable_value"],
-                )
-            case "Network-Traffic":
-                query = []
-                if "src_ref" in stix_entity:
-                    src_ip = self.helper.api.stix_cyber_observable.read(
-                        id=stix_entity["src_ref"]
-                    )
-                    if src_ip and "value" in src_ip:
-                        query.append(
-                            {
-                                "multi_match": {
-                                    "query": src_ip["value"],
-                                    "fields": [
-                                        "*.LocalIp",
-                                        "*.local_address",
-                                        "*.nat_source_ip",
-                                        "*.sourceIp",
-                                        "*.source_address",
-                                        "*.src_ip",
-                                        "*.srcip",
-                                    ],
-                                }
-                            }
-                        )
-                if "src_port" in stix_entity:
-                    query.append(
-                        {
-                            "multi_match": {
-                                "query": stix_entity["src_port"],
-                                "fields": [
-                                    "*.local_port",
-                                    "*.nat_source_port",
-                                    "*.sourcePort",
-                                    "*.spt",
-                                    "*.src_port",
-                                    "*.srcport",
-                                    "data.IP",
-                                ],
-                            }
-                        }
-                    )
-                if "dst_ref" in stix_entity:
-                    dest_ip = self.helper.api.stix_cyber_observable.read(
-                        id=stix_entity["dst_ref"]
-                    )
-                    if dest_ip and "value" in dest_ip:
-                        query.append(
-                            {
-                                "multi_match": {
-                                    "query": dest_ip["value"],
-                                    "fields": [
-                                        "*.dest_ip",
-                                        "*.destinationIp",
-                                        "*.destination_address",
-                                        "*.dstip",
-                                        "*.nat_destination_ip",
-                                        "*.remote_address",
-                                    ],
-                                }
-                            }
-                        )
-                if "dst_port" in stix_entity:
-                    query.append(
-                        {
-                            "multi_match": {
-                                "query": stix_entity["dst_port"],
-                                "fields": [
-                                    "*.dest_port",
-                                    "*.destinationPort",
-                                    "*.dpt",
-                                    "*.dstport",
-                                    "*.nat_destination_port",
-                                    "*.remote_port",
-                                ],
-                            }
-                        }
-                    )
-
-                if query:
-                    return self.opensearch.search(query)
-                else:
-                    return None
-            case "Email-Addr":
-                return self.opensearch.search_multi(
-                    fields=[
-                        "*Email",
-                        "*email",
-                        "data.office365.UserId",
-                    ],
-                    value=stix_entity["account_login"],
-                )
-            case "Domain-Name" | "Hostname":
-                fields = [
-                    "*.HostName",
-                    "*.dns_hostname",
-                    "*.domain",
-                    "*.host",
-                    "*.hostname",
-                    "*.netbios_hostname",
-                    "data.dns.question.name",
-                    "data.win.eventdata.queryName",
-                ]
-                hostname = entity["observable_value"]
-                if self.search_agent_name:
-                    return self.opensearch.search_multi(
-                        fields=fields,
-                        value=hostname,
-                    )
-                else:
-                    return self.opensearch.search(
-                        must={
-                            "multi_match": {
-                                "query": hostname,
-                                "fields": fields,
-                            }
-                        },
-                        # TODO: configurable?:
-                        # data.audit.exe /usr/bin/ssh
-                        # data.audit.execve.a* = hostname
-                        # must_not={"match": {"predecoder.hostname": hostname}},
-                    )
-            case "Url":
-                return self.opensearch.search_multi(
-                    fields=["*url", "*Url", "*.URL", "*.uri"],
-                    value=entity["observable_value"],
-                )
-            case "Directory":
-                # TODO: go through current field list and organise into fields
-                # that expects an escaped path and those that don't:
-                path = escape_path(stix_entity["path"])
-                # Support any number of backslash escapes in paths (many
-                # variants are seen in the wild):
-                regex_path = escape_lucene_regex(path).replace(r"\\", r"\\{2,}")
-                regex_path = f"{regex_path}[/\\\\]+.*"
-                # Search for the directory path also in filename/path fields
-                # that may be of intereset (not necessarily all the same fields
-                # as in File/StixFile:
-                filename_searches = [
-                    {
-                        "regexp": {
-                            field: {
-                                "value": regex_path,
-                                # Search for paths ignoring case for better
-                                # experience on Windows:
-                                "case_insensitive": True,
-                            }
-                        }
-                    }
-                    # Do not add globs here; it will throw:
-                    for field in [
-                        "data.ChildPath",
-                        "data.ParentPath",
-                        "data.Path",
-                        "data.TargetPath",
-                        "data.audit.file.name",
-                        "data.smbd.filename",
-                        "data.smbd.new_filename",
-                        "data.win.eventdata.image",
-                        "data.win.eventdata.sourceImage",
-                        "data.win.eventdata.targetImage",
-                        "syscheck.path",
-                    ]
-                ]
-                return self.opensearch.search(
-                    should=[
-                        {
-                            "multi_match": {
-                                "query": path,
-                                "fields": [
-                                    "*.currentDirectory",
-                                    "*.directory",
-                                    "*.path",
-                                    "*.pwd",
-                                    "data.SourceFilePath",
-                                    "data.TargetPath",
-                                    "data.audit.directory.name",
-                                    "data.home",
-                                    "data.pwd",
-                                ],
-                            }
-                        }
-                    ]
-                    + filename_searches
-                )
-
-            case "Windows-Registry-Key":
-                return self.opensearch.search_multi(
-                    fields=["data.win.eventdata.targetObject", "syscheck.path"],
-                    value=stix_entity["key"],
-                )
-            case "Windows-Registry-Value-Type":
-                hash = None
-                match stix_entity["data_type"]:
-                    case "REG_SZ" | "REG_EXPAND_SZ":
-                        hash = sha256(stix_entity["data"].encode("utf-8")).hexdigest()
-                    case "REG_BINARY":
-                        # The STIX standard says that binary data can be in any form, but in order to be able to use this type of observable at all, support only hex strings:
-                        try:
-                            hash = sha256(
-                                bytes.fromhex(stix_entity["data"])
-                            ).hexdigest()
-                        except ValueError:
-                            self.helper.connector_logger.warning(
-                                f"Windows-Registry-Value-Type binary string could not be parsed as a hex string: {stix_entity['data']}"
-                            )
-                    case _:
-                        self.helper.connector_logger.info(
-                            f"Windos-Registry-Value-Type of type {stix_entity['data_type']} is not supported"
-                        )
-                        return None
-
-                return (
-                    self.opensearch.search_multi(
-                        fields=["syscheck.sha256_after"], value=hash
-                    )
-                    if hash
-                    else None
-                )
-            # TODO: use wazuh API to list proceses too:
-            # TODO: Create a guard against too simple search strings (one word?)
-            case "Process":
-                if "command_line" in stix_entity:
-                    # Split the string into tokens wrapped in quotes or
-                    # separated by whitespace:
-                    tokens = re.findall(
-                        r"""("[^"]*"|'[^']*'|\S+)""", stix_entity["command_line"]
-                    )
-                    if len(tokens) < 1:
-                        return None
-
-                    self.helper.log_debug(tokens)
-                    command = basename(tokens[0])
-                    esc_command = escape_lucene_regex(command)
-                    args = [
-                        # Remove any non-escaped quotes in the beginning and
-                        # end of each argument, and escape any paths:
-                        escape_path(
-                            re.sub(
-                                r"""^(?:(?<!\\)"|')|(?:(?<!\\)"|')$""",
-                                "",
-                                arg,
-                            ),
-                            count=8,
-                        )
-                        for arg in tokens[1:]
-                    ]
-                    return self.opensearch.search(
-                        should=[
-                            {
-                                "bool": {
-                                    "must": [
-                                        {
-                                            "regexp": {
-                                                field: {
-                                                    "value": f"(.+[\\\\/])?{esc_command}.*",
-                                                    "case_insensitive": True,
-                                                }
-                                            }
-                                        }
-                                    ]
-                                    + [
-                                        {"wildcard": {field: f"*{arg}*"}}
-                                        for arg in args
-                                    ]
-                                }
-                            }
-                            for field in [
-                                "data.win.eventdata.commandLine",
-                                "data.win.eventdata.details",
-                                "data.win.eventdata.image",
-                                "data.win.eventdata.parentCommandLine",
-                                "data.win.eventdata.sourceImage",
-                                "data.win.eventdata.targetImage",
-                            ]
-                        ]
-                        + [
-                            {
-                                "bool": {
-                                    "must": [
-                                        {
-                                            "regexp": {
-                                                "data.command": {
-                                                    "value": f"(.+/)?{esc_command}.*",
-                                                    "case_insensitive": True,
-                                                }
-                                            }
-                                        }
-                                    ]
-                                    + [
-                                        {"wildcard": {"data.command": f"*{arg}*"}}
-                                        for arg in args
-                                    ]
-                                }
-                            },
-                            {
-                                "bool": {
-                                    "must": [
-                                        {"match": {"data.audit.command": command}}
-                                    ],
-                                    "should": [
-                                        {
-                                            "multi_match": {
-                                                "query": arg,
-                                                "fields": "data.audit.execve.a*",
-                                            }
-                                        }
-                                        for arg in args
-                                    ],
-                                    "minimum_should_match": len(args),
-                                }
-                            },
-                        ]
-                    )
-                else:
-                    return None
-            case "Vulnerability":
-                return self.opensearch.search_match(
-                    {
-                        "data.vulnerability.cve": stix_entity["name"],
-                        # TODO: Include solved too, and ensure Sighting from:to represents duration of CVE present in the system. Doesn't work with the current architecture that groups alerts by id.
-                        # "data.vulnerability.status": "Active",
-                    }
-                )
-            case "User-Account":
-                # TODO: what about DOMAIN\username?
-                # TODO: display name? Otherwise remove from entity_value*(?)
-                uid = oneof_nonempty("user_id", within=stix_entity)
-                username = oneof_nonempty("account_login", within=stix_entity)
-                # Some logs provide a username that also consists of a UID in parenthesis:
-                if match := re.match(
-                    r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", username or ""
-                ):
-                    uid = match.group("uid")
-                    username = match.group("name")
-
-                username_fields = [
-                    "*.LoggedUser",
-                    "*.destination_user",
-                    "*.dstuser",
-                    "*.parentUser",
-                    "*.sourceUser",
-                    "*.source_user",
-                    "*.srcuser",
-                    "*.user",
-                    "*.userName",
-                    "*.username",
-                    "data.gcp.protoPayload.authenticationInfo.principalEmail",
-                    "data.gcp.resource.labels.email_id",
-                    "data.office365.UserId",
-                    "data.win.eventdata.samAccountname",
-                    "syscheck.uname_after",
-                    "syscheck.uname_before",
-                ]
-                # TODO: add more. Missing more from windows?
-                uid_fields = [
-                    "data.userID",  # macOS
-                    "data.win.eventdata.subjectUserSid",
-                    "data.win.eventdata.targetSid",
-                    "syscheck.uid_after",
-                    "syscheck.uid_before",
-                    # For audit and pam:
-                    "*.auid",
-                    "*.euid",
-                    "*.fsuid",
-                    "*.inode_uid",
-                    "*.oauid",
-                    "*.obj_uid",
-                    "*.ouid",
-                    "*.ouid",
-                    "*.sauid",
-                    "*.suid",
-                    "*.uid",
-                ]
-                if username and uid:
-                    return self.opensearch.search(
-                        must=[
-                            {
-                                "multi_match": {
-                                    "query": username,
-                                    "fields": username_fields,
-                                }
-                            },
-                            {"multi_match": {"query": uid, "fields": uid_fields}},
-                        ]
-                    )
-                elif username:
-                    return self.opensearch.search_multi(
-                        fields=username_fields, value=username
-                    )
-                elif uid:
-                    return self.opensearch.search_multi(fields=uid_fields, value=uid)
-                else:
-                    return None
-            case _:
-                raise ValueError(
-                    f'{entity["entity_type"]} is not a supported entity type'
-                )
 
     def _query_api(self, entity: dict, stix_entity: dict):
         # TODO: handle results. Refactor this file first
@@ -1606,8 +1061,8 @@ class WazuhConnector:
             f"|Max hits|{self.hits_limit}|\n"
             f"|**Dropped**|**{total_hits - hits_returned}**|\n"
             f"|Search since|{self.search_after.isoformat() + 'Z' if self.search_after else '–'}|\n"
-            f"|Include filter|{json.dumps(self.search_include) if self.opensearch.include_match else ''}|\n"
-            f"|Exclude filter|{json.dumps(self.search_exclude) if self.opensearch.exclude_match else ''}|\n"
+            f"|Include filter|{json.dumps(self.search_include) if self.alert_searcher.opensearch.include_match else ''}|\n"
+            f"|Exclude filter|{json.dumps(self.search_exclude) if self.alert_searcher.opensearch.exclude_match else ''}|\n"
             f"|Connector v.|{self.CONNECTOR_VERSION}|\n"
             "\n"
             "### Alerts overview\n"
@@ -2290,7 +1745,7 @@ class WazuhConnector:
                     dst_ref=dst_ref,
                     src_port=src_port,
                     dst_port=dst_port,
-                    protocols=protocols,
+                    protocols=protocols,  # TODO: add protocols like ssh, http, smb from known events
                     # TOOD: add ssh, smb, ldap  protocol etc.
                     description=connection_string(
                         src_ref=src_ref,
