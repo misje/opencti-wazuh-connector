@@ -2104,6 +2104,7 @@ class WazuhConnector:
             bundle += self.enrich_dirs(incident=incident, alerts=alerts)
         if self.enrich_registry_key:
             bundle += self.enrich_reg_keys(incident=incident, alerts=alerts)
+        # TOOD: enrich ip addresses and mac addrs
         if self.enrich_network_traffic:
             bundle += self.enrich_traffic(incident=incident, alerts=alerts)
 
@@ -2496,7 +2497,14 @@ class WazuhConnector:
             # A NetworkTraffic object isn't interesting if we have a least two addresses or ports:
             if non_none(src_ref, src_port, dst_ref, dst_port, threshold=2)
         }
-        return list(addrs.values()) + [
+        # Only includes addresses that are referenced:
+        return [
+            addr
+            for addr in addrs.values()
+            for meta in results.values()
+            for traffic in (meta["sco"],)
+            if addr.id in traffic.src_ref or addr.id in traffic.dst_ref
+        ] + [
             stix
             for meta in results.values()
             for alert in (meta["alert"],)
