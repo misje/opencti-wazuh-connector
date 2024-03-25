@@ -20,17 +20,50 @@ from pycti import (
     OpenCTIMetricHandler,
     StixCoreRelationship,
     StixSightingRelationship,
-    Tool,
     get_config_variable,
 )
-from typing import Any, Callable, Final, Literal
+from typing import Any, Final
 from hashlib import sha256
 from datetime import datetime
 from urllib.parse import urljoin
-from os.path import commonprefix
 from ntpath import basename
 from pydantic import BaseModel
 from functools import cache, reduce
+from .utils import (
+    has,
+    has_any,
+    oneof_nonempty,
+    first_or_none,
+    first_or_empty,
+    search_fields,
+    search_field,
+    field_compare,
+    rule_level_to_severity,
+    priority_from_severity,
+    max_severity,
+    common_prefix_string,
+    list_or_empty,
+    non_none,
+    escape_lucene_regex,
+    escape_path,
+    search_in_object_multi,
+    regex_transform,
+    ip_protos,
+    connection_string,
+)
+from .stix_helper import (
+    # SCO,
+    # SDO,
+    # SRO,
+    # StandardID,
+    DUMMY_INDICATOR_ID,
+    tlp_marking_from_string,
+    tlp_allowed,
+    entity_values,
+    entity_name_value,
+    incident_entity_relation_type,
+    StixHelper,
+)
 
 # TODO: Enrichment connector that uses snipeit to get system owner
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
@@ -43,6 +76,10 @@ from functools import cache, reduce
 # TODO: Use TypeAlias (from typing) for things like Bundle, SCO etc.
 # TODO: create helper function for creating stix objects, like stix2.Relationship that needs several references to the same variable. Add in a module that can be initied with common_args?
 # TODO: create issue for getting type of enrichment (manual or automatic)
+# FIXME: Try search for obs-qt sha 94aba9d072a735caafbef4845433fda5afc87a0dfcbb4996ced2df6c5591ec3c:
+# - A number of IP addresses are created without relaitonships
+# - haakon is related to fjomp-lin sighting?
+# TODO: external_references must probably be added separately to be parsed correctly by openct?
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -248,67 +285,6 @@ class SightingsCollector:
         ]
 
 
-def has(
-    obj: dict,
-    spec: list[str],
-    value=None,
-    comp: Callable[[Any, Any], bool] | None = None,
-):
-    """
-    Test whether obj contains a specific structure
-
-    Examples:
-    `obj = {"a": {"b": 42}`
-    `has(obj, ['a'])` returns true
-    `has(obj, ['b'])` returns false
-    `has(obj, ['a', 'b'])` returns true
-    `has(obj, ['a', 'b'], 43)` returns false
-    `has(obj, ['a', 'b'], 42)` returns true
-    """
-    if not spec:
-        if comp is not None and value is not None:
-            return comp(obj, value)
-        else:
-            return obj == value if value is not None else True
-    try:
-        key, *rest = spec
-        return has(obj[key], rest, value=value)
-    except (KeyError, TypeError):
-        return False
-
-
-# def has_any_val(obj:dict, spec:list[str], values:list|None = None):
-#   if not spec:
-#       return any(obj == value for value in values) if values is not None else True
-#   try:
-#       key, *rest = spec
-#       return has_any_val(obj[key], rest, values=values)
-#   except (KeyError, TypeError):
-#       return False
-
-
-def has_any(obj: dict, spec1: list[str], spec2: list[str]):
-    """
-    Test whether an object contains a specific structure
-
-    Test whether obj contains a specific structure (a "JSON path") spec1. Then,
-    test whether the resulting object has any of the keys listed in spec2.
-    Example:
-
-    `has_any({"a": {"b": {"d": 1, "e": 2}}}, ["a", "b"], ["c", "d"])` returns
-    # TODO incorrect:
-    true, because "b" exists in "a", and "a" exists in obj, and either "c" or
-    "d" exists in "b".
-    """
-    if not spec1:
-        return any(key in obj for key in spec2)
-    try:
-        key, *rest = spec1
-        return has_any(obj[key], rest, spec2)
-    except (KeyError, TypeError):
-        return False
-
-
 def parse_config_datetime(value, setting_name):
     if value is None:
         return None
@@ -322,98 +298,7 @@ def parse_config_datetime(value, setting_name):
     return timestamp
 
 
-def first_or_none(values: list[Any]) -> Any | None:
-    return values[0] if values else None
-
-
-def first_or_empty(values: list[str]) -> str:
-    return values[0] if values else ""
-
-
-def re_search_or_none(pattern: str, string: str):
-    if not pattern:
-        return string
-    elif match := re.search(pattern, string):
-        return match.group(0)
-    else:
-        return None
-
-
-def extract_fields(
-    obj: dict, fields: list[str], *, raise_if_missing: bool = True
-) -> dict:
-    """
-    Extract values from a dict recursively using key paths
-
-    Example:
-    extract_fields({ "a": { "b": { "c": 1 }}}, ["a.b.c", "a.b"])
-    returns
-    { "a.b.c": 1, "a.b": { "c": 1 }}
-
-    If raise_if_missing is True, no KeyError will be raised if a key is not found.
-    ValueError will be raised if the path contains '*'.
-    """
-
-    def traverse(obj: dict, keys: list[str]):
-        for key in keys:
-            try:
-                obj = obj[key]
-            except KeyError as e:
-                if raise_if_missing:
-                    raise e
-                else:
-                    return None
-
-        return obj
-
-    if any("*" in field for field in fields):
-        raise ValueError('Field cannot contain "*"')
-
-    results = {field: traverse(obj, field.split(".")) for field in fields}
-    # Remove Nones:
-    return {k: v for k, v in results.items() if v is not None}
-
-
-def search_fields(obj: dict, fields: list[str], *, regex: str = ""):
-    return {
-        k: match
-        for k, v in extract_fields(obj, fields, raise_if_missing=False).items()
-        for match in (re_search_or_none(regex, v),)
-        if match is not None
-    }
-
-
-def search_field(obj: dict, field: str, *, regex: str = "") -> str | None:
-    return search_fields(obj, [field], regex=regex).get(field)
-
-
-def field_compare(
-    obj: dict, fields: list[str], comp: Callable[[Any], bool] | Any
-) -> bool:
-    """
-    Search for a value in a dict recursively using key paths
-
-    Example:
-    field_compare({ "a": { "b": 1, }, "c": 2 }, ["a.b", "c"], lambda x: x > 1)
-    returns
-    true
-    because "c", 2, is > 1. "a.b", 1, is not.
-
-    field_compare({ "a": { "b": 1, }, "c": 2 }, ["a.b", "c"], 1)
-    returns
-    true
-    because "a.b" is 1
-    """
-
-    def _comp(field):
-        return comp(field) if callable(comp) else field == comp
-
-    return any(
-        _comp(value)
-        for value in extract_fields(obj, fields, raise_if_missing=False).values()
-    )
-
-
+# TODO: move into opensearch:
 def parse_match_patterns(patterns: str):
     """
     Parse a string like "foo=bar,baz=qux" into
@@ -432,184 +317,6 @@ def parse_match_patterns(patterns: str):
         raise ValueError(f'The match patterns "{patterns}" is invalid')
 
     return [{"match": {pair[0]: pair[1]}} for pair in pairs]
-
-
-def to_tlp(tlp_string):
-    if tlp_string is None:
-        return None
-
-    match re.sub(r"^[^:]+:", "", tlp_string).lower():
-        case "clear" | "white":
-            return stix2.TLP_WHITE.id
-        case "green":
-            return stix2.TLP_GREEN.id
-        case "amber":
-            return stix2.TLP_AMBER.id
-        case "amber+strict":
-            return "marking-definition--826578e1-40ad-459f-bc73-ede076f81f37"
-        case "red":
-            return stix2.TLP_RED
-        case "":
-            return None
-        case _:
-            raise ValueError(f"{tlp_string} is not a valid marking definition")
-
-
-def tlp_allowed(entity, max_tlp):
-    # Not sure what the correct logic is if the entity has several TLP markings. I asumme all have to be within max:
-    return all(
-        OpenCTIConnectorHelper.check_max_tlp(tlp, max_tlp)
-        for mdef in entity["objectMarking"]
-        for tlp in (mdef["definition"],)
-        if mdef["definition_type"] == "TLP"
-    )
-
-
-def rule_level_to_severity(level: int):
-    match level:
-        case level if level in range(7, 10):
-            return "medium"
-        case level if level in range(11, 13):
-            return "high"
-        case level if level in range(14, 15):
-            return "critical"
-        case _:
-            return "low"
-
-
-def cvss3_to_severity(score: float):
-    match score:
-        case score if score > 9.0:
-            return "critical"
-        case score if score > 7.0:
-            return "high"
-        case score if score > 4.0:
-            return "medium"
-        case _:
-            return "low"
-
-
-def priority_from_severity(severity: str):
-    return {"critical": "P1", "high": "P2", "medium": "P3", "low": "P4"}.get(
-        severity, "P3"
-    )
-
-
-def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] = []):
-    s = alert["_source"]
-    return (
-        "|Key|Value|\n"
-        "|---|-----|\n"
-        f"|Rule ID|{s['rule']['id']}|\n"
-        f"|Rule desc.|{s['rule']['description']}|\n"
-        f"|Rule level|{s['rule']['level']}|\n"
-        f"|Alert ID|{alert['_id']}/{s['id']}|\n"
-    ) + "".join(f"|{key}|{value}|\n" for key, value in additional_rows)
-
-
-def oneof(*keys: str, within: dict, default=None):
-    return next((within[key] for key in keys if key in within), default)
-
-
-def oneof_nonempty(*keys: str, within: dict, default=None):
-    return next((within[key] for key in keys if key in within and within[key]), default)
-
-
-def allof_nonempty(*keys: str, within: dict):
-    values = []
-    for key in keys:
-        if key in within:
-            if isinstance(within[key], list):
-                values += [val for val in within[key] if val]
-            elif within[key]:
-                values.append(within[key])
-
-    return values
-
-
-def entity_value(entity: dict):
-    match entity["entity_type"]:
-        case "StixFile" | "Artifact":
-            name = oneof_nonempty("name", "x_opencti_additional_names", within=entity)
-            if isinstance(name, list) and len(name):
-                return name[0]
-            else:
-                return str(name) if name is not None else None
-        case "Directory":
-            return oneof("path", within=entity)
-        case "Software" | "Windows-Registry-Value-Type":
-            return oneof("name", within=entity)
-        case "User-Account":
-            return oneof_nonempty(
-                "account_login", "user_id", "display_name", within=entity
-            )
-        case "Vulnerability":
-            return oneof("name", within=entity)
-        case "Windows-Registry-Key":
-            return oneof("key", within=entity)
-        case _:
-            return oneof("value", within=entity)
-
-
-def entity_values(entity: dict):
-    match entity["entity_type"]:
-        case "StixFile" | "Artifact":
-            return allof_nonempty("name", "x_opencti_additional_names", within=entity)
-        case "Directory":
-            return allof_nonempty("path", within=entity)
-        case "Software" | "Windows-Registry-Value-Type":
-            return allof_nonempty("name", within=entity)
-        case "User-Account":
-            return allof_nonempty(
-                "account_login", "user_id", "display_name", within=entity
-            )
-        case "Vulnerability":
-            return allof_nonempty("name", within=entity)
-        case "Windows-Registry-Key":
-            return allof_nonempty("key", within=entity)
-        case _:
-            return allof_nonempty("value", within=entity)
-
-
-def entity_name_value(entity: dict):
-    return " ".join(filter(None, [entity["entity_type"], entity_value(entity)]))
-
-
-def common_prefix_string(strings: list[str], elideString: str = "[…]"):
-    if not strings:
-        return ""
-    if len(common := commonprefix(strings)) == len(strings[0]):
-        return common
-    else:
-        return common + elideString
-
-
-def create_tool_stix(name: str):
-    return stix2.Tool(
-        id=Tool.generate_id(name),
-        name=name,
-    )
-
-
-def incident_entity_relation_type(entity: dict):
-    match entity["entity_type"]:
-        case "Vulnerability":
-            return "targets"
-        case _:
-            return "related-to"
-
-
-def list_or_empty(obj: dict, key: str):
-    return obj[key] if key in obj else []
-
-
-def lucene_regex_escape(string: str):
-    reg_chars = [".", "?", "+", "|", "{", "}", "[", "]", "(", ")", '"', "\\"]
-    return "".join("\\" + ch if ch in reg_chars else ch for ch in string)
-
-
-def escape_path(path: str, *, count: int = 2):
-    return re.sub(r"\\{2,}", "\\" * count, path)
 
 
 def parse_incident_create_threshold(threshold: str | int | None) -> int:
@@ -633,30 +340,21 @@ def parse_incident_create_threshold(threshold: str | int | None) -> int:
             raise ValueError(f"WAZUH_INCIDENT_CREATE_THRESHOLD is invalid: {threshold}")
 
 
-def search_in_alert(alert: dict, search_term: str, path: str = ""):
-    if isinstance(alert, dict):
-        return {
-            path + "." + k if path else k: v
-            for k, v in alert.items()
-            if isinstance(v, str) and search_term in v
-        } | {
-            match_key: match_val
-            for k, v in alert.items()
-            for match_key, match_val in search_in_alert(
-                v, search_term, path + "." + k if path else k
-            ).items()
-        }
-    else:
-        return {}
+def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] = []):
+    """
+    Create a markdown table with key Wazuh alert information
 
-
-def search_in_alert_multi(alert: dict, *search_terms: str, exclude: list[str] = []):
-    return {
-        key: value
-        for results in [search_in_alert(alert, term) for term in search_terms]
-        for key, value in results.items()
-        if key not in exclude
-    }
+    Any additional rows can be appended to the table using additional_rows.
+    """
+    s = alert["_source"]
+    return (
+        "|Key|Value|\n"
+        "|---|-----|\n"
+        f"|Rule ID|{s['rule']['id']}|\n"
+        f"|Rule desc.|{s['rule']['description']}|\n"
+        f"|Rule level|{s['rule']['level']}|\n"
+        f"|Alert ID|{alert['_id']}/{s['id']}|\n"
+    ) + "".join(f"|{key}|{value}|\n" for key, value in additional_rows)
 
 
 def api_searchable_entity_type(entity_type: str):
@@ -668,85 +366,6 @@ def api_searchable_entity_type(entity_type: str):
             return True
         case _:
             return False
-
-
-def severity_to_int(severity: str) -> int:
-    match severity:
-        case "medium":
-            return 1
-        case "high":
-            return 2
-        case "critical":
-            return 3
-        # Put unknown severities in the same category as "low":
-        case _:
-            return 0
-
-
-def max_severity(severities: list[str]):
-    return max(severities, key=lambda s: severity_to_int(s))
-
-
-def regex_transform(obj: dict[str, Any], map: dict[str, str]) -> dict[str, Any]:
-    """
-    Apply a regex tranformation to each key in object
-    Example:
-
-    `regex_transform{'one.two': 1, 'three.one': 2}, {'^.+\\.(.+)$': r'\1'})` returns
-    `{'two': 1, 'one': 2}`
-    """
-    return {
-        re.sub(pattern, replacement, key): value
-        for key, value in obj.items()
-        for pattern, replacement in map.items()
-        if re.match(pattern, key)
-    }
-
-
-def ip_proto(addr: str) -> Literal["ipv4", "ipv6"] | None:
-    try:
-        ip = ipaddress.ip_address(addr)
-        if isinstance(ip, ipaddress.IPv4Address):
-            return "ipv4"
-        elif isinstance(ip, ipaddress.IPv6Address):
-            return "ipv6"
-        else:
-            return None
-    except ValueError:
-        return None
-
-
-def ip_protos(*addrs: str) -> list[str]:
-    return [
-        result for result in {ip_proto(addr) for addr in addrs} if result is not None
-    ]
-
-
-def connection_string(
-    *, src_ref=None, src_port=None, dst_ref=None, dst_port=None, protos=[]
-):
-    return (
-        f"{':'.join(protos)} "
-        f"{src_ref.value if src_ref else '?'}:{src_port if src_port is not None else '?'}"
-        " → "
-        f"{dst_ref.value if dst_ref else '?'}:{dst_port if dst_port is not None else '?'}"
-    )
-
-
-def non_none(*args, threshold: int = 1) -> bool:
-    """
-    Require at least some of the arguments to be something other than None
-    """
-    return sum(arg is not None for arg in args) >= threshold
-
-
-# : Remove?
-def note_with_new_ref(note: stix2.Note, obj: Any):
-    # Don't use new_version(), because that requires a new modified timestamp:
-    return stix2.Note(
-        **{prop: getattr(note, prop) for prop in note if prop != "get_attrs"},
-        object_refs=note.object_refs + [obj.id],
-    )
 
 
 class WazuhConnector:
@@ -767,10 +386,6 @@ class WazuhConnector:
     def __init__(self):
         self.CONNECTOR_VERSION: Final[str] = "0.0.1"
         # it appears that the dummy indicator has to exist for external references to work (probably not – random and inconsistent):
-        self.DUMMY_INDICATOR_ID: Final[
-            str
-            # ] = "indicator--220d5816-3786-5421-a6d3-fb149a0df54e"  # "indicator--c1034564-a9fb-429b-a1c1-c80116cc8e1e"
-        ] = "indicator--167565fe-69da-5e2f-a1c1-0542736f9f9a"  # = "indicator--1195bcd2-67ee-563a-83f8-29ebd9eacec7"
 
         config_file_path = Path(__file__).parent.parent.resolve() / "config.yml"
         config = (
@@ -798,9 +413,12 @@ class WazuhConnector:
         self.tlps = (
             [tlp]
             if (
-                tlp := to_tlp(
+                tlp := tlp_marking_from_string(
                     get_config_variable(
-                        "WAZUH_TLP", ["wazuh", "tlp"], config, required=True
+                        "WAZUH_TLP",
+                        ["wazuh", "tlp"],
+                        config,
+                        required=True,  # type: ignore
                     )
                 )
             )
@@ -1077,6 +695,9 @@ class WazuhConnector:
             description="Wazuh",
         )
         self.stix_common_attrs["created_by_ref"] = self.author["id"]
+        self.stix = StixHelper(
+            common_properties=self.stix_common_attrs, sco_labels=self.enrich_labels
+        )
         self.siem_system = stix2.Identity(
             id=Identity.generate_id(self.system_name, "system"),
             **self.stix_common_attrs,
@@ -1193,7 +814,7 @@ class WazuhConnector:
         # Remove:
         self.helper.log_debug(f"ENTITY: {entity}")
 
-        if not tlp_allowed(entity, self.max_tlp):
+        if not tlp_allowed(entity, self.max_tlp):  # type: ignore
             self.helper.connector_logger.info(f"max tlp: {self.max_tlp}")
             raise ValueError("Entity ignored because TLP not allowed")
 
@@ -1444,7 +1065,7 @@ class WazuhConnector:
                         map(
                             # Escape any regex characters and normalise path
                             # escape characters:
-                            lambda a: lucene_regex_escape(escape_path(a)),
+                            lambda a: escape_lucene_regex(escape_path(a)),
                             [stix_entity["name"]]
                             + list_or_empty(stix_entity, "x_opencti_additional_names"),
                         )
@@ -1700,7 +1321,7 @@ class WazuhConnector:
                 path = escape_path(stix_entity["path"])
                 # Support any number of backslash escapes in paths (many
                 # variants are seen in the wild):
-                regex_path = lucene_regex_escape(path).replace(r"\\", r"\\{2,}")
+                regex_path = escape_lucene_regex(path).replace(r"\\", r"\\{2,}")
                 regex_path = f"{regex_path}[/\\\\]+.*"
                 # Search for the directory path also in filename/path fields
                 # that may be of intereset (not necessarily all the same fields
@@ -1800,7 +1421,7 @@ class WazuhConnector:
 
                     self.helper.log_debug(tokens)
                     command = basename(tokens[0])
-                    esc_command = lucene_regex_escape(command)
+                    esc_command = escape_lucene_regex(command)
                     args = [
                         # Remove any non-escaped quotes in the beginning and
                         # end of each argument, and escape any paths:
@@ -2042,7 +1663,7 @@ class WazuhConnector:
             count=metadata.count,
             where_sighted_refs=[sighter_id],
             # Use a dummy indicator since this field is required:
-            sighting_of_ref=self.DUMMY_INDICATOR_ID,
+            sighting_of_ref=DUMMY_INDICATOR_ID,
             custom_properties={"x_opencti_sighting_of_ref": metadata.observable_id},
             # FIXME: External references has stopped working (takes a second enrichment run):
             external_references=self.create_sighting_ext_refs(metadata=metadata),
@@ -2135,8 +1756,8 @@ class WazuhConnector:
                 "|-----|-----|\n"
                 + "".join(
                     f"|{field}|{match}|\n"
-                    for field, match in search_in_alert_multi(
-                        alert["_source"], *obs_values, exclude=["full_log"]
+                    for field, match in search_in_object_multi(
+                        alert["_source"], *obs_values, exclude_fields=["full_log"]
                     ).items()
                 )
                 + "\n\n"
@@ -2506,14 +2127,14 @@ class WazuhConnector:
                 has(alert, ["_source", "rule", "mitre", "id"])
                 and "T1053.005" in alert["_source"]["rule"]["mitre"]["id"]
             ):
-                tools = [create_tool_stix("schtasks")]
+                tools = [self.stix.create_tool("schtasks")]
                 bundle.append(tools[0])
             elif "psexec" in alert["_source"]["rule"]["description"].casefold():
-                tools = [create_tool_stix("PsExec")]
+                tools = [self.stix.create_tool("PsExec")]
                 bundle.append(tools[0])
             else:
                 tools = [
-                    create_tool_stix(tool["name"])
+                    self.stix.create_tool(tool["name"])
                     # TODO: filter commmon words, like "at":
                     for tool in self.tools
                     if field_compare(
@@ -2614,7 +2235,7 @@ class WazuhConnector:
         results = {
             match: {
                 "field": field,
-                "sco": self.create_sco("StixFile", value=match),
+                "sco": self.stix.create_sco("StixFile", value=match),
                 "alert": alert,
             }
             for alert in alerts
@@ -2668,7 +2289,7 @@ class WazuhConnector:
                 if name and hashes and not name.startswith("HKEY_"):
                     results[name] = {
                         "field": name_field,
-                        "sco": self.create_sco(
+                        "sco": self.stix.create_sco(
                             "StixFile",
                             value=name,
                             # Only one hash should be populated in stix, according to the
@@ -2704,7 +2325,7 @@ class WazuhConnector:
         results = {
             "/".join([path, value]) if value else path: {
                 "field": field,
-                "sco": self.create_sco(
+                "sco": self.stix.create_sco(
                     "Windows-Registry-Key",
                     value=path,
                     # NOTE: This produces the correct output, but due to
@@ -2769,7 +2390,7 @@ class WazuhConnector:
             for addr in search_fields(
                 alert["_source"], from_addr_fields + to_addr_fields
             ).values()
-            for sco in (self.create_addr_sco(addr),)
+            for sco in (self.stix.create_addr_sco(addr),)
         }
         results = {
             sco.id: {"sco": sco, "alert": alert}
@@ -2872,38 +2493,6 @@ class WazuhConnector:
             )
         ]
 
-    def create_addr_sco(self, address: str, **properties):
-        SCO = stix2.IPv4Address if ip_proto(address) == "ipv6" else stix2.IPv4Address
-        return SCO(
-            value=address,
-            allow_custom=True,
-            **self.stix_common_attrs,
-            labels=self.enrich_labels,
-            **properties,
-        )
-
-    def create_sco(self, type: str, value: str, **properties):
-        common_attrs = {
-            "allow_custom": True,
-            **self.stix_common_attrs,
-            "labels": self.enrich_labels,
-        }
-        match type:
-            case "Directory":
-                return stix2.Directory(path=value, **common_attrs, **properties)
-            case "User-Account":
-                return self.stix_account_from_username(
-                    value, labels=self.enrich_labels, **properties
-                )
-            case "Url":
-                return stix2.URL(value=value, **common_attrs, **properties)
-            case "StixFile":
-                return stix2.File(name=value, **common_attrs, **properties)
-            case "Windows-Registry-Key":
-                return stix2.WindowsRegistryKey(key=value, **common_attrs, **properties)
-            case _:
-                raise ValueError(f"Enrichment SCO {type} not supported")
-
     def create_enrichment_obs_from_search(
         self,
         *,
@@ -2915,7 +2504,7 @@ class WazuhConnector:
         results = {
             match: {
                 "field": field,
-                "sco": self.create_sco(type, value=match),
+                "sco": self.stix.create_sco(type, value=match),
                 "alert": alert,
             }
             for alert in alerts
@@ -3161,20 +2750,4 @@ class WazuhConnector:
                 # This should be okay, because these refs can be any of SCO, SDO and SRO:
                 object_refs=refs,
             ),
-        )
-
-    # TODO: what about DOMAIN\username?
-    def stix_account_from_username(self, username: str, **stix_properties):
-        uid = None
-        # Some logs provide a username that also consists of a UID in parenthesis:
-        if match := re.match(r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", username or ""):
-            uid = int(match.group("uid"))
-            username = match.group("name")
-
-        return stix2.UserAccount(
-            account_login=username,
-            user_id=uid,
-            allow_custom=True,
-            **self.stix_common_attrs,
-            **stix_properties,
         )
