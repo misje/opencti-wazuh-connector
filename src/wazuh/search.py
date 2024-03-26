@@ -187,20 +187,25 @@ class AlertSearcher(BaseModel):
             )
 
     # TODO: wazuh_api: syscollector/id/netiface
-    # TODO: Repeat search for lower() + upper():
     def query_mac(self, *, entity: dict) -> dict | None:
-        return self.opensearch.search_multi(
-            fields=[
-                "*.dmac",
-                "*.dst_mac",
-                "*.dstmac",
-                "*.mac",
-                "*.smac",
-                "*.src_mac",
-                "*.srcmac",
-                "data.osquery.columns.interface",
-            ],
-            value=entity["observable_value"],
+        fields = [
+            "*.dmac",
+            "*.dst_mac",
+            "*.dstmac",
+            "*.mac",
+            "*.smac",
+            "*.src_mac",
+            "*.srcmac",
+            "data.osquery.columns.interface",
+        ]
+        return self.opensearch.search(
+            should=[
+                {"multi_match": {"query": value, "fields": fields}}
+                for value in [
+                    entity["observable_value"].lower(),
+                    entity["observable_value"].upper(),
+                ]
+            ]
         )
 
     def query_traffic(self, *, stix_entity: dict) -> dict | None:
