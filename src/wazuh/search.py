@@ -98,6 +98,7 @@ class AlertSearcher(BaseModel):
                     "data.audit.file.name",
                     "data.audit.file.name",
                     "data.file",
+                    "data.office365.SourceFileName",
                     "data.osquery.columns.path",
                     "data.sca.check.file",
                     "data.smbd.filename",
@@ -119,7 +120,7 @@ class AlertSearcher(BaseModel):
                         # this is full path, prepend a regex that
                         # ignores everything up to and including a path
                         # separator before the filename:
-                        f if re.match(r"^(?:[/\\]|[A-Za-z]:)", f) else f".*[/\\\\]+{f}"
+                        f if re.match(r"^(?:[/\\]|[A-Za-z]:)", f) else f".*[/\\\\]*{f}"
                         for filename in filenames
                         # Support any number of backslash escapes in
                         # paths (many variants are seen in the wild):
