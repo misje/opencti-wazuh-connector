@@ -142,6 +142,7 @@ class OpenSearchClient:
     def search(
         self,
         must: dict | list[dict] | None = None,
+        *,
         must_not: dict | list[dict] | None = None,
         should: dict | list[dict] | None = None,
     ):
