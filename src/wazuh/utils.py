@@ -477,8 +477,8 @@ def ip_protos(*addrs: str) -> list[str]:
     Return a list of the literals, 'ipv4' or 'ipv6', for any valid IP addres
 
     Examples:
-    >>> ip_protos('1.1.1.1', '::1', 'foo')
-    ['ipv6', 'ipv4']
+    >>> sorted(ip_protos('1.1.1.1', '::1', 'foo'))
+    ['ipv4', 'ipv6']
     >>> ip_protos('1.1.1.1', '8.8.8.8')
     ['ipv4']
     >>> ip_protos('foo', 'bar')
