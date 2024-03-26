@@ -40,6 +40,7 @@ from .stix_helper import (
     DUMMY_INDICATOR_ID,
     tlp_marking_from_string,
     tlp_allowed,
+    # add_incidents_to_note_refs,
     entity_values,
     entity_name_value,
     incident_entity_relation_type,
@@ -704,6 +705,10 @@ class WazuhConnector:
             bundle += self.create_agent_addr_obs(alerts=hits)
         if self.create_agent_host_obs:
             bundle += self.create_agent_hostname_obs(alerts=hits)
+
+        # TODO: doesn't seem to work? Or bug in OpenCTI. Anyway, add STIXList
+        # as type hint to bundle everywhere before continuing working on this:
+        # bundle = add_incidents_to_note_refs(bundle)
 
         # FIXME: WAZUH_INCIDENT_CREATE_MODE=per_sighting produces missing ref
         # errors unless dummy indicator exists. Update: might be random and

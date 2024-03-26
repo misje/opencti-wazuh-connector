@@ -2,7 +2,7 @@ import stix2
 import re
 from pycti import OpenCTIConnectorHelper, Tool
 from pydantic import BaseModel
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, Sequence
 from .utils import oneof, oneof_nonempty, allof_nonempty, ip_proto
 
 IPAddr = stix2.IPv4Address | stix2.IPv6Address
@@ -47,6 +47,7 @@ SDO = (
     | stix2.Vulnerability
 )
 SRO = stix2.Relationship | stix2.Sighting
+STIXList = Sequence[SCO | SDO | SRO]
 TLPLiteral = Literal[
     "TLP:CLEAR", "TLP:WHITE", "TLP:GREEN", "TLP:AMBER", "TLP:AMBER-STRICT", "TLP:RED"
 ]
@@ -181,6 +182,23 @@ def incident_entity_relation_type(entity: dict):
             return "related-to"
 
 
+def add_refs_to_note(note: stix2.Note, objs: STIXList) -> stix2.Note:
+    # Don't use new_version(), because that requires a new modified
+    # timestamp (which must be newer than created):
+    return stix2.Note(
+        **{prop: getattr(note, prop) for prop in note if prop != "object_refs"},
+        object_refs=list(set(note.object_refs) | {obj.id for obj in objs}),
+    )
+
+
+def add_incidents_to_note_refs(bundle: STIXList) -> STIXList:
+    return [
+        add_refs_to_note(obj, incidents) if isinstance(obj, stix2.Note) else obj
+        for incidents in ([obj for obj in bundle if isinstance(obj, stix2.Incident)],)
+        for obj in bundle
+    ]
+
+
 class StixHelper(BaseModel):
     """
     Helper class to simplify creation of STIX entities
@@ -266,5 +284,3 @@ class StixHelper(BaseModel):
             lables=self.sco_labels,
             **stix_properties,
         )
-
-    # def create_sighting(self, s_ref: StandardID, d_ref: StandardID, first_seen: str|datetime, last_seen: str|datetime, count: int, ext_refs= list[
