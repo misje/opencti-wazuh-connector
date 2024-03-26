@@ -3,7 +3,7 @@ import re
 from pydantic import BaseModel, ConfigDict, field_validator
 from ntpath import basename
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 from pycti import (
     AttackPattern,
     OpenCTIConnectorHelper,
@@ -210,6 +210,8 @@ class Enricher(BaseModel):
                     ],
                 },
             },
+            # Require at least one of account_login/user_id:
+            properties_validator=lambda x: len(x) >= 1,
         )
 
     def enrich_urls(self, *, incident: stix2.Incident, alerts: list[dict]):
@@ -556,6 +558,7 @@ class Enricher(BaseModel):
         type,
         SCO: Any,
         property_field_map: dict[str, dict[str, list[str]]],
+        properties_validator: Callable[[dict[str, Any]], bool] | None = None,
     ):
         results = {
             sco.id: {
@@ -563,16 +566,20 @@ class Enricher(BaseModel):
                 "alert": alert,
             }
             for alert in alerts
+            for properties in (
+                {
+                    property: match
+                    for property, map in property_field_map.items()
+                    for pattern, fields in map.items()
+                    for match in search_fields(
+                        alert["_source"], fields, regex=pattern
+                    ).values()
+                },
+            )
+            if not properties_validator or properties_validator(properties)
             for sco in (
                 SCO(
-                    **{
-                        property: match
-                        for property, map in property_field_map.items()
-                        for pattern, fields in map.items()
-                        for match in search_fields(
-                            alert["_source"], fields, regex=pattern
-                        ).values()
-                    },
+                    **properties,
                     allow_custom=True,
                     **self.stix.common_properties,
                     labels=self.stix.sco_labels,
