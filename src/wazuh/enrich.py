@@ -385,6 +385,7 @@ class Enricher(BaseModel):
         ]
 
     def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):
+        # TODO: Add domainnames too if relevant in any fields
         from_addr_fields = [
             "data.srcip",
             "data.src_ip",

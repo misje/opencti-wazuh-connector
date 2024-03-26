@@ -187,6 +187,7 @@ class AlertSearcher(BaseModel):
             )
 
     # TODO: wazuh_api: syscollector/id/netiface
+    # TODO: Repeat search for lower() + upper():
     def query_mac(self, *, entity: dict) -> dict | None:
         return self.opensearch.search_multi(
             fields=[
