@@ -60,6 +60,19 @@ def has_any(obj: dict, spec1: list[str], spec2: list[str]) -> bool:
         return False
 
 
+def has_atleast(obj: dict, *keys, threshold=1) -> bool:
+    """
+    Test whether at least N of keys are present in a dict
+
+    Examples
+    >>> has_atleast({'a': 1, 'b': 2}, 'a', 'c')
+    True
+    >>> has_atleast({'a': 1, 'b': 2}, 'a', 'b', 'c', threshold=2)
+    True
+    """
+    return sum(key in obj for key in keys) >= threshold
+
+
 def oneof(*keys: str, within: dict, default=None) -> Any:
     """
     Return the value of the first key that exists in the dict, or None.
