@@ -576,9 +576,7 @@ class Enricher(BaseModel):
                     ).values()
                 },
             )
-            if not properties_validator
-            or properties_validator(properties)
-            and (lambda x: self.helper.log_debug(f"CREATING FROM ALERT {alert}"), True)
+            if not properties_validator or properties_validator(properties)
             for sco in (
                 SCO(
                     **properties,
