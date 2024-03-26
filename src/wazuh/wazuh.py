@@ -62,6 +62,12 @@ from .enrich import Enricher
 # TODO: create helper function for creating stix objects, like stix2.Relationship that needs several references to the same variable. Add in a module that can be initied with common_args?
 # TODO: create issue for getting type of enrichment (manual or automatic)
 # TODO: Alert notes in incidents (already in sighting and case, but not incident)
+# TODO: aws, google and office
+# - user accounts
+# - emails
+# - files
+# - directories
+# TODO: drop wazuh.worker as hostname FIXME: missing refs when created for worker
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by

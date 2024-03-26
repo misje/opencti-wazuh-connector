@@ -3,7 +3,7 @@ import re
 from pydantic import BaseModel, ConfigDict, field_validator
 from ntpath import basename
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from pycti import (
     AttackPattern,
     OpenCTIConnectorHelper,
@@ -21,6 +21,7 @@ from .utils import (
     field_compare,
     non_none,
     regex_transform,
+    ip_proto,
     ip_protos,
     connection_string,
 )
@@ -35,6 +36,8 @@ class Type(Enum):
     URL = "url"
     File = "file"
     Directory = "directory"
+    IPv4Address = "ipv4-addr"
+    IPv6Address = "ipv6-addr"
     RegistryKey = "windows-registry-key"
     NetworkTraffic = "network-traffic"
 
@@ -80,7 +83,17 @@ class Enricher(BaseModel):
             bundle += self.enrich_dirs(incident=incident, alerts=alerts)
         if Type.RegistryKey in self.types:
             bundle += self.enrich_reg_keys(incident=incident, alerts=alerts)
-        # TOOD: enrich ip addresses and mac addrs
+        if Type.IPv4Address in self.types:
+            bundle += self.enrich_addrs(
+                incident=incident, alerts=alerts, type="IPv4-Addr"
+            )
+        if Type.IPv6Address in self.types:
+            bundle += self.enrich_addrs(
+                incident=incident, alerts=alerts, type="IPv6-Addr"
+            )
+        # TODO: enrich  mac addrs
+        # TODO: enrich UserAgent (data.aws.userAgent)
+        # TODO: enrich email (data.gcp.protoPayload.authenticationInfo.principalEmail, data.office365.UserId)
         if Type.NetworkTraffic in self.types:
             bundle += self.enrich_traffic(incident=incident, alerts=alerts)
 
@@ -184,6 +197,7 @@ class Enricher(BaseModel):
             alerts=alerts,
             type="User-Account",
             SCO=stix2.UserAccount,
+            # TODO: aws (optional): data.aws.userIdentitiy.userName, data.aws.userIdentity.accountId
             # TODO: Maps 0 to user for rule id 5715. Make custom code that only
             # extracts user_id in certain contexts (or not in som cases)?
             property_field_map={
@@ -379,6 +393,33 @@ class Enricher(BaseModel):
             )
         ]
 
+    def enrich_addrs(
+        self,
+        *,
+        incident: stix2.Incident,
+        alerts: list[dict],
+        type: Literal["IPv4-Addr", "IPv6-Addr"],
+    ):
+        return self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            type=type,
+            fields=[
+                "data.aws.remote_ip",
+                "data.aws.source_ip_address",
+                "data.dest_ip",
+                "data.dstip",
+                "data.gcp.protoPayload.requestMetadata.callerIp",
+                "data.office365.ClientIP",
+                "data.src_ip",
+                "data.srcip",
+                "data.win.eventdata.destinationIp",
+                "data.win.eventdata.sourceIp",
+            ],
+            validator=lambda x: ip_proto(x)
+            == ("ipv4" if type == "IPv4-Addr" else "ipv6"),
+        )
+
     def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):
         # TODO: Add domainnames too if relevant in any fields
         from_addr_fields = [
@@ -457,6 +498,10 @@ class Enricher(BaseModel):
                     ).values()
                 ),
             )
+            # Protocols are required:
+            if protocols
+            # A NetworkTraffic object isn't interesting if we have a least two addresses or ports:
+            and non_none(src_ref, src_port, dst_ref, dst_port, threshold=2)
             for sco in (
                 stix2.NetworkTraffic(
                     src_ref=src_ref,
@@ -477,8 +522,6 @@ class Enricher(BaseModel):
                     labels=self.stix.sco_labels,
                 ),
             )
-            # A NetworkTraffic object isn't interesting if we have a least two addresses or ports:
-            if non_none(src_ref, src_port, dst_ref, dst_port, threshold=2)
         }
         # Only includes addresses that are referenced:
         return [
@@ -515,6 +558,7 @@ class Enricher(BaseModel):
         alerts: list[dict],
         type: str,
         fields: list[str],
+        validator: Callable[[Any], bool] | None = None,
     ):
         results = {
             match: {
@@ -524,6 +568,7 @@ class Enricher(BaseModel):
             }
             for alert in alerts
             for field, match in search_fields(alert["_source"], fields).items()
+            if not validator or validator(match)
         }
         return [
             stix

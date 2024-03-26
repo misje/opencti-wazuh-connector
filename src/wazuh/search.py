@@ -27,6 +27,8 @@ class AlertSearcher(BaseModel):
     search_agent_ip: bool
     search_agent_name: bool
 
+    # TODO: UserAgent:
+    # data.aws.userAgent
     def search(self, entity: dict, stix_entity: dict) -> dict | None:
         match entity["entity_type"]:
             case "StixFile" | "Artifact":
@@ -297,7 +299,7 @@ class AlertSearcher(BaseModel):
                 "*email",
                 "data.office365.UserId",
             ],
-            value=stix_entity["account_login"],
+            value=stix_entity["value"],
         )
 
     def query_domain(
@@ -538,6 +540,7 @@ class AlertSearcher(BaseModel):
         )
 
     def query_account(self, *, stix_entity: dict) -> dict | None:
+        # TODO: settings to determine where to search (aws, google, office, windows, linux)
         # TODO: what about DOMAIN\username?
         # TODO: display name? Otherwise remove from entity_value*(?)
         uid = oneof_nonempty("user_id", within=stix_entity)
@@ -584,6 +587,8 @@ class AlertSearcher(BaseModel):
             "*.sauid",
             "*.suid",
             "*.uid",
+            "data.aws.userIdentity.accountId",
+            "data.aws.userIdentity.principalId",
         ]
         if username and uid:
             return self.opensearch.search(

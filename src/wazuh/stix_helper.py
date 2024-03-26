@@ -264,10 +264,14 @@ class StixHelper(BaseModel):
         match type:
             case "Directory":
                 return stix2.Directory(path=value, **common_attrs, **properties)
-            case "User-Account":
-                return self.create_account_from_username(value, **properties)
+            case "IPv4-Addr":
+                return stix2.IPv4Address(value=value, **common_attrs, **properties)
+            case "IPv6-Addr":
+                return stix2.IPv6Address(value=value, **common_attrs, **properties)
             case "Url":
                 return stix2.URL(value=value, **common_attrs, **properties)
+            case "User-Account":
+                return self.create_account_from_username(value, **properties)
             case "StixFile":
                 return stix2.File(name=value, **common_attrs, **properties)
             case "Windows-Registry-Key":
