@@ -67,7 +67,6 @@ from .enrich import Enricher
 # - emails
 # - files
 # - directories
-# FIXME: data.office365.SourceFileName is a UserId as well as an e-mail address
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by

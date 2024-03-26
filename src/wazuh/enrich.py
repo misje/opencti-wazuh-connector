@@ -3,7 +3,7 @@ import re
 from pydantic import BaseModel, ConfigDict, field_validator
 from ntpath import basename
 from enum import Enum
-from typing import Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal
 from pycti import (
     AttackPattern,
     OpenCTIConnectorHelper,
@@ -11,6 +11,7 @@ from pycti import (
 )
 from .stix_helper import (
     StixHelper,
+    SCO,
 )
 from .utils import (
     has,
@@ -27,6 +28,22 @@ from .utils import (
 )
 
 # TODO: Move a lot into stix_helper
+
+TransformCallback = Callable[
+    [Annotated[Any, "Field from search"]],
+    Annotated[
+        list[
+            tuple[
+                Annotated[Any, "Value to pass to SCO constructor"],
+                Annotated[
+                    dict[str, Any],
+                    "Any additional properties to pass to SCO constructor",
+                ],
+            ]
+        ],
+        "List of tuples, one for each SCO to be created",
+    ],
+]
 
 
 class Type(Enum):
@@ -94,6 +111,7 @@ class Enricher(BaseModel):
             bundle += self.enrich_addrs(
                 incident=incident, alerts=alerts, type="IPv6-Addr"
             )
+        # TODO: enrich domains
         # TODO: enrich  mac addrs
         # TODO: enrich UserAgent (data.aws.userAgent)
         if Type.NetworkTraffic in self.types:
@@ -115,7 +133,6 @@ class Enricher(BaseModel):
             if "mitre" in rule
             for id in rule["mitre"]["id"]
         ]
-        self.helper.log_debug(f"MITRE IDS: {mitre_ids}")
         for mitre_id in mitre_ids:
             pattern = stix2.AttackPattern(
                 id=AttackPattern.generate_id(mitre_id, mitre_id),
@@ -199,7 +216,6 @@ class Enricher(BaseModel):
             alerts=alerts,
             type="User-Account",
             SCO=stix2.UserAccount,
-            # TODO: aws (optional): data.aws.userIdentitiy.userName, data.aws.userIdentity.accountId
             # TODO: Maps 0 to user for rule id 5715. Make custom code that only
             # extracts user_id in certain contexts (or not in som cases)?
             property_field_map={
@@ -210,6 +226,8 @@ class Enricher(BaseModel):
                         "syscheck.uname_before",
                         "data.wineventdata.user",
                         "data.win.eventdata.samAccountname",
+                        "data.office365.UserId",
+                        "data.aws.userIdentitiy.userName",
                     ],
                 },
                 "user_id": {
@@ -218,6 +236,7 @@ class Enricher(BaseModel):
                         "data.audit.uid",
                         "data.userId",
                         "data.uid",
+                        "data.aws.userIdentitiy.accountId",
                     ],
                 },
             },
@@ -237,6 +256,10 @@ class Enricher(BaseModel):
                 "data.office365.MessageURLs",
                 "data.office365.RemoteItemWebUrl",
             ],
+            # MessageURLs is a list, so create a SCO for each entry:
+            transform=(
+                lambda x: [(i, {}) for i in x] if isinstance(x, list) else [(x, {})]
+            ),
         )
 
     def enrich_email_addrs(self, *, incident: stix2.Incident, alerts: list[dict]):
@@ -575,16 +598,42 @@ class Enricher(BaseModel):
         type: str,
         fields: list[str],
         validator: Callable[[Any], bool] | None = None,
+        transform: TransformCallback | None = None,
     ):
+        # Create a dict where the key is the value found by searching the
+        # alert, and the value is the STIX cyber observable:
+        def create_sco(match: Any) -> dict[str, SCO]:
+            if transform:
+                # If a custom transformation function is supplied, the value is
+                # probably not a simple string and need to be converted. The
+                # transformation function returns a list of tuples, where the
+                # the first value is the observable value and the second value
+                # is a dict of additional properties to pass to the SCO
+                # constructor:
+                return {
+                    value: self.stix.create_sco(type, value, **properties)
+                    for transformed in transform(match)
+                    for value, properties in (transformed,)
+                }
+            else:
+                return {match: self.stix.create_sco(type, match)}
+
         results = {
-            match: {
+            # Create a dict so that the SRO created later has some useful
+            # metadata to refer to:
+            value: {
                 "field": field,
-                "sco": self.stix.create_sco(type, value=match),
+                "sco": sco,
                 "alert": alert,
             }
             for alert in alerts
             for field, match in search_fields(alert["_source"], fields).items()
+            # If a validator is defined, validate the match found before
+            # creating a SCO. The validation could in theroy be done in the
+            # transform function, but it's more user-friendly to use a simple
+            # validation lambda:
             if not validator or validator(match)
+            for value, sco in create_sco(match).items()
         }
         return [
             stix
@@ -643,7 +692,6 @@ class Enricher(BaseModel):
                 ),
             )
         }
-        self.helper.log_info(results)
         return [
             stix
             for meta in results.values()

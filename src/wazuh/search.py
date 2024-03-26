@@ -343,8 +343,9 @@ class AlertSearcher(BaseModel):
         *,
         entity: dict,
     ) -> dict | None:
+        # TODO: Search for URL with and without trailing slash
         return self.opensearch.search_multi(
-            fields=["*url", "*Url", "*.URL", "*.uri"],
+            fields=["*url", "*Url", "*.URL", "*.uri", "data.office365.MessageURLs"],
             value=entity["observable_value"],
         )
 
