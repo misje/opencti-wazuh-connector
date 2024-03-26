@@ -60,11 +60,7 @@ from .enrich import Enricher
 # TODO: Use TypeAlias (from typing) for things like Bundle, SCO etc.
 # TODO: create helper function for creating stix objects, like stix2.Relationship that needs several references to the same variable. Add in a module that can be initied with common_args?
 # TODO: create issue for getting type of enrichment (manual or automatic)
-# FIXME: Try search for obs-qt sha 94aba9d072a735caafbef4845433fda5afc87a0dfcbb4996ced2df6c5591ec3c:
-# - A number of IP addresses are created without relaitonships
-# - haakon is related to fjomp-lin sighting?
-# FIXME: double marking_refs and double labels for enriched obs
-# FIXME: andreas with user_id=0 created if searching for 192.168.12.1
+# TODO: Alert notes in incidents (already in sighting and case, but not incident)
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by

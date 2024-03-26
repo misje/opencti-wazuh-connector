@@ -188,6 +188,8 @@ class Enricher(BaseModel):
             alerts=alerts,
             type="User-Account",
             SCO=stix2.UserAccount,
+            # TODO: Maps 0 to user for rule id 5715. Make custom code that only
+            # extracts user_id in certain contexts (or not in som cases)?
             property_field_map={
                 "account_login": {
                     r"^[^(]+": ["data.srcuser", "data.dstuser"],
@@ -201,12 +203,9 @@ class Enricher(BaseModel):
                 "user_id": {
                     r"(?<=\(uid=)\d+(?=\)$)": ["data.srcuser", "data.dstuser"],
                     ".+": [
-                        "data.audit.auid",
-                        "data.audit.euid",
                         "data.audit.uid",
                         "data.userId",
                         "data.uid",
-                        "data.eid",
                     ],
                 },
             },
@@ -577,7 +576,9 @@ class Enricher(BaseModel):
                     ).values()
                 },
             )
-            if not properties_validator or properties_validator(properties)
+            if not properties_validator
+            or properties_validator(properties)
+            and (lambda x: self.helper.log_debug(f"CREATING FROM ALERT {alert}"), True)
             for sco in (
                 SCO(
                     **properties,
