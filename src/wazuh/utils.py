@@ -172,7 +172,7 @@ def extract_fields(
         for key in keys:
             try:
                 obj = obj[key]
-            except KeyError as e:
+            except (KeyError, TypeError) as e:
                 if raise_if_missing:
                     raise e
                 else:
@@ -220,6 +220,23 @@ def search_field(obj: dict, field: str, *, regex: str = "") -> str | None:
     'bar'
     """
     return search_fields(obj, [field], regex=regex).get(field)
+
+
+def compare_field(obj1: dict, obj2: dict, field: str) -> bool:
+    """
+    Compare a field in two nested dicts
+
+    Examples:
+    >>> compare_field({'a': {'b': 'foo'}}, {'a': {'b': 'foo'}}, 'a.b')
+    True
+    >>> compare_field({'a': {'b': 'foo'}}, {'a': 'bar'}, 'a.b')
+    False
+    >>> compare_field({'a': None}, {'a': None}, 'a')
+    False
+    """
+    val1 = search_field(obj1, field)
+    val2 = search_field(obj2, field)
+    return val1 is not None and val2 is not None and val1 == val2
 
 
 def field_compare(

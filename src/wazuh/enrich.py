@@ -10,10 +10,6 @@ from pycti import (
     StixCoreRelationship,
 )
 from .stix_helper import (
-    SCO,
-    SDO,
-    SRO,
-    # StandardID,
     StixHelper,
 )
 from .utils import (
@@ -607,8 +603,3 @@ class Enricher(BaseModel):
                 ),
             )
         ]
-
-    # TODO: implement
-    @classmethod
-    def aggregate_files(cls, bundle: list[SCO | SDO | SRO]):
-        pass

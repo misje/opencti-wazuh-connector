@@ -2,8 +2,15 @@ import stix2
 import re
 from pycti import OpenCTIConnectorHelper, Tool
 from pydantic import BaseModel
-from typing import Any, Final, Literal, Sequence
-from .utils import oneof, oneof_nonempty, allof_nonempty, ip_proto
+from typing import Annotated, Any, Final, Literal, Sequence
+from .utils import (
+    first_or_none,
+    oneof,
+    oneof_nonempty,
+    allof_nonempty,
+    ip_proto,
+    compare_field,
+)
 
 IPAddr = stix2.IPv4Address | stix2.IPv6Address
 SCO = (
@@ -215,6 +222,15 @@ class StixHelper(BaseModel):
             **self.common_properties,
         )
 
+    def create_file(self, names: list[str], sha256: str):
+        return stix2.File(
+            name=first_or_none(names),
+            hash={"SHA-256": sha256} if sha256 else None,
+            allow_custom=True,
+            **self.common_properties,
+            x_opencti_additional_names=names[1:],
+        )
+
     def create_addr_sco(self, address: str, **properties):
         """
         Create either an IPv4Address or IPv6Address, depending on the address
@@ -284,3 +300,19 @@ class StixHelper(BaseModel):
             lables=self.sco_labels,
             **stix_properties,
         )
+
+    # TODO: Revisit the usefulness of replacing files. What about all the refs
+    # created?
+    def aggregate_files(self, bundle: STIXList) -> STIXList:
+        files: dict[Annotated[str, "SHA-256"], set[Annotated[str, "Filenames"]]] = {
+            file.hashes["SHA-256"]: {
+                file2.name
+                for file2 in files
+                if compare_field(file, file2, "hashes.SHA-256")
+            }
+            for files in ([obj for obj in bundle if isinstance(obj, stix2.File)],)
+            for file in files
+            if "hashes" in file and "SHA-256" in file.hashes
+        }
+
+        return [self.create_file(list(names), hash) for hash, names in files.items()]
