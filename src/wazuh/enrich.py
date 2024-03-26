@@ -38,6 +38,7 @@ class Type(Enum):
     Directory = "directory"
     IPv4Address = "ipv4-addr"
     IPv6Address = "ipv6-addr"
+    EMailAddr = "Email-Addr"
     RegistryKey = "windows-registry-key"
     NetworkTraffic = "network-traffic"
 
@@ -77,6 +78,8 @@ class Enricher(BaseModel):
             bundle += self.enrich_accounts(incident=incident, alerts=alerts)
         if Type.URL in self.types:
             bundle += self.enrich_urls(incident=incident, alerts=alerts)
+        if Type.EMailAddr in self.types:
+            bundle += self.enrich_email_addrs(incident=incident, alerts=alerts)
         if Type.File in self.types:
             bundle += self.enrich_files(incident=incident, alerts=alerts)
         if Type.Directory in self.types:
@@ -93,7 +96,6 @@ class Enricher(BaseModel):
             )
         # TODO: enrich  mac addrs
         # TODO: enrich UserAgent (data.aws.userAgent)
-        # TODO: enrich email (data.gcp.protoPayload.authenticationInfo.principalEmail, data.office365.UserId)
         if Type.NetworkTraffic in self.types:
             bundle += self.enrich_traffic(incident=incident, alerts=alerts)
 
@@ -235,6 +237,20 @@ class Enricher(BaseModel):
                 "data.office365.MessageURLs",
                 "data.office365.RemoteItemWebUrl",
             ],
+        )
+
+    def enrich_email_addrs(self, *, incident: stix2.Incident, alerts: list[dict]):
+        return self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            type="Email-Addr",
+            fields=[
+                "data.gcp.protoPayload.authenticationInfo.principalEmail",
+                "data.office365.UserId",
+            ],
+            # Do not even attempt to validate an e-mail with a regex, but do a
+            # simple sanity check:
+            validator=lambda x: bool(re.search(".+@.+", x)),
         )
 
     def enrich_dirs(self, *, incident: stix2.Incident, alerts: list[dict]):
