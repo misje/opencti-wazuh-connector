@@ -67,7 +67,6 @@ from .enrich import Enricher
 # - emails
 # - files
 # - directories
-# TODO: drop wazuh.worker as hostname FIXME: missing refs when created for worker
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -1359,7 +1358,7 @@ class WazuhConnector:
             }
             for alert in alerts
             for agent in (alert["_source"]["agent"],)
-            if "ip" in agent
+            if int(agent["id"]) > 0 and "ip" in agent
         }
         if self.wazuh and self.enrich_agent:
             for id, agent in agents.copy().items():
@@ -1432,6 +1431,7 @@ class WazuhConnector:
             }
             for alert in alerts
             for agent in (alert["_source"]["agent"],)
+            if int(agent["id"]) > 0
         }
         if self.wazuh and self.enrich_agent:
             for id, agent in agents.copy().items():
