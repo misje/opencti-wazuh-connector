@@ -8,7 +8,6 @@ from .opensearch import OpenSearchClient
 from .wazuh_api import WazuhAPIClient
 from pathlib import Path
 from pycti import (
-    AttackPattern,
     CaseIncident,
     CustomObjectCaseIncident,
     CustomObservableHostname,
@@ -24,24 +23,14 @@ from pycti import (
 from typing import Any, Final
 from datetime import datetime
 from urllib.parse import urljoin
-from ntpath import basename
 from functools import reduce
 from .utils import (
     has,
-    first_or_none,
-    first_or_empty,
-    search_fields,
-    search_field,
-    field_compare,
     rule_level_to_severity,
     priority_from_severity,
     max_severity,
     common_prefix_string,
-    non_none,
     search_in_object_multi,
-    regex_transform,
-    ip_protos,
-    connection_string,
 )
 from .stix_helper import (
     # SCO,
@@ -58,6 +47,7 @@ from .stix_helper import (
 )
 from .sightings import SightingsCollector
 from .search import AlertSearcher
+from .enrich import Enricher
 
 # TODO: Enrichment connector that uses snipeit to get system owner
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
@@ -428,39 +418,6 @@ class WazuhConnector:
             config,
             default=False,
         )
-        self.enrich_mitre = get_config_variable(
-            "WAZUH_ENRICH_MITRE", ["wazuh", "enrich_mitre"], config, default=True
-        )
-        self.enrich_tool = get_config_variable(
-            "WAZUH_ENRICH_TOOL", ["wazuh", "enrich_tool"], config, default=False
-        )
-        self.enrich_account = get_config_variable(
-            "WAZUH_ENRICH_ACCOUNT", ["wazuh", "enrich_account"], config, default=False
-        )
-        self.enrich_url = get_config_variable(
-            "WAZUH_ENRICH_URL", ["wazuh", "enrich_url"], config, default=False
-        )
-        self.enrich_file = get_config_variable(
-            "WAZUH_ENRICH_FILE", ["wazuh", "enrich_file"], config, default=False
-        )
-        self.enrich_dir = get_config_variable(
-            "WAZUH_ENRICH_DIRECTORY",
-            ["wazuh", "enrich_directory"],
-            config,
-            default=False,
-        )
-        self.enrich_registry_key = get_config_variable(
-            "WAZUH_ENRICH_REGISTRY_KEY",
-            ["wauzh", "enrich_registry_key"],
-            config,
-            default=False,
-        )
-        self.enrich_network_traffic = get_config_variable(
-            "WAZUH_ENRICH_NETWORK_TRAFFIC",
-            ["wazuh", "enrich_network_traffic"],
-            config,
-            default=False,
-        )
         self.enrich_agent = get_config_variable(
             "WAZUH_ENRICH_AGENT", ["wazuh", "enrich_agent"], config, default=True
         )
@@ -503,6 +460,16 @@ class WazuhConnector:
         self.stix_common_attrs["created_by_ref"] = self.author["id"]
         self.stix = StixHelper(
             common_properties=self.stix_common_attrs, sco_labels=self.enrich_labels
+        )
+        self.enricher = Enricher(
+            helper=self.helper,
+            stix=self.stix,
+            types=get_config_variable(
+                "WAZUH_ENRICH_TYPES",
+                ["wazuh", "enrich_types"],
+                config,
+                default=set("attack-pattern"),
+            ),  # type: ignore
         )
         self.siem_system = stix2.Identity(
             id=Identity.generate_id(self.system_name, "system"),
@@ -585,10 +552,7 @@ class WazuhConnector:
             self.wazuh.query_packages()
             self.wazuh.save_cache()
 
-        if self.enrich_tool:
-            self.helper.connector_logger.info("Building list of tools")
-            self.tools = self.helper.api.tool.list()
-
+        self.enricher.fetch_tools()
         self.helper.metric.state("idle")
         self.helper.listen(self.process_message)
 
@@ -1149,7 +1113,7 @@ class WazuhConnector:
                         obs_indicators=obs_indicators,
                         sighters=list(sightings.keys()),
                     )
-                    + self.enrich_incident(
+                    + self.enricher.enrich_incident(
                         incident=incident, alerts=sightings_meta.alerts()
                     )
                 )
@@ -1183,7 +1147,7 @@ class WazuhConnector:
                         obs_indicators=obs_indicators,
                         sighters=[sighter_id],
                     )
-                    bundle += self.enrich_incident(
+                    bundle += self.enricher.enrich_incident(
                         incident=incident,
                         alerts=[
                             alert for alerts in meta.alerts.values() for alert in alerts
@@ -1229,7 +1193,7 @@ class WazuhConnector:
                         obs_indicators=obs_indicators,
                         sighters=meta["sighters"],
                     )
-                    bundle += self.enrich_incident(
+                    bundle += self.enricher.enrich_incident(
                         incident=incident, alerts=[alert for alert in meta["alerts"]]
                     )
 
@@ -1284,7 +1248,7 @@ class WazuhConnector:
                     #    ]
                     #    for pair in zip(incidents, filtered_alerts, strict=True)
                     #    for incident, alerts in (pair,)
-                    #    for enrichment in self.enrich_incident(
+                    #    for enrichment in self.enricher.enrich_incident(
                     #        incident=incident, alerts=alerts
                     #    )
                     # ]
@@ -1351,535 +1315,33 @@ class WazuhConnector:
             ]
         )
 
-    def enrich_incident(self, *, incident: stix2.Incident, alerts: list[dict]):
-        bundle = []
-        # TODO: Create ObservedData too(?)
-        # TODO: All of the searched fields in these enrichment functions need a lot of QA
-        if self.enrich_mitre:
-            bundle += self.enrich_incident_mitre(incident=incident, alerts=alerts)
-        if self.enrich_tool:
-            bundle += self.enrich_incident_tool(incident=incident, alerts=alerts)
-        if self.enrich_account:
-            bundle += self.enrich_accounts(incident=incident, alerts=alerts)
-        if self.enrich_url:
-            bundle += self.enrich_urls(incident=incident, alerts=alerts)
-        if self.enrich_file:
-            bundle += self.enrich_files(incident=incident, alerts=alerts)
-        if self.enrich_dir:
-            bundle += self.enrich_dirs(incident=incident, alerts=alerts)
-        if self.enrich_registry_key:
-            bundle += self.enrich_reg_keys(incident=incident, alerts=alerts)
-        # TOOD: enrich ip addresses and mac addrs
-        if self.enrich_network_traffic:
-            bundle += self.enrich_traffic(incident=incident, alerts=alerts)
-
-        return bundle
-
-    def enrich_incident_mitre(self, *, incident: stix2.Incident, alerts: list[dict]):
-        bundle = []
-        mitre_ids = [
-            id
-            for alert in alerts[0:1]
-            for rule in (alert["_source"]["rule"],)
-            if "mitre" in rule
-            for id in rule["mitre"]["id"]
-        ]
-        self.helper.log_debug(f"MITRE IDS: {mitre_ids}")
-        for mitre_id in mitre_ids:
-            pattern = stix2.AttackPattern(
-                id=AttackPattern.generate_id(mitre_id, mitre_id),
-                name=mitre_id,
-                allow_custom=True,
+    def create_incident_response_case(
+        self, *, entity: dict, result: dict, bundle: list[Any]
+    ):
+        incidents = [obj for obj in bundle if isinstance(obj, stix2.Incident)]
+        timestamp = max(incident.created for incident in incidents)
+        severity = max_severity([incident.severity for incident in incidents])
+        sightings_count = reduce(
+            lambda sum, sighting: sum + sighting.count,
+            [obj for obj in bundle if isinstance(obj, stix2.Sighting)],
+            0,
+        )
+        hits_dropped = result["hits"]["total"]["value"] > len(result["hits"]["hits"])
+        name = f"{entity_name_value(entity)} sighted {sightings_count}{'+' if hits_dropped else ''} time(s)"
+        refs = bundle + [entity["standard_id"]]
+        refs.remove(self.author)
+        return (
+            CustomObjectCaseIncident(
+                id=CaseIncident.generate_id(name, timestamp),
+                name=name,
+                description="FIXME",
+                severity=severity,
+                priority=priority_from_severity(severity),
                 **self.stix_common_attrs,
-                x_mitre_id=mitre_id,
-            )
-            bundle += [
-                pattern,
-                stix2.Relationship(
-                    id=StixCoreRelationship.generate_id(
-                        "uses", incident.id, pattern.id
-                    ),
-                    created=alerts[0]["_source"]["@timestamp"],
-                    **self.stix_common_attrs,
-                    relationship_type="uses",
-                    source_ref=incident.id,
-                    target_ref=pattern.id,
-                ),
-            ]
-
-        return bundle
-
-    def enrich_incident_tool(self, *, incident: stix2.Incident, alerts: list[dict]):
-        bundle = []
-        for alert in alerts:
-            tools = []
-            if (
-                has(alert, ["_source", "rule", "mitre", "id"])
-                and "T1053.005" in alert["_source"]["rule"]["mitre"]["id"]
-            ):
-                tools = [self.stix.create_tool("schtasks")]
-                bundle.append(tools[0])
-            elif "psexec" in alert["_source"]["rule"]["description"].casefold():
-                tools = [self.stix.create_tool("PsExec")]
-                bundle.append(tools[0])
-            else:
-                tools = [
-                    self.stix.create_tool(tool["name"])
-                    # TODO: filter commmon words, like "at":
-                    for tool in self.tools
-                    if field_compare(
-                        alert["_source"],
-                        [
-                            "data.win.eventdata.commandLine",
-                            "data.win.eventdata.details",
-                            "data.win.eventdata.parentCommandLine",
-                            "data.win.eventdata.image",
-                            "data.win.eventdata.sourceImage",
-                            "data.win.eventdata.targetImage",
-                            "data.audit.command",
-                            "data.command",
-                        ],
-                        lambda cmd_line: isinstance(cmd_line, str)
-                        and tool["name"].lower()
-                        in map(
-                            lambda x: basename(x).lower(),
-                            re.split(r"\W+", cmd_line),
-                        ),
-                    )
-                ]
-
-            bundle += tools + [
-                stix2.Relationship(
-                    id=StixCoreRelationship.generate_id("uses", incident.id, tool.id),
-                    created=alert["_source"]["@timestamp"],
-                    **self.stix_common_attrs,
-                    relationship_type="uses",
-                    source_ref=incident.id,
-                    target_ref=tool.id,
-                )
-                for tool in tools
-            ]
-
-        return bundle
-
-    def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
-        return self.create_enrichment_obs_from_search_context(
-            incident=incident,
-            alerts=alerts,
-            type="User-Account",
-            SCO=stix2.UserAccount,
-            property_field_map={
-                "account_login": {
-                    r"^[^(]+": ["data.srcuser", "data.dstuser"],
-                    ".+": [
-                        "syscheck.uname_after",
-                        "syscheck.uname_before",
-                        "data.wineventdata.user",
-                        "data.win.eventdata.samAccountname",
-                    ],
-                },
-                "user_id": {
-                    r"(?<=\(uid=)\d+(?=\)$)": ["data.srcuser", "data.dstuser"],
-                    ".+": [
-                        "data.audit.auid",
-                        "data.audit.euid",
-                        "data.audit.uid",
-                        "data.userId",
-                        "data.uid",
-                        "data.eid",
-                    ],
-                },
-            },
+                # This should be okay, because these refs can be any of SCO, SDO and SRO:
+                object_refs=refs,
+            ),
         )
-
-    def enrich_urls(self, *, incident: stix2.Incident, alerts: list[dict]):
-        return self.create_enrichment_obs_from_search(
-            incident=incident,
-            alerts=alerts,
-            type="Url",
-            fields=[
-                "data.url",
-                "data.osquery.columns.update_url",
-                "data.office365.MeetingURL",
-                "data.office365.MessageURLs",
-                "data.office365.RemoteItemWebUrl",
-            ],
-        )
-
-    def enrich_dirs(self, *, incident: stix2.Incident, alerts: list[dict]):
-        return self.create_enrichment_obs_from_search(
-            incident=incident,
-            alerts=alerts,
-            type="Directory",
-            fields=[
-                "data.audit.directory.name",
-                "data.home",
-                "data.osquery.columns.directory",
-                "data.pwd",
-            ],
-        )
-
-    def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
-        # FIXME: add a re_negate to search_fields and exclude HKEY_:
-        # First search for fields that may contain filenames/paths, but without hashes:
-        results = {
-            match: {
-                "field": field,
-                "sco": self.stix.create_sco("StixFile", value=match),
-                "alert": alert,
-            }
-            for alert in alerts
-            for field, match in search_fields(
-                alert["_source"],
-                [
-                    "data.ChildPath",
-                    "data.ParentPath",
-                    "data.Path",
-                    "data.TargetFilename",
-                    "data.TargetPath",
-                    "data.audit.file.name",
-                    "data.audit.file.name",
-                    "data.file",
-                    "data.sca.check.file",
-                    "data.smbd.filename",
-                    "data.smbd.new_filename",
-                    "data.virustotal.source.file",
-                    "data.win.eventdata.file",
-                    "data.win.eventdata.filePath",
-                ],
-            ).items()
-        }
-
-        # Then search in fields that also may contain hashes:
-        for alert in alerts:
-            for name_field, hash_fields in {
-                "data.osquery.columns.path": [
-                    "data.osquery.columns.md5",
-                    "data.osquery.columns.sha1",
-                    "data.osquery.columns.sha256",
-                ],
-                "syscheck.path": [
-                    "syscheck.md5_after",
-                    "syscheck.sha1_after",
-                    "syscheck.sha256_after",
-                ],
-            }.items():
-                name = search_field(alert["_source"], name_field)
-                hashes = regex_transform(
-                    search_fields(
-                        alert["_source"],
-                        hash_fields,
-                    ),
-                    {
-                        ".+md5.*": "MD5",
-                        ".+sha1$.*": "SHA-1",
-                        ".+sha256.*": "SHA-256",
-                    },
-                )
-                if name and hashes and not name.startswith("HKEY_"):
-                    results[name] = {
-                        "field": name_field,
-                        "sco": self.stix.create_sco(
-                            "StixFile",
-                            value=name,
-                            # Only one hash should be populated in stix, according to the
-                            # standard, in order of preference: md5, sha-1, sha-256.
-                            # OpenCTI doesn't seem to care about this, and why not keep
-                            # them all:
-                            hashes=hashes,
-                        ),
-                        "alert": alert,
-                    }
-        return [
-            stix
-            for match, meta in results.items()
-            for alert in (meta["alert"],)
-            for sco in (meta["sco"],)
-            for stix in (
-                sco,
-                stix2.Relationship(
-                    id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, sco.id
-                    ),
-                    created=alert["_source"]["@timestamp"],
-                    **self.stix_common_attrs,
-                    relationship_type="related-to",
-                    description=f"StixFile {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
-                    source_ref=incident.id,
-                    target_ref=sco.id,
-                ),
-            )
-        ]
-
-    def enrich_reg_keys(self, *, incident: stix2.Incident, alerts: list[dict]):
-        results = {
-            "/".join([path, value]) if value else path: {
-                "field": field,
-                "sco": self.stix.create_sco(
-                    "Windows-Registry-Key",
-                    value=path,
-                    # NOTE: This produces the correct output, but due to
-                    # https://github.com/OpenCTI-Platform/opencti/issues/2574,
-                    # the values are not imported:
-                    values=[stix2.WindowsRegistryValueType(name=value, data_type=type)]
-                    if value is not None
-                    else [],
-                ),
-                "alert": alert,
-            }
-            for alert in alerts
-            for field in (
-                "syscheck.path",
-                "data.win.eventdata.targetObject",
-            )
-            for path in (
-                search_field(
-                    alert["_source"], field, regex="^(?:HKEY_|HK(?:LM|CU|CR|U|CC)).+"
-                ),
-            )
-            if path is not None
-            for type in (search_field(alert["_source"], "syscheck.value_type"),)
-            for value in (search_field(alert["_source"], "syscheck.value_name"),)
-        }
-        return [
-            stix
-            for match, meta in results.items()
-            for alert in (meta["alert"],)
-            for sco in (meta["sco"],)
-            for stix in (
-                sco,
-                stix2.Relationship(
-                    id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, sco.id
-                    ),
-                    created=alert["_source"]["@timestamp"],
-                    **self.stix_common_attrs,
-                    relationship_type="related-to",
-                    description=f"Windows-Registry-Key {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
-                    source_ref=incident.id,
-                    target_ref=sco.id,
-                ),
-            )
-        ]
-
-    def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):
-        from_addr_fields = [
-            "data.srcip",
-            "data.src_ip",
-            "data.win.eventdata.sourceIp",
-        ]
-        to_addr_fields = [
-            "data.dstip",
-            "data.dest_ip",
-            "data.win.eventdata.destinationIp",
-            "agent.ip",
-        ]
-        addrs = {
-            addr: sco
-            for alert in alerts
-            for addr in search_fields(
-                alert["_source"], from_addr_fields + to_addr_fields
-            ).values()
-            for sco in (self.stix.create_addr_sco(addr),)
-        }
-        results = {
-            sco.id: {"sco": sco, "alert": alert}
-            for alert in alerts
-            for src_ref in (
-                addrs.get(
-                    first_or_empty(
-                        list(search_fields(alert["_source"], from_addr_fields).values())
-                    )
-                ),
-            )
-            for dst_ref in (
-                addrs.get(
-                    first_or_empty(
-                        list(search_fields(alert["_source"], to_addr_fields).values())
-                    )
-                ),
-            )
-            for src_port in (
-                first_or_none(
-                    list(
-                        search_fields(
-                            alert["_source"],
-                            [
-                                "data.src_port",
-                                "data.srcport",
-                                "data.win.eventdata.sourcePort",
-                            ],
-                        ).values()
-                    )
-                ),
-            )
-            for dst_port in (
-                first_or_none(
-                    list(
-                        search_fields(
-                            alert["_source"],
-                            [
-                                "data.dest_port",
-                                "data.dstport",
-                                "data.win.eventdata.destinationPort",
-                            ],
-                        ).values()
-                    )
-                ),
-            )
-            for protocols in (
-                ip_protos(
-                    *search_fields(
-                        alert["_source"], from_addr_fields + to_addr_fields
-                    ).values()
-                )
-                + list(
-                    search_fields(
-                        alert["_source"], ["data.win.eventdata.protocol"]
-                    ).values()
-                ),
-            )
-            for sco in (
-                stix2.NetworkTraffic(
-                    src_ref=src_ref,
-                    dst_ref=dst_ref,
-                    src_port=src_port,
-                    dst_port=dst_port,
-                    protocols=protocols,  # TODO: add protocols like ssh, http, smb from known events
-                    # TOOD: add ssh, smb, ldap  protocol etc.
-                    description=connection_string(
-                        src_ref=src_ref,
-                        src_port=src_port,
-                        dst_ref=dst_ref,
-                        dst_port=dst_port,
-                        protos=protocols,
-                    ),
-                    allow_custom=True,
-                    **self.stix_common_attrs,
-                    labels=self.enrich_labels,
-                ),
-            )
-            # A NetworkTraffic object isn't interesting if we have a least two addresses or ports:
-            if non_none(src_ref, src_port, dst_ref, dst_port, threshold=2)
-        }
-        # Only includes addresses that are referenced:
-        return [
-            addr
-            for addr in addrs.values()
-            for meta in results.values()
-            for traffic in (meta["sco"],)
-            if addr.id in traffic.src_ref or addr.id in traffic.dst_ref
-        ] + [
-            stix
-            for meta in results.values()
-            for alert in (meta["alert"],)
-            for sco in (meta["sco"],)
-            for stix in (
-                sco,
-                stix2.Relationship(
-                    id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, sco.id
-                    ),
-                    created=alert["_source"]["@timestamp"],
-                    **self.stix_common_attrs,
-                    relationship_type="related-to",
-                    description=f"Network-Traffic found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
-                    source_ref=incident.id,
-                    target_ref=sco.id,
-                ),
-            )
-        ]
-
-    def create_enrichment_obs_from_search(
-        self,
-        *,
-        incident: stix2.Incident,
-        alerts: list[dict],
-        type: str,
-        fields: list[str],
-    ):
-        results = {
-            match: {
-                "field": field,
-                "sco": self.stix.create_sco(type, value=match),
-                "alert": alert,
-            }
-            for alert in alerts
-            for field, match in search_fields(alert["_source"], fields).items()
-        }
-        return [
-            stix
-            for match, meta in results.items()
-            for alert in (meta["alert"],)
-            for sco in (meta["sco"],)
-            for stix in (
-                sco,
-                stix2.Relationship(
-                    id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, sco.id
-                    ),
-                    created=alert["_source"]["@timestamp"],
-                    **self.stix_common_attrs,
-                    relationship_type="related-to",
-                    description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
-                    source_ref=incident.id,
-                    target_ref=sco.id,
-                ),
-            )
-        ]
-
-    def create_enrichment_obs_from_search_context(
-        self,
-        *,
-        incident: stix2.Incident,
-        alerts: list[dict],
-        type,
-        SCO: Any,
-        property_field_map: dict[str, dict[str, list[str]]],
-    ):
-        results = {
-            sco.id: {
-                "sco": sco,
-                "alert": alert,
-            }
-            for alert in alerts
-            for sco in (
-                SCO(
-                    **{
-                        property: match
-                        for property, map in property_field_map.items()
-                        for pattern, fields in map.items()
-                        for match in search_fields(
-                            alert["_source"], fields, regex=pattern
-                        ).values()
-                    },
-                    allow_custom=True,
-                    **self.stix_common_attrs,
-                    labels=self.enrich_labels,
-                ),
-            )
-        }
-        self.helper.log_info(results)
-        return [
-            stix
-            for meta in results.values()
-            for alert in (meta["alert"],)
-            for sco in (meta["sco"],)
-            for stix in (
-                sco,
-                stix2.Relationship(
-                    id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, sco.id
-                    ),
-                    created=alert["_source"]["@timestamp"],
-                    **self.stix_common_attrs,
-                    relationship_type="related-to",
-                    description=f"{type} found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
-                    source_ref=incident.id,
-                    target_ref=sco.id,
-                ),
-            )
-        ]
 
     def create_agent_addr_obs(self, *, alerts: list[dict]):
         agents = {
@@ -1926,14 +1388,14 @@ class WazuhConnector:
             addr = SCO(
                 value=agent["ip"],
                 allow_custom=True,
-                **self.stix_common_attrs,
-                labels=self.enrich_labels,
+                **self.stix.common_properties,
+                labels=self.stix.sco_labels,
             )
             rel = stix2.Relationship(
                 id=StixCoreRelationship.generate_id(
                     "related-to", agent["standard_id"], addr.id
                 ),
-                **self.stix_common_attrs,
+                **self.stix.common_properties,
                 relationship_type="related-to",
                 source_ref=agent["standard_id"],
                 target_ref=addr.id,
@@ -1992,14 +1454,14 @@ class WazuhConnector:
             hostname = CustomObservableHostname(
                 value=agent["name"],
                 allow_custom=True,
-                **self.stix_common_attrs,
-                labels=self.enrich_labels,
+                **self.stix.common_properties,
+                labels=self.stix.sco_labels,
             )
             rel = stix2.Relationship(
                 id=StixCoreRelationship.generate_id(
                     "related-to", agent["standard_id"], hostname.id
                 ),
-                **self.stix_common_attrs,
+                **self.stix.common_properties,
                 relationship_type="related-to",
                 source_ref=agent["standard_id"],
                 target_ref=hostname.id,
@@ -2020,31 +1482,3 @@ class WazuhConnector:
             bundle.append(rel)
 
         return bundle
-
-    def create_incident_response_case(
-        self, *, entity: dict, result: dict, bundle: list[Any]
-    ):
-        incidents = [obj for obj in bundle if isinstance(obj, stix2.Incident)]
-        timestamp = max(incident.created for incident in incidents)
-        severity = max_severity([incident.severity for incident in incidents])
-        sightings_count = reduce(
-            lambda sum, sighting: sum + sighting.count,
-            [obj for obj in bundle if isinstance(obj, stix2.Sighting)],
-            0,
-        )
-        hits_dropped = result["hits"]["total"]["value"] > len(result["hits"]["hits"])
-        name = f"{entity_name_value(entity)} sighted {sightings_count}{'+' if hits_dropped else ''} time(s)"
-        refs = bundle + [entity["standard_id"]]
-        refs.remove(self.author)
-        return (
-            CustomObjectCaseIncident(
-                id=CaseIncident.generate_id(name, timestamp),
-                name=name,
-                description="FIXME",
-                severity=severity,
-                priority=priority_from_severity(severity),
-                **self.stix_common_attrs,
-                # This should be okay, because these refs can be any of SCO, SDO and SRO:
-                object_refs=refs,
-            ),
-        )

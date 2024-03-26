@@ -18,7 +18,9 @@ from ntpath import basename
 
 
 class AlertSearcher(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        arbitrary_types_allowed=True
+    )  # For OpenCTIConnectorHelper
     helper: OpenCTIConnectorHelper  # for logging only
     opensearch: OpenSearchClient
     ignore_private_addrs: bool
