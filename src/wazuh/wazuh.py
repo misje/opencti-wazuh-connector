@@ -52,7 +52,6 @@ from .enrich import Enricher
 
 # TODO: Enrichment connector that uses snipeit to get system owner
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
-# TODO: Identities for AWS, GitHub, Office365, etc.(?)
 # TODO: inconsistent use of _ in func. names. Fix when cleaning up, modularise and move utils into utils, stix into stix(?) modules
 # TODO: update wazuh api completely in background
 # FIXME: Ignoring obs. from Wazuh is not a good solution. Manual enrichment must be allowed, if so.
@@ -68,6 +67,7 @@ from .enrich import Enricher
 # - files
 # - directories
 # FIXME: 188.95.241.209 creates missing ref to what I assume is wazu siem system
+# TODO: Identities for AWS, GitHub, Office365, etc.(?)
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -674,15 +674,11 @@ class WazuhConnector:
                 f"Too many hits ({hit_count}) > {self.hits_abort_limit}): aborting"
             )
 
-        # The sigher is the Wazuh SIEM identity unless later overriden by
-        # agents_as_systems:
-        sighter = self.siem_system
         # Use a helper module to create as few sighting objects as possible,
         # and modify their first_seen, last_seen and count instead:
         sightings_collector = SightingsCollector(observable_id=entity["standard_id"])
         agents = {}
         # The complete STIX bundle to send:
-        # TODO: Only add if used (siem_system):
         bundle = [self.author, self.siem_system]
         for hit in hits:
             try:
@@ -694,6 +690,8 @@ class WazuhConnector:
                     and int(s["agent"]["id"]) > 0
                 ):
                     agents[s["agent"]["id"]] = sighter = self.create_agent_stix(hit)
+                else:
+                    sighter = self.siem_system
 
                 sightings_collector.add(
                     timestamp=s["@timestamp"],
