@@ -53,9 +53,10 @@ class Type(Enum):
     URL = "url"
     File = "file"
     Directory = "directory"
+    Domain = "domain-name"
     IPv4Address = "ipv4-addr"
     IPv6Address = "ipv6-addr"
-    EMailAddr = "Email-Addr"
+    EMailAddr = "email-addr"
     RegistryKey = "windows-registry-key"
     NetworkTraffic = "network-traffic"
 
@@ -111,11 +112,14 @@ class Enricher(BaseModel):
             bundle += self.enrich_addrs(
                 incident=incident, alerts=alerts, type="IPv6-Addr"
             )
-        # TODO: enrich domains
         # TODO: enrich  mac addrs
         # TODO: enrich UserAgent (data.aws.userAgent)
+        # TODO: enrich Process
+        # TODO: enrich software(?)
         if Type.NetworkTraffic in self.types:
             bundle += self.enrich_traffic(incident=incident, alerts=alerts)
+        if Type.Domain in self.types:
+            bundle += self.enrich_domains(incident=incident, alerts=alerts)
 
         return bundle
 
@@ -589,6 +593,23 @@ class Enricher(BaseModel):
                 ),
             )
         ]
+
+    def enrich_domains(self, *, incident: stix2.Incident, alerts: list[dict]):
+        return self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            type="Domain-Name",
+            fields=[
+                "data.osquery.columns.hostname",  # FQDN
+                "data.dns.question.name",
+                "data.win.eventdata.queryName",
+                "data.office365.ParticipantInfo.ParticipatingDomains",
+            ],
+            # ParticipatingDomains is a list, so create a SCO for each entry:
+            transform=(
+                lambda x: [(i, {}) for i in x] if isinstance(x, list) else [(x, {})]
+            ),
+        )
 
     def create_enrichment_obs_from_search(
         self,

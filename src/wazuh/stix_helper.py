@@ -264,6 +264,8 @@ class StixHelper(BaseModel):
         match type:
             case "Directory":
                 return stix2.Directory(path=value, **common_attrs, **properties)
+            case "Domain-Name":
+                return stix2.DomainName(value=value, **common_attrs, **properties)
             case "Email-Addr":
                 return stix2.EmailAddress(value=value, **common_attrs, **properties)
             case "IPv4-Addr":

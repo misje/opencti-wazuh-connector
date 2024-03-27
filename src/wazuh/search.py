@@ -317,6 +317,7 @@ class AlertSearcher(BaseModel):
             "*.netbios_hostname",
             "data.dns.question.name",
             "data.win.eventdata.queryName",
+            # Don't search for data.office365.ParticipantInfo.ParticipatingDomains. Too many results. and not useful?
         ]
         hostname = entity["observable_value"]
         if self.search_agent_name:
