@@ -25,6 +25,8 @@ from .utils import (
     ip_proto,
     ip_protos,
     connection_string,
+    validate_mac,
+    normalise_mac,
 )
 
 # TODO: Move a lot into stix_helper
@@ -59,6 +61,7 @@ class Type(Enum):
     EMailAddr = "email-addr"
     RegistryKey = "windows-registry-key"
     NetworkTraffic = "network-traffic"
+    MAC = "max-addr"
 
 
 class Enricher(BaseModel):
@@ -112,6 +115,8 @@ class Enricher(BaseModel):
             bundle += self.enrich_addrs(
                 incident=incident, alerts=alerts, type="IPv6-Addr"
             )
+        if Type.MAC in self.types:
+            bundle += self.enrich_macs(incident=incident, alerts=alerts)
         # TODO: enrich  mac addrs
         # TODO: enrich UserAgent (data.aws.userAgent)
         # TODO: enrich Process
@@ -463,6 +468,34 @@ class Enricher(BaseModel):
             == ("ipv4" if type == "IPv4-Addr" else "ipv6"),
         )
 
+    def enrich_macs(
+        self,
+        *,
+        incident: stix2.Incident,
+        alerts: list[dict],
+    ):
+        return self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            type="Mac-Addr",
+            fields=[
+                "data.dmac",  # fireeye
+                "data.dstMac",  # sonicwall
+                "data.dst_mac",
+                "data.dstmac",
+                "data.mastersrcmac",  # fortigate
+                "data.osquery.columns.interface",
+                "data.osquery.columns.mac",
+                "data.smac",  # fireeye
+                "data.srcMac",  # sonicwall
+                "data.src_mac",  # cisco-asa, sophos
+                "data.srcmac",  # fortigate
+            ],
+            validator=validate_mac,
+            # Normalise MAC addresses to lower-case hyphen-separated format, which STIX requires:
+            transform=lambda x: [(normalise_mac(x), {})],
+        )
+
     def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):
         # TODO: Add domainnames too if relevant in any fields
         from_addr_fields = [
@@ -611,6 +644,7 @@ class Enricher(BaseModel):
             ),
         )
 
+    # TODO: Add a precondition callable that takes an alert and returns bool.
     def create_enrichment_obs_from_search(
         self,
         *,

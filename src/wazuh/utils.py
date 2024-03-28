@@ -516,3 +516,51 @@ def connection_string(
         " → "
         f"{dst_ref.value if dst_ref else '?'}:{dst_port if dst_port is not None else '?'}"
     )
+
+
+def validate_mac(mac: str) -> bool:
+    """
+    Return true if the provided string is a valid MAC format
+
+    Examples:
+    >>> validate_mac('01:02:03:04:ab:CD')
+    True
+    >>> validate_mac('01-02-03-04-ab-CD')
+    True
+    >>> validate_mac('01:02-03:04-ab:CD')
+    False
+    >>> validate_mac('01020304abCD')
+    True
+    >>> validate_mac('0102.0304.abCD') # Cisco-style
+    True
+    """
+    # Allow hyphons, colons or no separators, but require the separators to be
+    # consistent. Or match a Cisco-style format:
+    return bool(
+        re.match(
+            r"^(?:(?:[0-9A-Fa-f]{2}(?=([-:]|))(?:\1[0-9A-Fa-f]{2}){5}))$|^[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}\.[0-9A-Fa-f]{4}$",
+            mac,
+        )
+    )
+
+
+def normalise_mac(mac: str) -> str:
+    """
+    Return a MAC with colons and loer-case characters
+
+    The string must be a valid mac, otherwise an exception is possibly thrown.
+
+    Examples:
+    >>> normalise_mac('01:02:03:04:ab:CD')
+    '01:02:03:04:ab:cd'
+    >>> normalise_mac('01-02-03-04-ab-CD')
+    '01:02:03:04:ab:cd'
+    >>> normalise_mac('01:02-03:04-ab:CD')
+    '01:02:03:04:ab:cd'
+    >>> normalise_mac('01020304abCD')
+    '01:02:03:04:ab:cd'
+    >>> normalise_mac('0102.0304.abCD') # Cisco-style
+    '01:02:03:04:ab:cd'
+    """
+    m = re.sub("[^0-9A-Fa-f]", "", mac).lower()
+    return "%s:%s:%s:%s:%s:%s" % (m[0:2], m[2:4], m[4:6], m[6:8], m[8:10], m[10:12])

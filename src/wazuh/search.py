@@ -166,6 +166,7 @@ class AlertSearcher(BaseModel):
             "*.src_ip",
             "*.srcip",
             "data.win.eventdata.queryName",
+            "data.osquery.columns.address",
         ]
         address = entity["observable_value"]
         # This throws if the value is not an IP address. Accept this:

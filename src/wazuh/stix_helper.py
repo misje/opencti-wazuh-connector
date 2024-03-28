@@ -272,6 +272,8 @@ class StixHelper(BaseModel):
                 return stix2.IPv4Address(value=value, **common_attrs, **properties)
             case "IPv6-Addr":
                 return stix2.IPv6Address(value=value, **common_attrs, **properties)
+            case "Mac-Addr":
+                return stix2.MACAddress(value=value, **common_attrs, **properties)
             case "Url":
                 return stix2.URL(value=value, **common_attrs, **properties)
             case "User-Account":
