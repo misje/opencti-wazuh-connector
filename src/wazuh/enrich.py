@@ -62,6 +62,7 @@ class Type(Enum):
     RegistryKey = "windows-registry-key"
     NetworkTraffic = "network-traffic"
     MAC = "max-addr"
+    UserAgent = "user-agent"
 
 
 class Enricher(BaseModel):
@@ -117,8 +118,8 @@ class Enricher(BaseModel):
             )
         if Type.MAC in self.types:
             bundle += self.enrich_macs(incident=incident, alerts=alerts)
-        # TODO: enrich  mac addrs
-        # TODO: enrich UserAgent (data.aws.userAgent)
+        if Type.UserAgent in self.types:
+            bundle += self.enrich_user_agents(incident=incident, alerts=alerts)
         # TODO: enrich Process
         # TODO: enrich software(?)
         if Type.NetworkTraffic in self.types:
@@ -494,6 +495,21 @@ class Enricher(BaseModel):
             validator=validate_mac,
             # Normalise MAC addresses to lower-case hyphen-separated format, which STIX requires:
             transform=lambda x: [(normalise_mac(x), {})],
+        )
+
+    def enrich_user_agents(
+        self,
+        *,
+        incident: stix2.Incident,
+        alerts: list[dict],
+    ):
+        return self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            type="User-Agent",
+            fields=[
+                "data.aws.userAgent",
+            ],
         )
 
     def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):

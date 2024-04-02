@@ -1,6 +1,6 @@
 import stix2
 import re
-from pycti import OpenCTIConnectorHelper, Tool
+from pycti import OpenCTIConnectorHelper, Tool, CustomObservableUserAgent
 from pydantic import BaseModel
 from typing import Annotated, Any, Final, Literal, Sequence
 from .utils import (
@@ -280,6 +280,10 @@ class StixHelper(BaseModel):
                 return self.create_account_from_username(value, **properties)
             case "StixFile":
                 return stix2.File(name=value, **common_attrs, **properties)
+            case "User-Agent":
+                return CustomObservableUserAgent(
+                    value=value, **common_attrs, **properties
+                )
             case "Windows-Registry-Key":
                 return stix2.WindowsRegistryKey(key=value, **common_attrs, **properties)
             case _:
