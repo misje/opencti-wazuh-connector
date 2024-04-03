@@ -650,6 +650,7 @@ class WazuhConnector:
             else:
                 self._query_api(entity, stix_entity)
 
+        # TODO: If StixFile, extract path from parent_directory_ref:
         result = self.alert_searcher.search(entity=entity, stix_entity=stix_entity)
         if result is None:
             # Even though the entity is supported (an exception is throuwn

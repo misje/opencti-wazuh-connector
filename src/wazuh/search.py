@@ -68,6 +68,7 @@ class AlertSearcher(BaseModel):
                     f'{entity["entity_type"]} is not a supported entity type'
                 )
 
+    # TODO: when parent_directory_ref is available, use that as search path. Optionally search for filenames with paths too.
     def query_file(self, *, entity: dict, stix_entity: dict) -> dict | None:
         # TODO: wazuh_api: syscheck/id/{file,sha256}
         # TODO: Use name as well as hash if defined (optional, config)
@@ -104,9 +105,11 @@ class AlertSearcher(BaseModel):
                     "data.smbd.filename",
                     "data.smbd.new_filename",
                     "data.virustotal.source.file",
-                    "data.win.eventdata.targetFilename",
                     "data.win.eventdata.file",
                     "data.win.eventdata.filePath",
+                    "data.win.eventdata.image",
+                    "data.win.eventdata.parentImage",
+                    "data.win.eventdata.targetFilename",
                     "syscheck.path",
                 ],
                 # Search for paths ignoring case for better experience
@@ -351,6 +354,7 @@ class AlertSearcher(BaseModel):
             value=entity["observable_value"],
         )
 
+    # FIXME: Why no hits for C:\Program Files (x86)\ossec-agent\? Works in dev tools
     def query_directory(self, *, stix_entity: dict) -> dict | None:
         # TODO: go through current field list and organise into fields
         # that expects an escaped path and those that don't:
@@ -388,6 +392,9 @@ class AlertSearcher(BaseModel):
                 "syscheck.path",
             ]
         ]
+        # TODO: data.win.eventdata.currentDirectory typically has trailing slash(?)
+        # Make into regex with optional slash at the end?
+        # Case insensitive would be best too
         return self.opensearch.search(
             should=[
                 {

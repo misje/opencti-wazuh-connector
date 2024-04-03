@@ -73,7 +73,7 @@ def has_atleast(obj: dict, *keys, threshold=1) -> bool:
     return sum(key in obj for key in keys) >= threshold
 
 
-def oneof(*keys: str, within: dict, default=None) -> Any:
+def oneof(*keys: str, within: dict | None, default=None) -> Any:
     """
     Return the value of the first key that exists in the dict, or None.
 
@@ -83,7 +83,10 @@ def oneof(*keys: str, within: dict, default=None) -> Any:
     >>> oneof('foo', 'bar', within={'baz': 42}, default=1)
     1
     """
-    return next((within[key] for key in keys if key in within), default)
+    if not within:
+        return default
+    else:
+        return next((within[key] for key in keys if key in within), default)
 
 
 def oneof_nonempty(*keys: str, within: dict, default=None) -> Any:
@@ -132,6 +135,31 @@ def first_or_empty(values: list[str]) -> str:
     Return the first value in the list or an empty string if the list is empty
     """
     return values[0] if values else ""
+
+
+def first_of(values: list[Any], type: type) -> Any:
+    """
+    Return the first item of the given type in the list
+
+    Examples:
+    >>> first_of([1, '2'], str)
+    '2'
+    >>> first_of([1, '2'], dict)
+    """
+    return first_or_none(list(filter(lambda x: isinstance(x, type), values)))
+
+
+def filter_truthly(*values: Any) -> list[Any]:
+    """
+    Return a list of all items that are truthly
+
+    Examples:
+    >>> filter_truthly(None)
+    []
+    >>> filter_truthly(None, 1, '')
+    [1]
+    """
+    return list(filter(lambda x: x, values))
 
 
 def re_search_or_none(pattern: str, string: str):
@@ -220,6 +248,18 @@ def search_field(obj: dict, field: str, *, regex: str = "") -> str | None:
     'bar'
     """
     return search_fields(obj, [field], regex=regex).get(field)
+
+
+def simplify_field_names(obj: dict) -> dict:
+    """
+    Remove the common prefix in all dict keys
+
+    Examples:
+    >>> simplify_field_names({'a.b.c': 1, 'a.b.d': 2, 'a.b.e': 3})
+    {'c': 1, 'd': 2, 'e': 3}
+    """
+    common = common_prefix_string(list(obj.keys()), elideString="")
+    return {key.replace(common, ""): value for key, value in obj.items()}
 
 
 def compare_field(obj1: dict, obj2: dict, field: str) -> bool:
@@ -564,3 +604,16 @@ def normalise_mac(mac: str) -> str:
     """
     m = re.sub("[^0-9A-Fa-f]", "", mac).lower()
     return "%s:%s:%s:%s:%s:%s" % (m[0:2], m[2:4], m[4:6], m[6:8], m[8:10], m[10:12])
+
+
+def parse_sha256(hashes_str: str) -> str | None:
+    """
+    Extract anything that looks like a SHA-256 hash from the string, or None
+
+    Examples:
+    >>> parse_sha256("SHA1=6E6BE6D81CB3B1E452F2AC0D7BEE162320A74DDA,MD5=4BB07B66D8D8DF05E437CF456FC7CCBC,SHA256=D4703A80CD98F93C6BC2CA04A92D994579D563541C35CD65776A5FE64AD385EE,IMPHASH=9646AFB1056B0472B325E82B3B78629D")
+    'D4703A80CD98F93C6BC2CA04A92D994579D563541C35CD65776A5FE64AD385EE'
+    """
+    return (
+        match.group(0) if (match := re.search("[A-Fa-f0-9]{64}", hashes_str)) else None
+    )

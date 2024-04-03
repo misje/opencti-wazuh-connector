@@ -17,6 +17,7 @@ from .utils import (
     has,
     first_or_none,
     first_or_empty,
+    first_of,
     search_fields,
     search_field,
     field_compare,
@@ -27,6 +28,9 @@ from .utils import (
     connection_string,
     validate_mac,
     normalise_mac,
+    simplify_field_names,
+    parse_sha256,
+    oneof,
 )
 
 # TODO: Move a lot into stix_helper
@@ -63,6 +67,7 @@ class Type(Enum):
     NetworkTraffic = "network-traffic"
     MAC = "max-addr"
     UserAgent = "user-agent"
+    Process = "process"
 
 
 class Enricher(BaseModel):
@@ -78,7 +83,9 @@ class Enricher(BaseModel):
     @classmethod
     def parse_type_string(cls, types):
         if isinstance(types, str):
-            if types == "all":
+            if not types:
+                return set()
+            elif types == "all":
                 return set(Type)
             else:
                 # If this is a string, parse it as a comma-separated string with
@@ -120,7 +127,8 @@ class Enricher(BaseModel):
             bundle += self.enrich_macs(incident=incident, alerts=alerts)
         if Type.UserAgent in self.types:
             bundle += self.enrich_user_agents(incident=incident, alerts=alerts)
-        # TODO: enrich Process
+        if Type.Process in self.types:
+            bundle += self.enrich_processes(incident=incident, alerts=alerts)
         # TODO: enrich software(?)
         if Type.NetworkTraffic in self.types:
             bundle += self.enrich_traffic(incident=incident, alerts=alerts)
@@ -302,6 +310,10 @@ class Enricher(BaseModel):
     def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
         # FIXME: add a re_negate to search_fields and exclude HKEY_:
         # First search for fields that may contain filenames/paths, but without hashes:
+        # TODO: Create directory (optional?) with parent_directory_ref)
+        # TODO: Ask filigran if filename is truly only the filename, without any path
+        # Config: Search filenames without path? Search filenames with paths(?)
+        # Problem: File with nested object parent directory is not part of STIX sent to File observable
         results = {
             match: {
                 "field": field,
@@ -512,6 +524,108 @@ class Enricher(BaseModel):
             ],
         )
 
+    def enrich_processes(
+        self,
+        *,
+        incident: stix2.Incident,
+        alerts: list[dict],
+    ):
+        return self.enrich_processes_sysmon(incident=incident, alerts=alerts)
+
+    def enrich_processes_sysmon(
+        self,
+        *,
+        incident: stix2.Incident,
+        alerts: list[dict],
+    ):
+        bundle = []
+        for alert in alerts:
+            data = simplify_field_names(
+                search_fields(
+                    alert["_source"],
+                    [
+                        "data.win.eventdata.commandLine",
+                        "data.win.eventdata.currentDirectory",
+                        "data.win.eventdata.hashes",
+                        "data.win.eventdata.image",
+                        "data.win.eventdata.parentCommandLine",
+                        "data.win.eventdata.parentImage",
+                        "data.win.eventdata.parentProcessId",
+                        "data.win.eventdata.parentUser",
+                        "data.win.eventdata.processId",
+                        "data.win.eventdata.user",
+                    ],
+                )
+            )
+            if not data:
+                continue
+
+            creator = image = parent = None
+            if "user" in data:
+                bundle += [
+                    creator := self.stix.create_sco("User-Account", data["user"])
+                ]
+            if "image" in data:
+                file_bundle = self.stix.create_file(
+                    [data["image"]],
+                    sha256=parse_sha256(oneof("hashes", within=data, default="")),
+                )
+
+                bundle += file_bundle
+                image = first_of(file_bundle, stix2.File)
+            if "parentProcessId" in data:
+                p_image = p_creator = None
+                if "parentUser" in data:
+                    bundle += [
+                        p_creator := self.stix.create_sco(
+                            "User-Account", data["parentUser"]
+                        )
+                    ]
+                if "parentImage" in data:
+                    file_bundle = self.stix.create_file(
+                        [data["parentImage"]],
+                        sha256=parse_sha256(oneof("hashes", within=data, default="")),
+                        labels=self.stix.sco_labels,
+                    )
+
+                    bundle += file_bundle
+                    p_image = first_of(file_bundle, stix2.File)
+
+                bundle += [
+                    parent := self.stix.create_sco(
+                        "Process",
+                        value=oneof("parentProcessId", within=data),
+                        command_line=oneof("parentCommandLine", within=data),
+                        creator_user_ref=oneof("id", within=p_creator),
+                        image_ref=oneof("id", within=p_image),
+                    )
+                ]
+
+            bundle += [
+                process := self.stix.create_sco(
+                    "Process",
+                    value=oneof("processId", within=data),
+                    cwd=oneof("currentDirectory", within=data),
+                    command_line=oneof("commandLine", within=data),
+                    creator_user_ref=oneof("id", within=creator),
+                    image_ref=oneof("id", within=image),
+                    parent_ref=oneof("id", within=parent),
+                ),
+                stix2.Relationship(
+                    id=StixCoreRelationship.generate_id(
+                        "related-to", incident.id, process.id
+                    ),
+                    created=alert["_source"]["@timestamp"],
+                    **self.stix.common_properties,
+                    relationship_type="related-to",
+                    description=f"Process found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
+                    source_ref=incident.id,
+                    target_ref=process.id,
+                ),
+            ]
+
+        return bundle
+
     def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):
         # TODO: Add domainnames too if relevant in any fields
         from_addr_fields = [
@@ -652,6 +766,7 @@ class Enricher(BaseModel):
                 "data.osquery.columns.hostname",  # FQDN
                 "data.dns.question.name",
                 "data.win.eventdata.queryName",
+                "data.win.system.computer",
                 "data.office365.ParticipantInfo.ParticipatingDomains",
             ],
             # ParticipatingDomains is a list, so create a SCO for each entry:
