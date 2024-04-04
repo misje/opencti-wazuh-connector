@@ -1,6 +1,6 @@
 import re
 import ipaddress
-from typing import Any, Callable, Literal, TypeVar
+from typing import Any, Callable, Literal, Mapping, TypeVar
 from os.path import commonprefix
 
 U = TypeVar("U")
@@ -75,7 +75,7 @@ def has_atleast(obj: dict, *keys, threshold=1) -> bool:
     return sum(key in obj for key in keys) >= threshold
 
 
-def oneof(*keys: str, within: dict | None, default=None) -> Any:
+def oneof(*keys: str, within: Mapping | None, default=None) -> Any:
     """
     Return the value of the first key that exists in the dict, or None.
 

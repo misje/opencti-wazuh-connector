@@ -12,7 +12,7 @@ from pycti import (
 )
 from .stix_helper import (
     StixHelper,
-    SCO,
+    SCOBundle,
 )
 from .utils import (
     create_if,
@@ -253,6 +253,7 @@ class Enricher(BaseModel):
         return bundle
 
     def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
+        # TODO: Optionally guess (setting) user_id–account_name by looking for alerts where both are present (for the same agent)
         return self.create_enrichment_obs_from_search_context(
             incident=incident,
             alerts=alerts,
@@ -404,31 +405,25 @@ class Enricher(BaseModel):
                         ),
                         "alert": alert,
                     }
-        nested_objs = [
-            obj
-            for meta in results.values()
-            for _, objs in (meta["sco"],)
-            for obj in objs
-        ]
-        return nested_objs + [
+        return [
             stix
             for match, meta in results.items()
             for alert in (meta["alert"],)
-            for sco, _ in (meta["sco"],)
-            for stix in (
-                sco,
+            for sco_bundle in (meta["sco"],)
+            for stix in sco_bundle.objects()
+            + [
                 stix2.Relationship(
                     id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, sco.id
+                        "related-to", incident.id, sco_bundle.sco.id
                     ),
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
                     description=f"StixFile {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
                     source_ref=incident.id,
-                    target_ref=sco.id,
+                    target_ref=sco_bundle.sco.id,
                 ),
-            )
+            ]
         ]
 
     def enrich_reg_keys(self, *, incident: stix2.Incident, alerts: list[dict]):
@@ -461,31 +456,25 @@ class Enricher(BaseModel):
             for type in (search_field(alert["_source"], "syscheck.value_type"),)
             for value in (search_field(alert["_source"], "syscheck.value_name"),)
         }
-        nested_objs = [
-            obj
-            for meta in results.values()
-            for _, objs in (meta["sco"],)
-            for obj in objs
-        ]
-        return nested_objs + [
+        return [
             stix
             for match, meta in results.items()
             for alert in (meta["alert"],)
-            for sco, _ in (meta["sco"],)
-            for stix in (
-                sco,
+            for sco_bundle in (meta["sco"],)
+            for stix in sco_bundle.objects()
+            + [
                 stix2.Relationship(
                     id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, sco.id
+                        "related-to", incident.id, sco_bundle.sco.id
                     ),
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
                     description=f"Windows-Registry-Key {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
                     source_ref=incident.id,
-                    target_ref=sco.id,
+                    target_ref=sco_bundle.sco.id,
                 ),
-            )
+            ]
         ]
 
     def enrich_addrs(
@@ -684,35 +673,34 @@ class Enricher(BaseModel):
         bundle = []
         creator = image = parent = None
         if meta.creator:
-            bundle += [
-                creator := self.stix.create_sco(
-                    "User-Account",
-                    meta.creator.account_login,  # type: ignore
-                    user_id=meta.creator.user_id,
-                )
-            ]
+            scos = self.stix.create_sco(
+                "User-Account",
+                meta.creator.account_login,  # type: ignore
+                user_id=meta.creator.user_id,
+            )
+            creator = scos.sco
+            bundle += scos.objects()
         if meta.image:
-            file_bundle = self.stix.create_file(
+            scos = self.stix.create_file(
                 [meta.image.filename],  # type: ignore
                 sha256=meta.image.sha256,
             )
-
-            bundle += file_bundle
-            image = first_of(file_bundle, stix2.File)
+            image = scos.sco
+            bundle += scos.objects()
         if meta.parent:
             bundle += self.create_process(meta=meta.parent)
 
-        bundle += [
-            process := self.stix.create_sco(
-                "Process",
-                value=meta.pid,  # type: ignore
-                cwd=meta.cwd,
-                command_line=meta.command_line,
-                creator_user_ref=oneof("id", within=creator),
-                image_ref=oneof("id", within=image),
-                parent_ref=oneof("id", within=parent),
-            ),
-        ]
+        scos = self.stix.create_sco(
+            "Process",
+            value=meta.pid,  # type: ignore
+            cwd=meta.cwd,
+            command_line=meta.command_line,
+            creator_user_ref=oneof("id", within=creator),
+            image_ref=oneof("id", within=image),
+            parent_ref=oneof("id", within=parent),
+        )
+        bundle += scos.objects()
+        process = scos.sco
         if incident and alert:
             bundle += [
                 stix2.Relationship(
@@ -892,7 +880,7 @@ class Enricher(BaseModel):
     ):
         # Create a dict where the key is the value found by searching the
         # alert, and the value is the STIX cyber observable:
-        def create_sco(match: Any) -> dict[str, SCO]:
+        def create_sco(match: Any) -> dict[str, SCOBundle]:
             if transform:
                 # If a custom transformation function is supplied, the value is
                 # probably not a simple string and need to be converted. The
@@ -913,7 +901,7 @@ class Enricher(BaseModel):
             # metadata to refer to:
             value: {
                 "field": field,
-                "sco": sco,
+                "sco": sco_bundle,
                 "alert": alert,
             }
             for alert in alerts
@@ -923,27 +911,27 @@ class Enricher(BaseModel):
             # transform function, but it's more user-friendly to use a simple
             # validation lambda:
             if not validator or validator(match)
-            for value, sco in create_sco(match).items()
+            for value, sco_bundle in create_sco(match).items()
         }
         return [
             stix
             for match, meta in results.items()
             for alert in (meta["alert"],)
-            for sco in (meta["sco"],)
-            for stix in (
-                sco,
+            for sco_bundle in (meta["sco"],)
+            for stix in sco_bundle.objects()
+            + [
                 stix2.Relationship(
                     id=StixCoreRelationship.generate_id(
-                        "related-to", incident.id, sco.id
+                        "related-to", incident.id, sco_bundle.sco.id
                     ),
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
                     description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']})",
                     source_ref=incident.id,
-                    target_ref=sco.id,
+                    target_ref=sco_bundle.sco.id,
                 ),
-            )
+            ]
         ]
 
     def create_enrichment_obs_from_search_context(
