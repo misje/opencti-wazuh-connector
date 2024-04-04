@@ -366,14 +366,17 @@ class StixHelper(BaseModel):
 
         return SCOBundle(
             sco=stix2.File(
-                name=main_name,
-                hash={"SHA-256": sha256} if sha256 else None,
-                parent_directory_ref=dir,
-                allow_custom=True,
-                **self.common_properties,
-                labels=self.sco_labels,
-                x_opencti_additional_names=extra_names,
-                **properties,
+                # Let "properties" override properties set here (like hashes):
+                **merge_outof(
+                    properties,
+                    name=main_name,
+                    hashes={"SHA-256": sha256} if sha256 else None,
+                    parent_directory_ref=dir,
+                    allow_custom=True,
+                    **self.common_properties,
+                    labels=self.sco_labels,
+                    x_opencti_additional_names=extra_names,
+                )
             ),
             nested_objs=filter_truthly(dir),
         )
@@ -441,7 +444,7 @@ class StixHelper(BaseModel):
                     sco=self.create_account_from_username(value, **properties)
                 )
             case "StixFile":
-                return self.create_file(names=listify(value))
+                return self.create_file(names=listify(value), **properties)
             case "User-Agent":
                 return _create_sco(CustomObservableUserAgent, value=value)
             case "Windows-Registry-Key":

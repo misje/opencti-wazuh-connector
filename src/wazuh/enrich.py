@@ -342,6 +342,7 @@ class Enricher(BaseModel):
             }
             for alert in alerts
             for field, match in remove_reg_paths(
+                # TODO: same as below: ignore reg.keys:
                 search_fields(
                     alert["_source"],
                     [
