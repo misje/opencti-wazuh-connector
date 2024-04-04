@@ -1,3 +1,4 @@
+from __future__ import annotations
 import stix2
 import re
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -14,10 +15,13 @@ from .stix_helper import (
     SCO,
 )
 from .utils import (
+    create_if,
     has,
+    has_atleast,
     first_or_none,
     first_or_empty,
     first_of,
+    join_values,
     search_fields,
     search_field,
     field_compare,
@@ -50,6 +54,25 @@ TransformCallback = Callable[
         "List of tuples, one for each SCO to be created",
     ],
 ]
+
+
+class AccountMeta(BaseModel):
+    account_login: str | None = None
+    user_id: str | None = None
+
+
+class FileMeta(BaseModel):
+    filename: str | None = None
+    sha256: str | None = None
+
+
+class ProcessMeta(BaseModel):
+    pid: int | None = None
+    cwd: str | None = None
+    command_line: str
+    creator: AccountMeta | None = None
+    image: FileMeta | None = None
+    parent: ProcessMeta | None = None
 
 
 class Type(Enum):
@@ -530,7 +553,9 @@ class Enricher(BaseModel):
         incident: stix2.Incident,
         alerts: list[dict],
     ):
-        return self.enrich_processes_sysmon(incident=incident, alerts=alerts)
+        return self.enrich_processes_sysmon(
+            incident=incident, alerts=alerts
+        ) + self.enrich_processes_auditd(incident=incident, alerts=alerts)
 
     def enrich_processes_sysmon(
         self,
@@ -557,60 +582,130 @@ class Enricher(BaseModel):
                     ],
                 )
             )
-            if not data:
+            # OpenCTI requires command_line, even if the STIX standard does not:
+            if "commandLine" not in data:
                 continue
 
-            creator = image = parent = None
-            if "user" in data:
-                bundle += [
-                    creator := self.stix.create_sco("User-Account", data["user"])
-                ]
-            if "image" in data:
-                file_bundle = self.stix.create_file(
-                    [data["image"]],
-                    sha256=parse_sha256(oneof("hashes", within=data, default="")),
-                )
-
-                bundle += file_bundle
-                image = first_of(file_bundle, stix2.File)
-            if "parentProcessId" in data:
-                p_image = p_creator = None
-                if "parentUser" in data:
-                    bundle += [
-                        p_creator := self.stix.create_sco(
-                            "User-Account", data["parentUser"]
-                        )
-                    ]
-                if "parentImage" in data:
-                    file_bundle = self.stix.create_file(
-                        [data["parentImage"]],
-                        sha256=parse_sha256(oneof("hashes", within=data, default="")),
-                        labels=self.stix.sco_labels,
-                    )
-
-                    bundle += file_bundle
-                    p_image = first_of(file_bundle, stix2.File)
-
-                bundle += [
-                    parent := self.stix.create_sco(
-                        "Process",
-                        value=oneof("parentProcessId", within=data),
-                        command_line=oneof("parentCommandLine", within=data),
-                        creator_user_ref=oneof("id", within=p_creator),
-                        image_ref=oneof("id", within=p_image),
-                    )
-                ]
-
-            bundle += [
-                process := self.stix.create_sco(
-                    "Process",
-                    value=oneof("processId", within=data),
+            bundle += self.create_process(
+                meta=ProcessMeta(
+                    pid=oneof("processId", within=data),
                     cwd=oneof("currentDirectory", within=data),
-                    command_line=oneof("commandLine", within=data),
-                    creator_user_ref=oneof("id", within=creator),
-                    image_ref=oneof("id", within=image),
-                    parent_ref=oneof("id", within=parent),
+                    command_line=data["commandLine"],
+                    creator=create_if(
+                        AccountMeta,
+                        condition=lambda: "user" in data,
+                        account_login=oneof("user", within=data),
+                    ),
+                    image=create_if(
+                        FileMeta,
+                        condition=lambda: has_atleast(data, "image", "hashes"),
+                        filename=oneof("image", within=data),
+                        sha256=parse_sha256(oneof("hashes", within=data, default="")),
+                    ),
+                    parent=create_if(
+                        ProcessMeta,
+                        condition=lambda: "parentCommandLine" in data,
+                        pid=oneof("parentProcessId", within=data),
+                        command_line=data["parentCommandLine"],
+                        creator=create_if(
+                            AccountMeta,
+                            condition=lambda: "parentUser" in data,
+                            account_login=oneof("parentUser", within=data),
+                        ),
+                        image=create_if(
+                            FileMeta,
+                            condition=lambda: "parentImage" in data,
+                            filename=oneof("parentImage", within=data),
+                        ),
+                    ),
                 ),
+                incident=incident,
+                alert=alert,
+            )
+        return bundle
+
+    def enrich_processes_auditd(self, *, incident: stix2.Incident, alerts: list[dict]):
+        bundle = []
+        for alert in alerts:
+            data = simplify_field_names(
+                search_fields(
+                    alert["_source"],
+                    [
+                        "data.audit.file.name",  # image_ref
+                        "data.audit.execve",  # command_line
+                        "data.audit.auid",  # creator
+                        "data.audit.pid",  # pid
+                        "data.audit.ppid",  # Can't use, because OpenCTI requires command_line
+                    ],
+                )
+            )
+            # OpenCTI requires command_line, even if the STIX standard does not:
+            if "execve" not in data:
+                continue
+
+            bundle += self.create_process(
+                meta=ProcessMeta(
+                    pid=oneof("pid", within=data),
+                    command_line=join_values(data["execve"], " "),
+                    creator=create_if(
+                        AccountMeta,
+                        condition=lambda: "auid" in data,
+                        user_id=oneof("auid", within=data),
+                    ),
+                    image=create_if(
+                        FileMeta,
+                        condition=lambda: "file.name" in data,
+                        filename=oneof("file.name", within=data),
+                    ),
+                ),
+                incident=incident,
+                alert=alert,
+            )
+        return bundle
+
+    def create_process(
+        self,
+        *,
+        meta: ProcessMeta,
+        incident: stix2.Incident | None = None,
+        alert: dict | None = None,
+    ):
+        bundle = []
+        creator = image = parent = None
+        if meta.creator:
+            bundle += [
+                creator := self.stix.create_sco(
+                    "User-Account",
+                    meta.creator.account_login,  # type: ignore
+                    user_id=meta.creator.user_id,
+                )
+            ]
+            self.helper.log_info(f"CREATOR: {meta.creator, creator}")
+        if meta.image:
+            file_bundle = self.stix.create_file(
+                [meta.image.filename],  # type: ignore
+                sha256=meta.image.sha256,
+            )
+
+            bundle += file_bundle
+            image = first_of(file_bundle, stix2.File)
+        if meta.parent:
+            bundle += self.create_process(meta=meta.parent)
+
+        self.helper.log_info(f"COMMAND LINE: {meta.command_line}")
+        bundle += [
+            process := self.stix.create_sco(
+                "Process",
+                value=meta.pid,  # type: ignore
+                cwd=meta.cwd,
+                command_line=meta.command_line,
+                creator_user_ref=oneof("id", within=creator),
+                image_ref=oneof("id", within=image),
+                parent_ref=oneof("id", within=parent),
+            ),
+        ]
+        if incident and alert:
+            bundle += [
                 stix2.Relationship(
                     id=StixCoreRelationship.generate_id(
                         "related-to", incident.id, process.id

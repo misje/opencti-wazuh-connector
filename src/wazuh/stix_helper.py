@@ -10,6 +10,7 @@ from .utils import (
     oneof_nonempty,
     allof_nonempty,
     ip_proto,
+    merge_outof,
 )
 from enum import Enum
 from ntpath import split
@@ -335,46 +336,51 @@ class StixHelper(BaseModel):
             **properties,
         )
 
-    def create_sco(self, type: str, value: str, **properties):
+    def create_sco(self, type: str, value: str | None, **properties):
         """
         Create a SCO from its type name and properties
+
+        If value is None, properties must contain the observable value.
         """
         common_attrs = {
             "allow_custom": True,
             **self.common_properties,
             "labels": self.sco_labels,
         }
+
+        def _create_sco(SCO, **kwargs):
+            # Allow "properties" to override:
+            return SCO(**merge_outof(properties, **common_attrs, **kwargs))
+
         match type:
             case "Directory":
-                return stix2.Directory(path=value, **common_attrs, **properties)
+                return _create_sco(stix2.Directory, path=value)
             case "Domain-Name":
-                return stix2.DomainName(value=value, **common_attrs, **properties)
+                return _create_sco(stix2.DomainName, value=value)
             case "Email-Addr":
-                return stix2.EmailAddress(value=value, **common_attrs, **properties)
+                return _create_sco(stix2.EmailAddress, value=value)
             case "IPv4-Addr":
-                return stix2.IPv4Address(value=value, **common_attrs, **properties)
+                return _create_sco(stix2.IPv4Address, value=value)
             case "IPv6-Addr":
-                return stix2.IPv6Address(value=value, **common_attrs, **properties)
+                return _create_sco(stix2.IPv6Address, value=value)
             case "Mac-Addr":
-                return stix2.MACAddress(value=value, **common_attrs, **properties)
+                return _create_sco(stix2.MACAddress, value=value)
             case "Process":
-                return stix2.Process(pid=value, **common_attrs, **properties)
+                return _create_sco(stix2.Process, pid=value)
             case "Url":
-                return stix2.URL(value=value, **common_attrs, **properties)
+                return _create_sco(stix2.URL, value=value)
             case "User-Account":
                 return self.create_account_from_username(value, **properties)
             case "StixFile":
-                return stix2.File(name=value, **common_attrs, **properties)
+                return _create_sco(stix2.File, name=value)
             case "User-Agent":
-                return CustomObservableUserAgent(
-                    value=value, **common_attrs, **properties
-                )
+                return _create_sco(CustomObservableUserAgent, value=value)
             case "Windows-Registry-Key":
-                return stix2.WindowsRegistryKey(key=value, **common_attrs, **properties)
+                return _create_sco(stix2.WindowsRegistryKey, key=value)
             case _:
                 raise ValueError(f"Enrichment SCO {type} not supported")
 
-    def create_account_from_username(self, username: str, **stix_properties):
+    def create_account_from_username(self, username: str | None, **stix_properties):
         """
         Create a User-Account from a string that may container a username or
         both a username and a user ID
@@ -382,22 +388,36 @@ class StixHelper(BaseModel):
         If the username is of the form "name(uid=digits)", the uid is extracted
         and the resulting UserAccount will have both account_login and user_id
         set, otherwise account_login will be used.
+
+        Examples:
+        >>> h = StixHelper()
+        >>> h.create_account_from_username('foo', custom_prop='bar')
+        UserAccount(type='user-account', spec_version='2.1', id='user-account--234499e1-7802-5681-87df-a7667d8e3b6e', account_login='foo', defanged=False, custom_prop='bar')
+        >>> h.create_account_from_username('foo(uid=1000)')
+        UserAccount(type='user-account', spec_version='2.1', id='user-account--7d128e22-4162-5b1e-8df6-d6b8644c6949', user_id='1000', account_login='foo', defanged=False)
+        >>> h.create_account_from_username(username=None,user_id='1000')
+        UserAccount(type='user-account', spec_version='2.1', id='user-account--4b8a1e8e-e7c7-5c91-b832-b1bdad612c36', user_id='1000', defanged=False)
         """
         uid = None
         # Some logs provide a username that also consists of a UID in parenthesis:
-        if match := re.match(r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", username or ""):
+        if username and (
+            match := re.match(r"^(?P<name>[^\(]+)\(uid=(?P<uid>\d+)\)$", username or "")
+        ):
             uid = int(match.group("uid"))
             username = match.group("name")
         #
         # TODO: what about DOMAIN\username? set account_type = windows-domain
 
         return stix2.UserAccount(
-            account_login=username,
-            user_id=uid,
-            allow_custom=True,
-            **self.common_properties,
-            lables=self.sco_labels,
-            **stix_properties,
+            # Let stix_properties override properties set here (like user_id):
+            **merge_outof(
+                stix_properties,
+                account_login=username,
+                user_id=oneof("user_id", within=stix_properties, default=uid),
+                allow_custom=True,
+                **self.common_properties,
+                labels=self.sco_labels,
+            )
         )
 
     ## TODO: Revisit the usefulness of replacing files. What about all the refs

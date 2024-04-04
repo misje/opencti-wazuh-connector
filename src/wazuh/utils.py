@@ -617,3 +617,48 @@ def parse_sha256(hashes_str: str) -> str | None:
     return (
         match.group(0) if (match := re.search("[A-Fa-f0-9]{64}", hashes_str)) else None
     )
+
+
+def create_if(Object, *args, condition: Callable[[], bool], default=None, **kwargs):
+    """
+    Instantiate a class if a condition is met, otherwise return a default value
+
+    Examples:
+    >>> create_if(ipaddress.ip_address, '1.1.1.1', condition=lambda: True)
+    IPv4Address('1.1.1.1')
+    >>> create_if(ipaddress.ip_address, '1.1.1.1', condition=lambda: False)
+    """
+    return Object(*args, **kwargs) if condition() else default
+
+
+def join_values(obj: dict, sep: str) -> str:
+    """
+    Join all values in a dict in order of keys
+
+    Examples:
+    >>> join_values({'b': 'bar', 'a': 'foo', 'c': 'baz'}, ' ')
+    'foo bar baz'
+    """
+    return sep.join(value for _, value in sorted(obj.items()))
+
+
+def merge_into(obj: dict, **overrides) -> dict:
+    """
+    Override items in a dict with named arguments
+
+    Examples:
+    >>> merge_into({'a': 1, 'b': 2}, b=42)
+    {'a': 1, 'b': 42}
+    """
+    return obj | {key: value for key, value in overrides.items()}
+
+
+def merge_outof(obj: dict, **overrides) -> dict:
+    """
+    Create a dict from the named arguments and override values from obj
+
+    Examples:
+    >>> merge_outof({'b': 42}, a=1, b=2)
+    {'a': 1, 'b': 42}
+    """
+    return {key: value for key, value in overrides.items()} | obj

@@ -96,7 +96,13 @@ class AlertSearcher(BaseModel):
                     "data.ParentPath",  # panda paps
                     "data.Path",  # panda paps
                     "data.TargetPath",  # panda paps
-                    "data.audit.file.name",
+                    "data.audit.execve.a1",
+                    "data.audit.execve.a2",
+                    "data.audit.execve.a3",
+                    "data.audit.execve.a4",
+                    "data.audit.execve.a5",
+                    "data.audit.execve.a6",
+                    "data.audit.execve.a7",
                     "data.audit.file.name",
                     "data.file",
                     "data.office365.SourceFileName",
@@ -448,9 +454,11 @@ class AlertSearcher(BaseModel):
             else None
         )
 
+    # FIXME: doesn't find "secedit /export /cfg $env:temp/secexport.cfg" in data.win.eventdata.parentCommandLine (powershell \"$null = secedit /export /cfg $env:temp/secexport.cfg; $(gc $env:temp/secexport.cfg | Select-String \\\"LSAAnonymousNameLookup\\\").ToString().Split(\\\"=\\\")[1].Trim()\")
     def query_process(self, *, stix_entity: dict) -> dict | None:
         # TODO: use wazuh API to list proceses too:
         # TODO: Create a guard against too simple search strings (one word?)
+        # TODO: Compare results against observable value and ignore if they differ too much, like fjas → /usr/bin/tee customers/orsted/usvportal-grafana-provisioning/alerting/fjas.yaml
         if "command_line" in stix_entity:
             # Split the string into tokens wrapped in quotes or
             # separated by whitespace:
@@ -490,6 +498,7 @@ class AlertSearcher(BaseModel):
                                     }
                                 }
                             ]
+                            # TODO: wildcard escape in arg?
                             + [{"wildcard": {field: f"*{arg}*"}} for arg in args]
                         }
                     }
