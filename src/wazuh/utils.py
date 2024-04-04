@@ -164,7 +164,7 @@ def filter_truthly(*values: Any) -> list[Any]:
     return list(filter(lambda x: x, values))
 
 
-def listify(value: U | list[U]) -> list[U]:
+def listify(value: U | list[U] | None) -> list[U]:
     """
     Return value if it is a list, otherwise return a single-item list
 
@@ -174,6 +174,9 @@ def listify(value: U | list[U]) -> list[U]:
     >>> listify(1)
     [1]
     """
+    if value is None:
+        return []
+
     return value if isinstance(value, list) else [value]
 
 
