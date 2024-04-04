@@ -38,6 +38,7 @@ from .stix_helper import (
     # SRO,
     # StandardID,
     DUMMY_INDICATOR_ID,
+    remove_unref_objs,
     tlp_marking_from_string,
     tlp_allowed,
     # add_incidents_to_note_refs,
@@ -52,13 +53,11 @@ from .enrich import Enricher
 
 # TODO: Enrichment connector that uses snipeit to get system owner
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
-# TODO: inconsistent use of _ in func. names. Fix when cleaning up, modularise and move utils into utils, stix into stix(?) modules
 # TODO: update wazuh api completely in background
 # FIXME: Ignoring obs. from Wazuh is not a good solution. Manual enrichment must be allowed, if so.
 # TODO: escape_md() function (for use in all text going into opencti)
 # TODO: Add search options to prevent too many hits, like: search_{file::name}. Hæ?
 # TODO: Use TypeAlias (from typing) for things like Bundle, SCO etc.
-# TODO: create helper function for creating stix objects, like stix2.Relationship that needs several references to the same variable. Add in a module that can be initied with common_args?
 # TODO: create issue for getting type of enrichment (manual or automatic)
 # TODO: Alert notes in incidents (already in sighting and case, but not incident)
 # TODO: aws, google and office
@@ -462,7 +461,14 @@ class WazuhConnector:
         )
         self.stix_common_attrs["created_by_ref"] = self.author["id"]
         self.stix = StixHelper(
-            common_properties=self.stix_common_attrs, sco_labels=self.enrich_labels
+            common_properties=self.stix_common_attrs,
+            sco_labels=self.enrich_labels,
+            filename_behaviour=get_config_variable(
+                "WAZUH_FILENAME_BEHAVIOUR",
+                ["wazuh", "filename_behaviour"],
+                config,
+                default="create-dir",
+            ),  # type: ignore
         )
         self.enricher = Enricher(
             helper=self.helper,
@@ -1334,8 +1340,10 @@ class WazuhConnector:
         )
         hits_dropped = result["hits"]["total"]["value"] > len(result["hits"]["hits"])
         name = f"{entity_name_value(entity)} sighted {sightings_count}{'+' if hits_dropped else ''} time(s)"
-        refs = bundle + [entity["standard_id"]]
-        refs.remove(self.author)
+        # Remove any objects not referenced in relationships, as they will just
+        # pollute the knowledge graph. These objects are typically nested
+        # objects that the knowledge graph will not display anyway:
+        refs = [o.id for o in remove_unref_objs(bundle)] + [entity["standard_id"]]
         return (
             CustomObjectCaseIncident(
                 id=CaseIncident.generate_id(name, timestamp),

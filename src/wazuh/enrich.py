@@ -22,6 +22,7 @@ from .utils import (
     first_or_empty,
     first_of,
     join_values,
+    remove_reg_paths,
     search_fields,
     search_field,
     field_compare,
@@ -332,11 +333,8 @@ class Enricher(BaseModel):
 
     def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
         # FIXME: add a re_negate to search_fields and exclude HKEY_:
+
         # First search for fields that may contain filenames/paths, but without hashes:
-        # TODO: Create directory (optional?) with parent_directory_ref)
-        # TODO: Ask filigran if filename is truly only the filename, without any path
-        # Config: Search filenames without path? Search filenames with paths(?)
-        # Problem: File with nested object parent directory is not part of STIX sent to File observable
         results = {
             match: {
                 "field": field,
@@ -344,24 +342,26 @@ class Enricher(BaseModel):
                 "alert": alert,
             }
             for alert in alerts
-            for field, match in search_fields(
-                alert["_source"],
-                [
-                    "data.ChildPath",
-                    "data.ParentPath",
-                    "data.Path",
-                    "data.TargetFilename",
-                    "data.TargetPath",
-                    "data.audit.file.name",
-                    "data.audit.file.name",
-                    "data.file",
-                    "data.sca.check.file",
-                    "data.smbd.filename",
-                    "data.smbd.new_filename",
-                    "data.virustotal.source.file",
-                    "data.win.eventdata.file",
-                    "data.win.eventdata.filePath",
-                ],
+            for field, match in remove_reg_paths(
+                search_fields(
+                    alert["_source"],
+                    [
+                        "data.ChildPath",
+                        "data.ParentPath",
+                        "data.Path",
+                        "data.TargetFilename",
+                        "data.TargetPath",
+                        "data.audit.file.name",
+                        "data.audit.file.name",
+                        "data.file",
+                        "data.sca.check.file",
+                        "data.smbd.filename",
+                        "data.smbd.new_filename",
+                        "data.virustotal.source.file",
+                        "data.win.eventdata.file",
+                        "data.win.eventdata.filePath",
+                    ],
+                )
             ).items()
         }
 
@@ -680,7 +680,6 @@ class Enricher(BaseModel):
                     user_id=meta.creator.user_id,
                 )
             ]
-            self.helper.log_info(f"CREATOR: {meta.creator, creator}")
         if meta.image:
             file_bundle = self.stix.create_file(
                 [meta.image.filename],  # type: ignore
@@ -692,7 +691,6 @@ class Enricher(BaseModel):
         if meta.parent:
             bundle += self.create_process(meta=meta.parent)
 
-        self.helper.log_info(f"COMMAND LINE: {meta.command_line}")
         bundle += [
             process := self.stix.create_sco(
                 "Process",

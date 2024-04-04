@@ -11,9 +11,11 @@ from .utils import (
     allof_nonempty,
     ip_proto,
     merge_outof,
+    listify,
 )
 from enum import Enum
 from ntpath import split
+from collections import OrderedDict
 
 IPAddr = stix2.IPv4Address | stix2.IPv6Address
 SCO = (
@@ -213,6 +215,49 @@ def add_incidents_to_note_refs(bundle: STIXList) -> STIXList:
     ]
 
 
+def remove_unref_objs(bundle: STIXList) -> STIXList:
+    """
+    Return a new bundle only with SCOs/SDOs that are referenced in SROs
+
+    All observables and domain objects that are referenced by relationships or
+    sightings (not as nested objects) are kept in the list, in order. All
+    unreferenced objects are removed.
+
+    Examples:
+    >>> f1 = stix2.File(name='foo', allow_custom=True, test_id='file_foo')
+    >>> f2 = stix2.File(name='bar', allow_custom=True, test_id='file_bar')
+    >>> f3 = stix2.File(name='baz', allow_custom=True, test_id='file_baz')
+    >>> r1 = stix2.Relationship(relationship_type='related-to', source_ref=f1, target_ref=f2, allow_custom=True, test_id='rel')
+    >>> i1 = stix2.Indicator(pattern="[file:name = 'foo']", pattern_type='stix', valid_from='2024-04-04T15:46:03.282304Z', allow_custom=True, test_id='ind')
+    >>> id1 = stix2.Identity(name='id1', allow_custom=True, test_id='id1')
+    >>> id2 = stix2.Identity(name='id2', allow_custom=True, test_id='id2')
+    >>> id3 = stix2.Identity(name='id3', allow_custom=True, test_id='id3')
+    >>> s1 = stix2.Sighting(sighting_of_ref=i1.id, where_sighted_refs=[id1, id2], allow_custom=True, test_id='sight')
+    >>> bundle = [f1, r1, f2, f3, id1, i1, id2, s1, id3]
+    >>> [o.test_id for o in remove_unref_objs(bundle)]
+    ['file_foo', 'rel', 'file_bar', 'id1', 'ind', 'id2', 'sight']
+    """
+    relationships = (obj for obj in bundle if isinstance(obj, SRO))
+    ref_ids = OrderedDict.fromkeys(
+        id
+        for rel in relationships
+        for attr in (
+            "source_ref",
+            "target_ref",
+            "sighting_of_ref",
+            "observed_data_refs",
+            "where_sighted_refs",
+        )
+        for ids in (getattr(rel, attr, []),)
+        for id in listify(ids)
+    )
+    return [
+        obj
+        for obj in bundle
+        if isinstance(obj, SRO) or (isinstance(obj, SCO | SDO) and obj.id in ref_ids)
+    ]
+
+
 class FilenameBehaviour(Enum):
     CreateDir = "create-dir"
     RemovePath = "remove-path"
@@ -300,7 +345,10 @@ class StixHelper(BaseModel):
         dir = None
         if paths and FilenameBehaviour.CreateDir in self.filename_behaviour:
             dir = stix2.Directory(
-                path=paths[0], allow_custom=True, **self.common_properties
+                path=paths[0],
+                allow_custom=True,
+                **self.common_properties,
+                labels=self.sco_labels,
             )
 
         return filter_truthly(dir) + [
@@ -310,6 +358,7 @@ class StixHelper(BaseModel):
                 parent_directory_ref=dir,
                 allow_custom=True,
                 **self.common_properties,
+                labels=self.sco_labels,
                 x_opencti_additional_names=extra_names,
                 **properties,
             )

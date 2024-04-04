@@ -1,7 +1,9 @@
 import re
 import ipaddress
-from typing import Any, Callable, Literal
+from typing import Any, Callable, Literal, TypeVar
 from os.path import commonprefix
+
+U = TypeVar("U")
 
 
 def has(
@@ -162,10 +164,23 @@ def filter_truthly(*values: Any) -> list[Any]:
     return list(filter(lambda x: x, values))
 
 
+def listify(value: U | list[U]) -> list[U]:
+    """
+    Return value if it is a list, otherwise return a single-item list
+
+    Examples:
+    >>> listify([1, 2])
+    [1, 2]
+    >>> listify(1)
+    [1]
+    """
+    return value if isinstance(value, list) else [value]
+
+
 def re_search_or_none(pattern: str, string: str):
     """
-    Return the regex match in the provided string, or None if the pattern is
-    empty
+    Return the regex match in the provided string, or return the search string
+    if no pattern
 
     Examples:
     >>> re_search_or_none('(?<=foo=)bar', 'foo=bar')
@@ -662,3 +677,14 @@ def merge_outof(obj: dict, **overrides) -> dict:
     {'a': 1, 'b': 42}
     """
     return {key: value for key, value in overrides.items()} | obj
+
+
+def remove_reg_paths(obj: dict[Any, str]) -> dict[Any, str]:
+    """
+    Remove all values from the dict that starts with 'HKEY_'
+
+    Examples:
+    >>> remove_reg_paths({'a': '/foo/bar', 'b': 'HKEY_CURRENT_MACHINE/baz'})
+    {'a': '/foo/bar'}
+    """
+    return {k: v for k, v in obj.items() if not v.startswith("HKEY_")}
