@@ -2,7 +2,7 @@ import stix2
 import re
 from pycti import OpenCTIConnectorHelper, Tool, CustomObservableUserAgent
 from pydantic import BaseModel, field_validator
-from typing import Any, Final, Literal, Sequence
+from typing import Annotated, Any, Final, Literal, Sequence
 from .utils import (
     filter_truthly,
     first_or_none,
@@ -294,8 +294,13 @@ class StixHelper(BaseModel):
         )
 
     def create_file(
-        self, names: list[str], *, sha256: str | None = None, **properties
-    ) -> list[stix2.Directory | stix2.File]:
+        self,
+        names: list[str],
+        *,
+        sha256: str | None = None,
+        **properties,
+        # Use list to support contains_ref, content_ref in future (and to match return format of create_sco)
+    ) -> tuple[stix2.File, list[stix2.Directory]]:
         """
         Create a STIX file
 
@@ -311,15 +316,15 @@ class StixHelper(BaseModel):
         Examples:
         >>> h = StixHelper(filename_behaviour='')
         >>> h.create_file(names=['filename1', 'filename2'])
-        [File(type='file', spec_version='2.1', id='file--f83c036d-56f6-5246-8585-1616d42c7669', name='filename1', defanged=False, x_opencti_additional_names=['filename2'])]
+        (File(type='file', spec_version='2.1', id='file--f83c036d-56f6-5246-8585-1616d42c7669', name='filename1', defanged=False, x_opencti_additional_names=['filename2']), [])
         >>> h.create_file(names=['/tmp/filename1', '/filename2'])
-        [File(type='file', spec_version='2.1', id='file--09765542-1408-5026-8674-8128438fc940', name='/tmp/filename1', defanged=False, x_opencti_additional_names=['/filename2'])]
+        (File(type='file', spec_version='2.1', id='file--09765542-1408-5026-8674-8128438fc940', name='/tmp/filename1', defanged=False, x_opencti_additional_names=['/filename2']), [])
         >>> h = StixHelper(filename_behaviour='create-dir')
         >>> h.create_file(names=['/tmp/filename1', '/home/foo/Downloads/filename2'])
-        [Directory(type='directory', spec_version='2.1', id='directory--b7ed5105-3a80-559d-9bd6-ec208b6d813e', path='/home/foo/Downloads', defanged=False), File(type='file', spec_version='2.1', id='file--ed282b5e-3ebe-5d5f-81e3-d52b629abb46', name='/tmp/filename1', parent_directory_ref='directory--b7ed5105-3a80-559d-9bd6-ec208b6d813e', defanged=False, x_opencti_additional_names=['/home/foo/Downloads/filename2'])]
+        (File(type='file', spec_version='2.1', id='file--ed282b5e-3ebe-5d5f-81e3-d52b629abb46', name='/tmp/filename1', parent_directory_ref='directory--b7ed5105-3a80-559d-9bd6-ec208b6d813e', defanged=False, x_opencti_additional_names=['/home/foo/Downloads/filename2']), [Directory(type='directory', spec_version='2.1', id='directory--b7ed5105-3a80-559d-9bd6-ec208b6d813e', path='/home/foo/Downloads', defanged=False)])
         >>> h = StixHelper(filename_behaviour='create-dir,remove-path')
         >>> h.create_file(names=['filename1', '/home/foo/Downloads/filename2'])
-        [Directory(type='directory', spec_version='2.1', id='directory--b7ed5105-3a80-559d-9bd6-ec208b6d813e', path='/home/foo/Downloads', defanged=False), File(type='file', spec_version='2.1', id='file--901c064f-7d08-5092-b84e-851f68c67a73', name='filename1', parent_directory_ref='directory--b7ed5105-3a80-559d-9bd6-ec208b6d813e', defanged=False, x_opencti_additional_names=['filename2'])]
+        (File(type='file', spec_version='2.1', id='file--901c064f-7d08-5092-b84e-851f68c67a73', name='filename1', parent_directory_ref='directory--b7ed5105-3a80-559d-9bd6-ec208b6d813e', defanged=False, x_opencti_additional_names=['filename2']), [Directory(type='directory', spec_version='2.1', id='directory--b7ed5105-3a80-559d-9bd6-ec208b6d813e', path='/home/foo/Downloads', defanged=False)])
         """
         path_names = {
             (path, filename) for name in names for path, filename in (split(name),)
@@ -351,7 +356,7 @@ class StixHelper(BaseModel):
                 labels=self.sco_labels,
             )
 
-        return filter_truthly(dir) + [
+        return (
             stix2.File(
                 name=main_name,
                 hash={"SHA-256": sha256} if sha256 else None,
@@ -361,8 +366,9 @@ class StixHelper(BaseModel):
                 labels=self.sco_labels,
                 x_opencti_additional_names=extra_names,
                 **properties,
-            )
-        ]
+            ),
+            filter_truthly(dir),
+        )
 
     def create_addr_sco(self, address: str, **properties):
         """
@@ -385,7 +391,12 @@ class StixHelper(BaseModel):
             **properties,
         )
 
-    def create_sco(self, type: str, value: str | None, **properties):
+    def create_sco(
+        self, type: str, value: str | None, **properties
+    ) -> tuple[
+        Annotated[SCO, "Main observable"],
+        Annotated[Sequence[SCO], "Additional nested objects"],
+    ]:
         """
         Create a SCO from its type name and properties
 
@@ -399,7 +410,7 @@ class StixHelper(BaseModel):
 
         def _create_sco(SCO, **kwargs):
             # Allow "properties" to override:
-            return SCO(**merge_outof(properties, **common_attrs, **kwargs))
+            return (SCO(**merge_outof(properties, **common_attrs, **kwargs)), [])
 
         match type:
             case "Directory":
@@ -419,9 +430,9 @@ class StixHelper(BaseModel):
             case "Url":
                 return _create_sco(stix2.URL, value=value)
             case "User-Account":
-                return self.create_account_from_username(value, **properties)
+                return (self.create_account_from_username(value, **properties), [])
             case "StixFile":
-                return _create_sco(stix2.File, name=value)
+                return self.create_file(names=listify(value))
             case "User-Agent":
                 return _create_sco(CustomObservableUserAgent, value=value)
             case "Windows-Registry-Key":

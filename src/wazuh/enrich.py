@@ -404,11 +404,17 @@ class Enricher(BaseModel):
                         ),
                         "alert": alert,
                     }
-        return [
+        nested_objs = [
+            obj
+            for meta in results.values()
+            for _, objs in (meta["sco"],)
+            for obj in objs
+        ]
+        return nested_objs + [
             stix
             for match, meta in results.items()
             for alert in (meta["alert"],)
-            for sco in (meta["sco"],)
+            for sco, _ in (meta["sco"],)
             for stix in (
                 sco,
                 stix2.Relationship(
@@ -455,11 +461,17 @@ class Enricher(BaseModel):
             for type in (search_field(alert["_source"], "syscheck.value_type"),)
             for value in (search_field(alert["_source"], "syscheck.value_name"),)
         }
-        return [
+        nested_objs = [
+            obj
+            for meta in results.values()
+            for _, objs in (meta["sco"],)
+            for obj in objs
+        ]
+        return nested_objs + [
             stix
             for match, meta in results.items()
             for alert in (meta["alert"],)
-            for sco in (meta["sco"],)
+            for sco, _ in (meta["sco"],)
             for stix in (
                 sco,
                 stix2.Relationship(
