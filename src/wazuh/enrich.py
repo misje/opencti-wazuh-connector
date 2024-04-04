@@ -389,6 +389,7 @@ class Enricher(BaseModel):
                         ".+sha256.*": "SHA-256",
                     },
                 )
+                # FIXME: use regex below instead (+ HKLM etc.):
                 if name and hashes and not name.startswith("HKEY_"):
                     results[name] = {
                         "field": name_field,
