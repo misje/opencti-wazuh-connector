@@ -332,8 +332,6 @@ class Enricher(BaseModel):
         )
 
     def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
-        # FIXME: add a re_negate to search_fields and exclude HKEY_:
-
         # First search for fields that may contain filenames/paths, but without hashes:
         results = {
             match: {
