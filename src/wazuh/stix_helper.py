@@ -104,11 +104,22 @@ def tlp_marking_from_string(tlp_string: str | None):
     Map a TLP string to a corresponding marking definition, or None
 
     Any characters ut to and including ":" are stripped and case is ignored.
+
+    Examples:
+
+    >>> tlp_marking_from_string('white')
+    'marking-definition--613f2e26-407d-48c7-9eca-b8e91df99dc9'
+    >>> tlp_marking_from_string('TLP:amBEr')
+    'marking-definition--f88d31f6-486f-44da-b317-01333bde0b82'
+    >>> tlp_marking_from_string('foo')
+    Traceback (most recent call last):
+    ...
+    ValueError: foo is not a valid marking definition
     """
     if tlp_string is None:
         return None
 
-    match re.sub(r"^[^:]+:", "", tlp_string).lower():
+    match re.sub(r"(?i)^tlp:", "", tlp_string).lower():
         case "clear" | "white":
             return stix2.TLP_WHITE.id
         case "green":
