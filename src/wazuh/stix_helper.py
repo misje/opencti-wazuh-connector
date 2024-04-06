@@ -129,7 +129,7 @@ def tlp_marking_from_string(tlp_string: str | None):
         case "amber+strict":
             return "marking-definition--826578e1-40ad-459f-bc73-ede076f81f37"
         case "red":
-            return stix2.TLP_RED
+            return stix2.TLP_RED.id
         case "":
             return None
         case _:
