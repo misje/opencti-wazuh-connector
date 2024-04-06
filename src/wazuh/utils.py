@@ -16,6 +16,7 @@ def has(
     Test whether dict contains a specific structure
 
     Examples:
+
     >>> obj = {"a": {"b": 42}}
     >>> has(obj, ['a'])
     True
@@ -46,7 +47,8 @@ def has_any(obj: dict, spec1: list[str], spec2: list[str]) -> bool:
 
     Test whether obj contains a specific structure (a "JSON path") spec1. Then,
     test whether the resulting object has any of the keys listed in spec2.
-    Example:
+
+    Examples:
 
     >>> has_any({"a": {"b": {"d": 1, "e": 2}}}, ["a", "b"], ["c", "d"])
     True
@@ -66,7 +68,8 @@ def has_atleast(obj: dict, *keys, threshold=1) -> bool:
     """
     Test whether at least N of keys are present in a dict
 
-    Examples
+    Examples:
+
     >>> has_atleast({'a': 1, 'b': 2}, 'a', 'c')
     True
     >>> has_atleast({'a': 1, 'b': 2}, 'a', 'b', 'c', threshold=2)
@@ -80,6 +83,7 @@ def oneof(*keys: str, within: Mapping | None, default=None) -> Any:
     Return the value of the first key that exists in the dict, or None.
 
     Examples:
+
     >>> oneof('foo', 'bar', within={'bar': 1, 'baz': 2})
     1
     >>> oneof('foo', 'bar', within={'baz': 42}, default=1)
@@ -97,6 +101,7 @@ def oneof_nonempty(*keys: str, within: dict, default=None) -> Any:
     None.
 
     Examples:
+
     >>> oneof_nonempty('foo', 'bar', within={'foo': [], 'bar': 1})
     1
     >>> oneof_nonempty('bar', within={'foo': [], 'bar': None}, default=[])
@@ -111,6 +116,7 @@ def allof_nonempty(*keys: str, within: dict) -> list[Any]:
     Return all non-empty values of keys found in dict.
 
     Examples:
+
     >>> allof_nonempty('foo', 'bar', 'baz', within={'foo': [], 'bar': 0, 'baz': 42})
     [42]
     """
@@ -144,6 +150,7 @@ def first_of(values: list[Any], type: type) -> Any:
     Return the first item of the given type in the list
 
     Examples:
+
     >>> first_of([1, '2'], str)
     '2'
     >>> first_of([1, '2'], dict)
@@ -156,6 +163,7 @@ def filter_truthly(*values: Any) -> list[Any]:
     Return a list of all items that are truthly
 
     Examples:
+
     >>> filter_truthly(None)
     []
     >>> filter_truthly(None, 1, '')
@@ -169,6 +177,7 @@ def listify(value: U | list[U] | None) -> list[U]:
     Return value if it is a list, otherwise return a single-item list
 
     Examples:
+
     >>> listify([1, 2])
     [1, 2]
     >>> listify(1)
@@ -186,6 +195,7 @@ def re_search_or_none(pattern: str, string: str):
     if no pattern
 
     Examples:
+
     >>> re_search_or_none('(?<=foo=)bar', 'foo=bar')
     'bar'
     >>> re_search_or_none('(?<=foo=)bar', 'foo=baz')
@@ -209,7 +219,8 @@ def extract_fields(
     ValueError will be raised if the path contains '*'. If raise_if_missing is
     True, no KeyError will be raised if a key is not found.
 
-    Example:
+    Examples:
+
     >>> extract_fields({ "a": { "b": { "c": 1 }}}, ["a.b.c", "a.b"])
     {'a.b.c': 1, 'a.b': {'c': 1}}
     """
@@ -242,6 +253,8 @@ def search_fields(obj: dict, fields: list[str], *, regex: str = ""):
 
     If the regex pattern is empty, this is the same as calling extract_fields() with raise_if_missing=False. Examples:
 
+    Examples:
+
     >>> search_fields({'a': {'b': 'foo'}, 'c': 'bar'}, ['a.b', 'c'], regex='oo')
     {'a.b': 'oo'}
     >>> search_fields({'a': {'b': 'foo'}, 'c': 'bar'}, ['a.b', 'c'])
@@ -260,6 +273,7 @@ def search_field(obj: dict, field: str, *, regex: str = "") -> str | None:
     Search a dict for a field using a key path
 
     Examples:
+
     >>> search_field({'a': {'b': 'foo'}, 'c': 'bar'}, 'a.b', regex='oo')
     'oo'
     >>> search_field({'a': {'b': 'foo'}, 'c': 'bar'}, 'c')
@@ -273,6 +287,7 @@ def simplify_field_names(obj: dict) -> dict:
     Remove the common prefix in all dict keys
 
     Examples:
+
     >>> simplify_field_names({'a.b.c': 1, 'a.b.d': 2, 'a.b.e': 3})
     {'c': 1, 'd': 2, 'e': 3}
     """
@@ -285,6 +300,7 @@ def compare_field(obj1: dict, obj2: dict, field: str) -> bool:
     Compare a field in two nested dicts
 
     Examples:
+
     >>> compare_field({'a': {'b': 'foo'}}, {'a': {'b': 'foo'}}, 'a.b')
     True
     >>> compare_field({'a': {'b': 'foo'}}, {'a': 'bar'}, 'a.b')
@@ -304,6 +320,7 @@ def field_compare(
     Search for a value in a dict recursively using key paths
 
     Examples:
+
     >>> field_compare({'a': {'b': 1}, 'c': 2}, ['a.b', 'c'], lambda x: x > 1)
     True
     >>> # because 'c'→2 > 1, 'a.b'→1 is not
@@ -392,6 +409,7 @@ def common_prefix_string(strings: list[str], elideString: str = "[…]"):
     Return a common prefix string from all strings, terminated by elideString
 
     Examples:
+
     >>> common_prefix_string(['You shall not', 'You shall indeed', "You shan't"])
     'You sha[…]'
     """
@@ -408,6 +426,7 @@ def list_or_empty(obj: dict, key: str):
     Return list at the given key or an empty list if it does not exist.
 
     Examples:
+
     >>> list_or_empty({'a': [1, 2]}, 'a')
     [1, 2]
     >>> list_or_empty({}, 'a')
@@ -421,6 +440,7 @@ def non_none(*args, threshold: int = 1) -> bool:
     Require at least some of the arguments to be something other than None
 
     Examples:
+
     >> non_none(1, None, 3, threshold=2)
     True
     >> none_none(None, None):
@@ -433,7 +453,8 @@ def escape_lucene_regex(string: str):
     """
     Escape a string for all valid Lucene regex characters
 
-    Example:
+    Examples:
+
     >>> escape_lucene_regex('Benign string? Possibly. (*Perhaps not*)')
     'Benign string\\\\? Possibly\\\\. \\\\(\\\\*Perhaps not\\\\*\\\\)'
     """
@@ -458,6 +479,7 @@ def search_in_object(obj: dict, search_term: str) -> dict[str, str]:
     and values that matched.
 
     Examples:
+
     >>> search_in_object({'a': {'b': 'one two three', 'c': 'two'}}, 'two')
     {'a.b': 'one two three', 'a.c': 'two'}
     """
@@ -492,6 +514,7 @@ def search_in_object_multi(
     and values that matched.
 
     Examples:
+
     >>> search_in_object_multi({'a': {'b': 'one two three', 'c': 'two', 'd': 'three'}}, 'two', 'three', exclude_fields=['a.d'])
     {'a.b': 'one two three', 'a.c': 'two'}
     """
@@ -511,7 +534,8 @@ def regex_transform(obj: dict[str, Any], map: dict[str, str]) -> dict[str, Any]:
     substitution pattern. The returned dict contains the substituted keys, and
     the original values from obj.
 
-    Example:
+    Examples:
+
     >>> regex_transform({'one.two': 1, 'three.one': 2}, {'^.+\\\\.(.+)$': '\\\\1'})
     {'two': 1, 'one': 2}
     """
@@ -528,7 +552,8 @@ def ip_proto(addr: str) -> Literal["ipv4", "ipv6"] | None:
     Return the literal 'ipv4' or 'ipv6' depending on the type of IP address, or
     None if the string is invalid.
 
-    Example:
+    Examples:
+
     >>> ip_proto('1.1.1.1')
     'ipv4'
     >>> ip_proto('::')
@@ -552,6 +577,7 @@ def ip_protos(*addrs: str) -> list[str]:
     Return a list of the literals, 'ipv4' or 'ipv6', for any valid IP addres
 
     Examples:
+
     >>> sorted(ip_protos('1.1.1.1', '::1', 'foo'))
     ['ipv4', 'ipv6']
     >>> ip_protos('1.1.1.1', '8.8.8.8')
@@ -581,6 +607,7 @@ def validate_mac(mac: str) -> bool:
     Return true if the provided string is a valid MAC format
 
     Examples:
+
     >>> validate_mac('01:02:03:04:ab:CD')
     True
     >>> validate_mac('01-02-03-04-ab-CD')
@@ -609,6 +636,7 @@ def normalise_mac(mac: str) -> str:
     The string must be a valid mac, otherwise an exception is possibly thrown.
 
     Examples:
+
     >>> normalise_mac('01:02:03:04:ab:CD')
     '01:02:03:04:ab:cd'
     >>> normalise_mac('01-02-03-04-ab-CD')
@@ -629,6 +657,7 @@ def parse_sha256(hashes_str: str) -> str | None:
     Extract anything that looks like a SHA-256 hash from the string, or None
 
     Examples:
+
     >>> parse_sha256("SHA1=6E6BE6D81CB3B1E452F2AC0D7BEE162320A74DDA,MD5=4BB07B66D8D8DF05E437CF456FC7CCBC,SHA256=D4703A80CD98F93C6BC2CA04A92D994579D563541C35CD65776A5FE64AD385EE,IMPHASH=9646AFB1056B0472B325E82B3B78629D")
     'D4703A80CD98F93C6BC2CA04A92D994579D563541C35CD65776A5FE64AD385EE'
     """
@@ -642,6 +671,7 @@ def create_if(Object, *args, condition: Callable[[], bool], default=None, **kwar
     Instantiate a class if a condition is met, otherwise return a default value
 
     Examples:
+
     >>> create_if(ipaddress.ip_address, '1.1.1.1', condition=lambda: True)
     IPv4Address('1.1.1.1')
     >>> create_if(ipaddress.ip_address, '1.1.1.1', condition=lambda: False)
@@ -654,6 +684,7 @@ def join_values(obj: dict, sep: str) -> str:
     Join all values in a dict in order of keys
 
     Examples:
+
     >>> join_values({'b': 'bar', 'a': 'foo', 'c': 'baz'}, ' ')
     'foo bar baz'
     """
@@ -665,6 +696,7 @@ def merge_into(obj: dict, **overrides) -> dict:
     Override items in a dict with named arguments
 
     Examples:
+
     >>> merge_into({'a': 1, 'b': 2}, b=42)
     {'a': 1, 'b': 42}
     """
@@ -676,6 +708,7 @@ def merge_outof(obj: dict, **overrides) -> dict:
     Create a dict from the named arguments and override values from obj
 
     Examples:
+
     >>> merge_outof({'b': 42}, a=1, b=2)
     {'a': 1, 'b': 42}
     """
@@ -684,9 +717,10 @@ def merge_outof(obj: dict, **overrides) -> dict:
 
 def remove_reg_paths(obj: dict[Any, str]) -> dict[Any, str]:
     """
-    Remove all values from the dict that starts with 'HKEY_'
+    Remove all values from the dict that starts with 'HKEY\\_'
 
     Examples:
+
     >>> remove_reg_paths({'a': '/foo/bar', 'b': 'HKEY_CURRENT_MACHINE/baz'})
     {'a': '/foo/bar'}
     """

@@ -248,6 +248,7 @@ def remove_unref_objs(bundle: STIXList) -> STIXList:
     unreferenced objects are removed.
 
     Examples:
+
     >>> f1 = stix2.File(name='foo', allow_custom=True, test_id='file_foo')
     >>> f2 = stix2.File(name='bar', allow_custom=True, test_id='file_bar')
     >>> f3 = stix2.File(name='baz', allow_custom=True, test_id='file_baz')
@@ -337,6 +338,7 @@ class StixHelper(BaseModel):
         contains RemovePath, the path component of filenames will be removed.
 
         Examples:
+
         >>> h = StixHelper(filename_behaviour='')
         >>> h.create_file(names=['filename1', 'filename2'])
         SCOBundle(sco=File(type='file', spec_version='2.1', id='file--f83c036d-56f6-5246-8585-1616d42c7669', name='filename1', defanged=False, x_opencti_additional_names=['filename2']), nested_objs=[])
@@ -477,6 +479,7 @@ class StixHelper(BaseModel):
         set, otherwise account_login will be used.
 
         Examples:
+
         >>> h = StixHelper()
         >>> h.create_account_from_username('foo', custom_prop='bar')
         UserAccount(type='user-account', spec_version='2.1', id='user-account--234499e1-7802-5681-87df-a7667d8e3b6e', account_login='foo', defanged=False, custom_prop='bar')
