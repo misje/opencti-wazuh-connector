@@ -263,12 +263,6 @@ class WazuhConnector:
             config,
             default=True,
         )
-        self.alerts_as_notes = get_config_variable(
-            "WAZUH_ALERTS_AS_NOTES",
-            ["wazuh", "alerts_as_notes"],
-            config,
-            default=True,
-        )
         self.search_agent_ip = get_config_variable(
             "WAZUH_SEARCH_AGENT_IP",
             ["wazuh", "search_agent_ip"],
