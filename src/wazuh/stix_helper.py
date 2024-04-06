@@ -61,7 +61,7 @@ SDO = (
 SRO = stix2.Relationship | stix2.Sighting
 STIXList = Sequence[SCO | SDO | SRO]
 TLPLiteral = Literal[
-    "TLP:CLEAR", "TLP:WHITE", "TLP:GREEN", "TLP:AMBER", "TLP:AMBER-STRICT", "TLP:RED"
+    "TLP:CLEAR", "TLP:WHITE", "TLP:GREEN", "TLP:AMBER", "TLP:AMBER+STRICT", "TLP:RED"
 ]
 
 DUMMY_INDICATOR_ID: Final[str] = "indicator--167565fe-69da-5e2f-a1c1-0542736f9f9a"
