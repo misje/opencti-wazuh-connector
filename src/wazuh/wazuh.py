@@ -67,6 +67,7 @@ from .enrich import Enricher
 # - directories
 # FIXME: 188.95.241.209 creates missing ref to what I assume is wazu siem system
 # TODO: Identities for AWS, GitHub, Office365, etc.(?)
+# TODO: Rule_id ignore list
 
 # Notes:
 # - get_config_variable with required doesn't throw if not set. Resolved by
@@ -1040,7 +1041,7 @@ class WazuhConnector:
             "|Rule|Level|Count|Earliest|Latest|Description|\n"
             "|----|-----|-----|--------|------|-----------|\n"
         ) + "".join(
-            f"{rule_id}|{level}|{len(alerts)}{'+' if total_hits > hits_returned else ''}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
+            f"[{rule_id}]({self.alert_rule_link(rule_id)})|{level}|{len(alerts)}{'+' if total_hits > hits_returned else ''}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
             for rule_id, alerts in sightings_meta.alerts_by_rule_id().items()
             for level in (alerts[0]["_source"]["rule"]["level"],)
             for rule_desc in (
@@ -1493,3 +1494,9 @@ class WazuhConnector:
             bundle.append(rel)
 
         return bundle
+
+    def alert_rule_link(self, id: str) -> str:
+        return urljoin(
+            self.app_url,  # type: ignore
+            f"app/wazuh#/manager/?tab=rules&redirectRule={id}",
+        )
