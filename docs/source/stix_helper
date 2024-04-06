@@ -1,0 +1,9 @@
+Utils
+===================================================
+
+The Utils module contains a number of useful helper functions, with a focus on
+dict searching and manipulation. See the FIXMEREF STIX helper utility for
+STIX-specific helper utilities.
+
+.. automodule:: wazuh.utils
+   :members:
