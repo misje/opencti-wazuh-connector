@@ -1264,6 +1264,8 @@ class WazuhConnector:
                     #        incident=incident, alerts=alerts
                     #    )
                     # ]
+            case "never":
+                return []
 
             case _:
                 raise ValueError(
