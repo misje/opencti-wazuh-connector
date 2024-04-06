@@ -68,6 +68,7 @@ class AlertSearcher(BaseModel):
                     f'{entity["entity_type"]} is not a supported entity type'
                 )
 
+    # TODO: setting: refuse to search unless path is set (parent dir or in filename)
     # TODO: when parent_directory_ref is available, use that as search path. Optionally search for filenames with paths too.
     def query_file(self, *, entity: dict, stix_entity: dict) -> dict | None:
         # TODO: wazuh_api: syscheck/id/{file,sha256}
