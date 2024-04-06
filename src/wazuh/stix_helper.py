@@ -67,22 +67,26 @@ TLPLiteral = Literal[
 DUMMY_INDICATOR_ID: Final[str] = "indicator--167565fe-69da-5e2f-a1c1-0542736f9f9a"
 
 
-class StandardID:
+def validate_stix_id(id: str, object_type: str = "") -> bool:
     """
-    A string-like type that validates against STIX [object-type]--[UUID]
-    """
+    Test whether a string is a STIX standard ID ([object-type]--[UUID])
 
-    def __init__(self, id: str):
-        self._id = id
-        if not re.match(
+    Examples:
+
+    >>> validate_stix_id('indicator--167565fe-69da-5e2f-a1c1-0542736f9f9a')
+    True
+    >>> validate_stix_id('marking-definition--34098fce-860f-48ae-8e50-ebd3cc5e41da', 'marking-definition')
+    True
+    >>> validate_stix_id('marking-definition--34098fce-860f-48ae-8e50-ebd3cc5e41da', 'ipv4-addr')
+    False
+    """
+    return bool(
+        re.match(
             r"^.+--[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-            self._id,
+            id,
             re.IGNORECASE,
-        ):
-            raise ValueError(f"{self._id} is not a valid UUID")
-
-    def _str__(self):
-        return self._id
+        )
+    ) and id.startswith(object_type)
 
 
 class SCOBundle(BaseModel):
