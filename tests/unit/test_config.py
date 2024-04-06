@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from datetime import datetime
 
 sys.path.insert(0, os.path.abspath("../../src"))
-from wazuh.config import Config
+from wazuh.config import Config, EnrichmentConfig
 
 # random.seed(0)
 
@@ -161,3 +161,9 @@ def test_max_refs_below_limit_raises():
 def test_max_notes_below_limit_raises():
     with pytest.raises(ValidationError):
         Config(max_tlp="TLP:WHITE", max_notes=1, max_notes_per_alert_rule=2)
+
+
+def test_all_enum_values_in_set():
+    c = Config(max_tlp="TLP:WHITE", enrich=EnrichmentConfig(types="all"))  # type: ignore
+    etypes = c.enrich.types
+    assert etypes == set(EnrichmentConfig.EntityType)

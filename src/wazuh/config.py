@@ -1,29 +1,32 @@
 import re
 import dateparser
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from pydantic import (
-    AliasChoices,
-    BaseModel,
-    ConfigDict,
     Field,
     field_validator,
-    ValidationError,
     ValidationInfo,
-    TypeAdapter,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Any, Iterable, Literal, Type, TypeVar
+from typing import Any, Iterable, TypeVar
 from .stix_helper import TLPLiteral, tlp_marking_from_string, validate_stix_id
+from .utils import comma_string_to_set
 from enum import Enum
 
 T = TypeVar("T")
 
 
 class EnrichmentConfig(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="WAZUH_")
+    """
+    This configuration dictates how the connector should enrich incidents with
+    observables and other entities
+    """
 
-    class Type(Enum):
+    model_config = SettingsConfigDict(
+        env_prefix="WAZUH_ENRICH_", validate_assignment=True
+    )
+
+    class EntityType(Enum):
         """
         Entity types to enrich
         """
@@ -52,7 +55,9 @@ class EnrichmentConfig(BaseSettings):
             * data.osquery.columns.directory
             * data.pwd
 
-        Only the property *path* is set.
+        The following properties are set:
+
+            * path
         """
         Domain = "domain-name"
         """
@@ -63,9 +68,59 @@ class EnrichmentConfig(BaseSettings):
             * data.osquery.columns.hostname
             * data.win.eventdata.queryName
             * data.win.system.computer
+
+        The following properties are set:
+
+            * value
         """
         EMailAddr = "email-addr"
+        """
+        Enrich :stix:`e-mail addresses <#_wmenahkvqmgj>` from
+
+            * data.gcp.protoPayload.authenticationInfo.principalEmail
+            * data.office365.UserId
+
+        The following properties are set:
+
+            * value
+        """
         File = "file"
+        """
+        Enrich :stix:`files <#_99bl2dibcztv>`. File names (name and
+        x_opencti_additional_names) are fetched from
+
+            * data.ChildPath
+            * data.ParentPath
+            * data.Path
+            * data.TargetFilename
+            * data.TargetPath
+            * data.audit.file.name
+            * data.audit.file.name
+            * data.file
+            * data.sca.check.file
+            * data.smbd.filename
+            * data.smbd.new_filename
+            * data.virustotal.source.file
+            * data.win.eventdata.file
+            * data.win.eventdata.filePath
+
+        Hashes (MD5, SHA-1, and SHA-256) are fetched from
+
+            * data.osquery.columns.md5
+            * data.osquery.columns.sha1
+            * data.osquery.columns.sha256
+            * syscheck.md5_after
+            * syscheck.sha1_after
+            * syscheck.sha256_after
+
+        If FIXME:filename_behaviour is FIXME, a nested Directory observable
+        will also be created and set as *parent directory*. If FIXME is FIXME,
+        the filename will contain only the filename, otherwise the full path
+        will be used as filename. This also applies to all filenames in
+        x_opencti_additional_names.
+
+        FIXME: size and othes
+        """
         IPv4Address = "ipv4-addr"
         IPv6Address = "ipv6-addr"
         MAC = "max-addr"
@@ -76,12 +131,27 @@ class EnrichmentConfig(BaseSettings):
         URL = "url"
         UserAgent = "user-agent"
 
-    enrich_types: set[Type] = Field(title="Enrichment types", default=set())
+    types: set[EntityType] = Field(title="Enrichment types", default=set())
     """
     Which entity types to enrich
 
     See :ref:`enrichment`.
     """
+
+    @field_validator("types", mode="before")
+    @classmethod
+    def parse_comma_string(cls, types):
+        """
+        Convert a comma-separated string of types to a set
+
+        Examples:
+
+        >>> sorted(EnrichmentConfig.parse_comma_string('process,file'))
+        ['file', 'process']
+        >>> EnrichmentConfig.parse_comma_string('all') == set(EnrichmentConfig.EntityType)
+        True
+        """
+        return comma_string_to_set(types, cls.EntityType)
 
 
 # TODO: add aliases to create sensible env names
@@ -92,6 +162,8 @@ class Config(BaseSettings):
     """
     FIXME
     """
+
+    model_config = SettingsConfigDict(env_prefix="WAZUH_", validate_assignment=True)
 
     # TODO: add helper function for parsing without dashes too
     class IncidentCreateMode(Enum):
@@ -166,6 +238,10 @@ class Config(BaseSettings):
         Critical severity
         """
 
+    enrich: EnrichmentConfig = EnrichmentConfig()
+    """
+    Settings for what and how to enrich
+    """
     max_tlp: TLPLiteral = Field(
         title="Max TLP",
         description="Max TLP to allow for lookups",
@@ -364,8 +440,6 @@ class Config(BaseSettings):
         default="Wazuh",
     )
 
-    model_config = SettingsConfigDict(env_prefix="WAZUH_")
-
     @field_validator("max_tlp", mode="before")
     @classmethod
     def normalise_tlp(cls, tlp):
@@ -394,7 +468,7 @@ class Config(BaseSettings):
         >>> sorted(Config.parse_comma_string('label1,label2'))
         ['label1', 'label2']
         """
-        return cls.comma_string_to_set(tlps)
+        return comma_string_to_set(tlps)
 
     @field_validator("tlps", mode="after")
     @classmethod
@@ -512,27 +586,3 @@ class Config(BaseSettings):
         max_total = info.data["max_notes"]
         assert max == max_total == 0 or max <= max_total
         return max
-
-    @classmethod
-    def comma_string_to_set(cls, values: Any, Type: Type | None = None) -> Any:
-        """
-        Split a comma-separated string to a set
-
-        This function only splits a string into set of strings. Further
-        validation and coersion is left to pydantic or other validators. Empty
-        strings returns empty sets. The special string "all" returns a
-        set(Type) if Type is specified, as a convenient way to return a set
-        with all possible enum values.
-        """
-        if isinstance(values, str):
-            if not values:
-                return set()
-            elif Type is not None and values == "all":
-                return set(Type)
-            else:
-                # If this is a string, parse it as a comma-separated string with
-                # enum values:
-                return {type_str for type_str in values.split(",")}
-        else:
-            # Otherwise, let pydantic validate whatever it is:
-            return values

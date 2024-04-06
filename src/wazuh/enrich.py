@@ -15,12 +15,14 @@ from .stix_helper import (
     SCOBundle,
 )
 from .utils import (
+    REGISTRY_PATH_REGEX,
     create_if,
     has,
     has_atleast,
     first_or_none,
     first_or_empty,
     first_of,
+    is_registry_path,
     join_values,
     remove_reg_paths,
     search_fields,
@@ -332,6 +334,7 @@ class Enricher(BaseModel):
             ],
         )
 
+    # TODO: add syscheck.size_after
     def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
         # First search for fields that may contain filenames/paths, but without hashes:
         results = {
@@ -342,7 +345,6 @@ class Enricher(BaseModel):
             }
             for alert in alerts
             for field, match in remove_reg_paths(
-                # TODO: same as below: ignore reg.keys:
                 search_fields(
                     alert["_source"],
                     [
@@ -391,8 +393,7 @@ class Enricher(BaseModel):
                         ".+sha256.*": "SHA-256",
                     },
                 )
-                # FIXME: use regex below instead (+ HKLM etc.):
-                if name and hashes and not name.startswith("HKEY_"):
+                if name and hashes and not is_registry_path(name):
                     results[name] = {
                         "field": name_field,
                         "sco": self.stix.create_sco(
@@ -406,6 +407,7 @@ class Enricher(BaseModel):
                         ),
                         "alert": alert,
                     }
+
         return [
             stix
             for match, meta in results.items()
@@ -449,9 +451,7 @@ class Enricher(BaseModel):
                 "data.win.eventdata.targetObject",
             )
             for path in (
-                search_field(
-                    alert["_source"], field, regex="^(?:HKEY_|HK(?:LM|CU|CR|U|CC)).+"
-                ),
+                search_field(alert["_source"], field, regex=REGISTRY_PATH_REGEX),
             )
             if path is not None
             for type in (search_field(alert["_source"], "syscheck.value_type"),)

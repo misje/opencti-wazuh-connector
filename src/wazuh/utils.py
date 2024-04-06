@@ -1,9 +1,11 @@
 import re
 import ipaddress
-from typing import Any, Callable, Literal, Mapping, TypeVar
+from typing import Any, Callable, Literal, Mapping, Type, TypeVar
 from os.path import commonprefix
 
 U = TypeVar("U")
+
+REGISTRY_PATH_REGEX = r"^(?:HKEY_(?:LOCAL_MACHINE|CURRENT_USER|CLASSES_ROOT|USERS|CURRENT_CONFIG)|HK(?:LM|CU|CR|U|CC))"
 
 
 def has(
@@ -715,13 +717,59 @@ def merge_outof(obj: dict, **overrides) -> dict:
     return {key: value for key, value in overrides.items()} | obj
 
 
+def is_registry_path(path: str) -> bool:
+    """
+    Is the provided path a registry path
+
+    Examples:
+
+    >>> is_registry_path('HKLM')
+    True
+    >>> is_registry_path('HKEY_LOCAL_MACHINE\\foo')
+    True
+    >>> is_registry_path('\\HKCU')
+    False
+    """
+    return bool(
+        re.search(
+            REGISTRY_PATH_REGEX,
+            path,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
 def remove_reg_paths(obj: dict[Any, str]) -> dict[Any, str]:
     """
     Remove all values from the dict that starts with 'HKEY\\_'
 
     Examples:
 
-    >>> remove_reg_paths({'a': '/foo/bar', 'b': 'HKEY_CURRENT_MACHINE/baz'})
+    >>> remove_reg_paths({'a': '/foo/bar', 'b': 'HKEY_LOCAL_MACHINE/baz'})
     {'a': '/foo/bar'}
     """
-    return {k: v for k, v in obj.items() if not v.startswith("HKEY_")}
+    return {k: v for k, v in obj.items() if not is_registry_path(v)}
+
+
+def comma_string_to_set(values: Any, EType: Type | None = None) -> Any:
+    """
+    Split a comma-separated string to a set
+
+    This function only splits a string into set of strings. Further
+    validation and coersion is left to pydantic or other validators. Empty
+    strings returns empty sets. The special string "all" returns a
+    set(Type) if Type is specified, as a convenient way to return a set
+    with all possible enum values.
+    """
+    if isinstance(values, str):
+        if not values:
+            return set()
+        elif EType is not None and values == "all":
+            return set(EType)
+        else:
+            # If this is a string, parse it as a comma-separated string with
+            # enum values:
+            return {type_str for type_str in values.split(",")}
+    else:
+        # Otherwise, let pydantic validate whatever it is:
+        return values

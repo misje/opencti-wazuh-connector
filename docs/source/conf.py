@@ -73,4 +73,6 @@ extlinks = {
     ),
 }
 
+# TODO: gloassary and :term:
+
 sys.path.insert(0, os.path.abspath("../../src"))
