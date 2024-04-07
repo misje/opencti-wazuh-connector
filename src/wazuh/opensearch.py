@@ -1,10 +1,12 @@
 import urllib3
 import requests
+import logging
 from datetime import datetime
-from pycti import OpenCTIConnectorHelper
 from requests.adapters import HTTPAdapter
 from urllib3.util import Retry
 from urllib.parse import urljoin
+
+log = logging.getLogger(__name__)
 
 
 class OpenSearchClient:
@@ -27,7 +29,6 @@ class OpenSearchClient:
     def __init__(
         self,
         *,
-        helper: OpenCTIConnectorHelper,
         url: str,
         username: str,
         password: str,
@@ -44,7 +45,6 @@ class OpenSearchClient:
         self.password = password
         self.index = index
         self.limit = limit
-        self.helper = helper
         self.filters = filters
         self.search_after = search_after
         self.order_by = self._parse_order_by(order_by)
@@ -109,15 +109,15 @@ class OpenSearchClient:
             "size": self.limit,
             "sort": self.order_by + [{"timestamp": {"order": "desc"}}],
         }
-        self.helper.connector_logger.debug(f'Sending query "{query}"')
+        log.debug(f'Sending query "{query}"')
 
         r = self._query(f"{self.index}/_search", query=query)
         if not r:
             return None
         try:
             if r["timed_out"]:
-                self.helper.connector_logger.warning("OpenSearch: Query timed out")
-                self.helper.connector_logger.debug(
+                log.warning("OpenSearch: Query timed out")
+                log.debug(
                     "OpenSearh: Searched {}/{} shards, {} skipped, {} failed".format(
                         r["_shards"]["successful"],
                         r["_shards"]["total"],
@@ -126,7 +126,7 @@ class OpenSearchClient:
                     )
                 )
             if r["hits"]["total"]["value"] > self.limit:
-                self.helper.connector_logger.warning(
+                log.warning(
                     "Processing only {} of {} hits (hint: increase 'max_hits')".format(
                         self.limit, r["hits"]["total"]["value"]
                     )
