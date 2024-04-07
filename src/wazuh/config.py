@@ -29,6 +29,8 @@ class EnrichmentConfig(BaseSettings):
     class EntityType(Enum):
         """
         Entity types to enrich
+
+        See :doc:`enrichment` for details.
         """
 
         Account = "user-account"
@@ -134,8 +136,6 @@ class EnrichmentConfig(BaseSettings):
     types: set[EntityType] = Field(title="Enrichment types", default=set())
     """
     Which entity types to enrich
-
-    See :ref:`enrichment`.
     """
 
     @field_validator("types", mode="before")

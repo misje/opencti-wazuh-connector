@@ -8,6 +8,12 @@ OpenCTI–Wazuh connector
 Overview
 ---------------------------------------------------
 
+.. toctree::
+   :maxdepth: 2
+
+   enrichment
+
+
 Installation
 ---------------------------------------------------
 
