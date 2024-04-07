@@ -576,35 +576,6 @@ def regex_transform_keys(obj: dict[str, T], map: dict[str, str]) -> dict[str, T]
     }
 
 
-# def regex_transform_keys(
-#    obj: dict[str, T], map: dict[str, str], overwrite: bool = False
-# ) -> dict[str, T]:
-#    """
-#    Apply a regex tranformation to each key in object
-#
-#    Each key in the map is a regular expression, and each value is the
-#    substitution pattern. The returned dict contains the substituted keys, and
-#    the original values from obj.
-#
-#    Examples:
-#
-#    >>> regex_transform_keys({'one.two': 1, 'three.one': 2}, {'^.+\\\\.(.+)$': '\\\\1'})
-#    {'two': 1, 'one': 2}
-#    >>> regex_transform_keys({'one.two': 1, 'three.one': 2, 'four.one': 3}, {'^.+\\\\.(.+)$': '\\\\1'})
-#    {'two': 1, 'one': 2}
-#    """
-#    new_keys = set()
-#    return {
-#        subst_key: value
-#        for key, value in obj.items()
-#        for pattern, replacement in map.items()
-#        for subst_key in (re.sub(pattern, replacement, key),)
-#        if re.match(pattern, key)
-#        and overwrite
-#        or subst_key not in new_keys | set(subst_key)
-#    }
-
-
 def ip_proto(addr: str) -> Literal["ipv4", "ipv6"] | None:
     """
     Return the literal 'ipv4' or 'ipv6' depending on the type of IP address, or
