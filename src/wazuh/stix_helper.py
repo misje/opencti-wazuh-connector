@@ -297,7 +297,7 @@ def find_hashes(
     'sha256' or 'sha-256' in any case will be matched. The hashes themselves
     are not verified.
 
-    The fields in a list of list of fields, where the outer list determines the
+    The fields is a list of list of fields, where the outer list determines the
     order of preference. The overwrite parameter determines whether a hash
     member found in a previous field list will be replaced or not.
 

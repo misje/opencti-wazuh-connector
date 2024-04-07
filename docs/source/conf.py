@@ -16,6 +16,7 @@ extensions = [
     "sphinx.ext.doctest",
     "sphinx.ext.coverage",
     "sphinx.ext.extlinks",
+    "sphinx_paramlinks",
     # Include when project published:
     # "sphinx.ext.viewcode",
     "sphinx_rtd_theme",

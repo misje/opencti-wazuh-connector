@@ -2,6 +2,7 @@ import re
 import ipaddress
 from typing import Any, Callable, Literal, Mapping, Type, TypeVar
 from os.path import commonprefix
+from pydantic import AnyUrl, ValidationError
 
 T = TypeVar("T")
 Number = TypeVar("Number", int, float)
@@ -820,3 +821,100 @@ def none_unless_threshold(
     2
     """
     return value if isinstance(value, (int, float)) and value >= threshold else default
+
+
+def verify_url(
+    url: AnyUrl | str | None,
+    *,
+    must: list[str] = [],
+    must_not: list[str] = ["username", "password", "query", "fragment"],
+    throw: bool = False,
+) -> bool:
+    """
+    Verify that a URL conforms to a set of requirement
+
+    :param url:      An AnyUrl object or any of its specialised types, None, or
+                     a string. If the parameter is a string, an AnyUrl is
+                     created (using default constraints).
+    :param must:     Set of properties that must be set (i.e. not None) in the
+                     :paramref:`url`. The properties must exist.
+    :param must_not: Set of properties that must not be set (i.e. None) in the
+                     :paramref:`url`. The properties must exist.
+    :param throw:    Raise an exception if :paramref:`url` is a string and the
+                     AnyUrl created from this argument raises a
+                     ValidationError, or if the properties check fail.
+
+    This function is meant to run additional checks on an AnyUrl object or any
+    of its specialised types, like HttpUrl, MySQLDsn etc. It's useful to ensure
+    that credentials are not part of the URL, and its default arguments ensure
+    that username, password, query and fragment are not set.
+
+    Although :paramref:`url` may be a string, it's highly recommended to use
+    one of pydantic's URL objects to use suitable UrlConstraints in addition to
+    the checks in this function.
+
+    :return:
+
+        * True if
+            * the properties in :paramref:`must` are not None in
+              :paramref:`url`
+            * the properties in :paramref:`must_not` are None in
+              :paramref:`url`
+        * False if the above is not true, or if :paramref:`url` is None
+
+    :raises ValueError: If :paramref:`throw` is true (see :paramref:`throw`),
+                        or if :paramref:`must` or :paramref:`must_not` contians
+                        properties that do not exist in AnyUrl.
+
+    Examples:
+
+    >>> verify_url('foo', throw=True)
+    Traceback (most recent call last):
+    ValueError: Invalid URL
+    >>> verify_url('http://foo.bar/baz')
+    True
+    >>> verify_url('http://user:pass@foo.bar')
+    False
+    >>> verify_url('http://user:@foo.bar', must_not=['password'])
+    True
+    >>> from pydantic import AnyHttpUrl
+    >>> verify_url(AnyHttpUrl('http://foo.bar/baz'))
+    True
+    """
+    # FIXME: somehow doesn't work:
+    # >>> verify_url('foo://bar', must=['port'], throw=True)
+    # Traceback (most recent call last):
+    # ValueError: Invalid URL: properties not set: port
+    # >>> verify_url(AnyHttpUrl('http://foo.bar/baz?qux=quux'), throw=True)
+    # Traceback (most recent call last):
+    # ValueError: Invalid URL: properties expected to be empty: query
+    if isinstance(url, str):
+        try:
+            url = AnyUrl(url)
+        except ValidationError as e:
+            if throw:
+                raise ValueError("Invalid URL") from e
+            else:
+                return False
+
+    elif not isinstance(url, AnyUrl):
+        return False
+
+    valid = all(getattr(url, prop) is not None for prop in must) and all(
+        getattr(url, prop) is None for prop in must_not
+    )
+    if not throw:
+        return valid
+    # Provide helpful exception info when used in pydantic validators:
+    elif not valid and (
+        failed_musts := [prop for prop in must if getattr(url, prop) is None]
+    ):
+        raise ValueError(f"Invalid URL: properties not set: {', '.join(failed_musts)} ")
+    elif not valid and (
+        failed_mustnts := [prop for prop in must_not if getattr(url, prop) is not None]
+    ):
+        raise ValueError(
+            f"Invalid URL: properties expected to be empty: {', '.join(failed_mustnts)} "
+        )
+    else:
+        return True

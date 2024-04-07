@@ -634,6 +634,7 @@ class Enricher(BaseModel):
                         FileMeta,
                         condition=lambda: has_atleast(data, "image", "hashes"),
                         filename=oneof("image", within=data),
+                        # TODO: parse the rest of the hashes too (SHA1=,MD5=,SHA25=):
                         sha256=parse_sha256(oneof("hashes", within=data, default="")),
                     ),
                     parent=create_if(

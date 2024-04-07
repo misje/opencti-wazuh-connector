@@ -8,6 +8,8 @@ from urllib.parse import urljoin
 
 log = logging.getLogger(__name__)
 
+# TODO: filter instead of query context?
+
 
 class OpenSearchClient:
     """

@@ -487,7 +487,6 @@ class WazuhConnector:
         self.alert_searcher = AlertSearcher(
             helper=self.helper,
             opensearch=OpenSearchClient(
-                helper=self.helper,
                 url=get_config_variable(  # type: ignore
                     "WAZUH_OPENSEARCH_URL",
                     ["wazuh", "opensearch", "url"],
