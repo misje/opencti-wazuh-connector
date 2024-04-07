@@ -1,6 +1,7 @@
 from __future__ import annotations
 import stix2
 import re
+import dateparser
 from pydantic import BaseModel, ConfigDict, field_validator
 from ntpath import basename
 from enum import Enum
@@ -17,6 +18,7 @@ from .stix_helper import (
 from .utils import (
     REGISTRY_PATH_REGEX,
     create_if,
+    first_field,
     has,
     has_atleast,
     first_or_none,
@@ -24,6 +26,7 @@ from .utils import (
     first_of,
     is_registry_path,
     join_values,
+    none_unless_threshold,
     remove_reg_paths,
     search_fields,
     search_field,
@@ -340,7 +343,15 @@ class Enricher(BaseModel):
         results = {
             match: {
                 "field": field,
-                "sco": self.stix.create_sco("StixFile", value=match),
+                "sco": self.stix.create_sco(
+                    "StixFile",
+                    value=match,
+                    size=none_unless_threshold(size, 0),
+                    hashes=hashes,
+                    ctime=ctime,
+                    mtime=mtime,
+                    atime=atime,
+                ),
                 "alert": alert,
             }
             for alert in alerts
@@ -356,57 +367,73 @@ class Enricher(BaseModel):
                         "data.audit.file.name",
                         "data.audit.file.name",
                         "data.file",
+                        "data.osquery.columns.path",
                         "data.sca.check.file",
                         "data.smbd.filename",
                         "data.smbd.new_filename",
                         "data.virustotal.source.file",
                         "data.win.eventdata.file",
                         "data.win.eventdata.filePath",
+                        "syscheck.path",
                     ],
                 )
             ).items()
-        }
-
-        # Then search in fields that also may contain hashes:
-        for alert in alerts:
-            for name_field, hash_fields in {
-                "data.osquery.columns.path": [
-                    "data.osquery.columns.md5",
-                    "data.osquery.columns.sha1",
-                    "data.osquery.columns.sha256",
-                ],
-                "syscheck.path": [
-                    "syscheck.md5_after",
-                    "syscheck.sha1_after",
-                    "syscheck.sha256_after",
-                ],
-            }.items():
-                name = search_field(alert["_source"], name_field)
-                hashes = regex_transform(
+            for size in (
+                first_field(
+                    alert["_source"], "syscheck.size_after", "syscheck.size_before"
+                ),
+            )
+            # Only one hash should be populated in stix, according to the
+            # standard, in order of preference: md5, sha-1, sha-256. OpenCTI
+            # doesn't seem to care about this, and why not keep them all:
+            # TODO: _before?
+            for hashes in (
+                regex_transform(
                     search_fields(
                         alert["_source"],
-                        hash_fields,
+                        [
+                            "data.osquery.columns.md5",
+                            "data.osquery.columns.sha1",
+                            "data.osquery.columns.sha256",
+                            "syscheck.md5_after",
+                            "syscheck.sha1_after",
+                            "syscheck.sha256_after",
+                        ],
                     ),
                     {
                         ".+md5.*": "MD5",
                         ".+sha1$.*": "SHA-1",
                         ".+sha256.*": "SHA-256",
                     },
-                )
-                if name and hashes and not is_registry_path(name):
-                    results[name] = {
-                        "field": name_field,
-                        "sco": self.stix.create_sco(
-                            "StixFile",
-                            value=name,
-                            # Only one hash should be populated in stix, according to the
-                            # standard, in order of preference: md5, sha-1, sha-256.
-                            # OpenCTI doesn't seem to care about this, and why not keep
-                            # them all:
-                            hashes=hashes,
-                        ),
-                        "alert": alert,
-                    }
+                ),
+            )
+            for ctime in (
+                # Timestamps can be in any sort of format, and dateparser is
+                # great and doing the best thing. If it is handed an invalid
+                # timestamp string (including stringified None), it just
+                # returns None. Perfect in this case:
+                dateparser.parse(
+                    str(first_field(alert["_source"], "data.osquery.columns.ctime"))
+                ),
+            )
+            for mtime in (
+                dateparser.parse(
+                    str(
+                        first_field(
+                            alert["_source"],
+                            "syscheck.mtime_after",
+                            "syscheck.mtime_before",
+                            "data.osquery.columns.mtime",
+                        )
+                    )
+                ),
+            )
+            for atime in (
+                dateparser.parse(
+                    str(first_field(alert["_source"], "data.osquery.columns.atime"))
+                ),
+            )
+        }
 
         return [
             stix

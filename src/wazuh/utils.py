@@ -3,7 +3,8 @@ import ipaddress
 from typing import Any, Callable, Literal, Mapping, Type, TypeVar
 from os.path import commonprefix
 
-U = TypeVar("U")
+T = TypeVar("T")
+Number = TypeVar("Number", int, float)
 
 REGISTRY_PATH_REGEX = r"^(?:HKEY_(?:LOCAL_MACHINE|CURRENT_USER|CLASSES_ROOT|USERS|CURRENT_CONFIG)|HK(?:LM|CU|CR|U|CC))"
 
@@ -174,7 +175,7 @@ def filter_truthly(*values: Any) -> list[Any]:
     return list(filter(lambda x: x, values))
 
 
-def listify(value: U | list[U] | None) -> list[U]:
+def listify(value: T | list[T] | None) -> list[T]:
     """
     Return value if it is a list, otherwise return a single-item list
 
@@ -270,6 +271,7 @@ def search_fields(obj: dict, fields: list[str], *, regex: str = ""):
     }
 
 
+# TODO: return value can be anything:
 def search_field(obj: dict, field: str, *, regex: str = "") -> str | None:
     """
     Search a dict for a field using a key path
@@ -282,6 +284,29 @@ def search_field(obj: dict, field: str, *, regex: str = "") -> str | None:
     'bar'
     """
     return search_fields(obj, [field], regex=regex).get(field)
+
+
+def first_field(obj: dict, *fields: str, regex: str = "") -> Any:
+    """
+    Return the first field found in obj using search_field, or None
+
+    Examples:
+
+    >>> first_field({'a': {'b': 'foo'}, 'c': 'bar'}, 'a.b', 'c')
+    'foo'
+    >>> first_field({'a': {'b': 'foo'}, 'c': 'bar'}, 'a.c', 'c')
+    'bar'
+    >>> first_field({'a': {'b': 'foo'}, 'c': 'bar'}, 'd')
+    """
+    return next(
+        (
+            result
+            for field in fields
+            for result in (search_field(obj, field, regex=regex),)
+            if result is not None
+        ),
+        None,
+    )
 
 
 def simplify_field_names(obj: dict) -> dict:
@@ -773,3 +798,23 @@ def comma_string_to_set(values: Any, EType: Type | None = None) -> Any:
     else:
         # Otherwise, let pydantic validate whatever it is:
         return values
+
+
+def none_unless_threshold(
+    value: Number, threshold: Number, default: Number | None = None
+) -> Number | None:
+    """
+    Return value if it is a number and above or equals a threshold, otherwise default
+
+
+    Examples
+
+    >>> none_unless_threshold(1, 2, -1)
+    -1
+    >>> none_unless_threshold(1, 2)
+    >>> none_unless_threshold(None, 2, 3)
+    3
+    >>> none_unless_threshold(2, 2)
+    2
+    """
+    return value if isinstance(value, (int, float)) and value >= threshold else default
