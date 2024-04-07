@@ -2,7 +2,7 @@ import stix2
 import re
 from pycti import OpenCTIConnectorHelper, Tool, CustomObservableUserAgent
 from pydantic import BaseModel, ConfigDict, field_validator
-from typing import Annotated, Any, Final, Literal, Sequence
+from typing import Any, Final, Literal, Mapping, Sequence
 from .utils import (
     filter_truthly,
     first_or_none,
@@ -12,6 +12,8 @@ from .utils import (
     ip_proto,
     merge_outof,
     listify,
+    regex_transform_keys,
+    search_fields,
 )
 from enum import Enum
 from ntpath import split
@@ -281,6 +283,48 @@ def remove_unref_objs(bundle: STIXList) -> STIXList:
         for obj in bundle
         if isinstance(obj, SRO) or (isinstance(obj, SCO | SDO) and obj.id in ref_ids)
     ]
+
+
+def find_hashes(
+    obj: Mapping, fields: list[list[str]], overwrite: bool = False
+) -> dict[str, dict[str, str]]:
+    """
+    Return a dict suitable for the argument 'hashes' in stix2.File from hash
+    properties in an alert
+
+    The hash keys will be transformed into the keys expected by STIX, e.g.
+    'sha256_after' will be replaced with 'SHA-256'. Any field containing
+    'sha256' or 'sha-256' in any case will be matched. The hashes themselves
+    are not verified.
+
+    The fields in a list of list of fields, where the outer list determines the
+    order of preference. The overwrite parameter determines whether a hash
+    member found in a previous field list will be replaced or not.
+
+    Examples:
+
+    >>> alert = {"syscheck": { "md5_before": "11ee6b89a2500aa326d45bc0f0d93821", "sha256_before": "87b3bfb07fa641adf426961c9d5e8a81c321fd03c32d9afb0f761a2c876cb6a1", "sha1_after": "950c5897c1e1b8b7686b976472d19fd815beccd7", "md5_after": "502ad4209d3eb3267d08708f0807de1c", "sha1_before": "ff916c71058daa68e2951a50bed8b3e5bfd7aff3", "sha256_after": "6f2a43b4d954d9984701a23513bb4476736dd4aed5b5ec47ad99e7943eacd7bf"}}
+    >>> find_hashes(alert, [['syscheck.sha256_after', 'syscheck.md5_after', 'syscheck.sha1_after'], ['syscheck.sha256_before']])
+    {'SHA-256': '6f2a43b4d954d9984701a23513bb4476736dd4aed5b5ec47ad99e7943eacd7bf', 'MD5': '502ad4209d3eb3267d08708f0807de1c', 'SHA-1': '950c5897c1e1b8b7686b976472d19fd815beccd7'}
+    >>> find_hashes(alert, [['syscheck.sha256_after', 'syscheck.md5_after', 'syscheck.sha1_after'], ['syscheck.sha256_before']], overwrite=True)
+    {'SHA-256': '87b3bfb07fa641adf426961c9d5e8a81c321fd03c32d9afb0f761a2c876cb6a1', 'MD5': '502ad4209d3eb3267d08708f0807de1c', 'SHA-1': '950c5897c1e1b8b7686b976472d19fd815beccd7'}
+    """
+    hashes = {}
+    for fields_pref in fields:
+        hashes.update(
+            (key, value)
+            for key, value in regex_transform_keys(
+                search_fields(obj, fields_pref),
+                {
+                    "(?i).+md5.*": "MD5",
+                    "(?i).+sha-?1.*": "SHA-1",
+                    "(?i).+sha-?256.*": "SHA-256",
+                },
+            ).items()
+            if overwrite or key not in hashes
+        )
+
+    return hashes
 
 
 class FilenameBehaviour(Enum):

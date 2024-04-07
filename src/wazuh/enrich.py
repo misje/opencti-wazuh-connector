@@ -14,6 +14,7 @@ from pycti import (
 from .stix_helper import (
     StixHelper,
     SCOBundle,
+    find_hashes,
 )
 from .utils import (
     REGISTRY_PATH_REGEX,
@@ -32,7 +33,7 @@ from .utils import (
     search_field,
     field_compare,
     non_none,
-    regex_transform,
+    regex_transform_keys,
     ip_proto,
     ip_protos,
     connection_string,
@@ -386,11 +387,10 @@ class Enricher(BaseModel):
             # Only one hash should be populated in stix, according to the
             # standard, in order of preference: md5, sha-1, sha-256. OpenCTI
             # doesn't seem to care about this, and why not keep them all:
-            # TODO: _before?
             for hashes in (
-                regex_transform(
-                    search_fields(
-                        alert["_source"],
+                find_hashes(
+                    alert["_source"],
+                    [
                         [
                             "data.osquery.columns.md5",
                             "data.osquery.columns.sha1",
@@ -399,12 +399,18 @@ class Enricher(BaseModel):
                             "syscheck.sha1_after",
                             "syscheck.sha256_after",
                         ],
-                    ),
-                    {
-                        ".+md5.*": "MD5",
-                        ".+sha1$.*": "SHA-1",
-                        ".+sha256.*": "SHA-256",
-                    },
+                        # In syscheck modificaiton events, both 'before' and
+                        # 'after' hashes are present. In such cases, the
+                        # 'after' hash is wanted. However, if only 'before' is
+                        # present, be sure to include that one. Add before
+                        # hashes as a second list argument to indicate lesser
+                        # prefere:
+                        [
+                            "syscheck.md5_before",
+                            "syscheck.sha1_before",
+                            "syscheck.sha256_before",
+                        ],
+                    ],
                 ),
             )
             for ctime in (

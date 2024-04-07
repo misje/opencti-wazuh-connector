@@ -5,6 +5,8 @@ from os.path import commonprefix
 
 T = TypeVar("T")
 Number = TypeVar("Number", int, float)
+# TODO: use typevars to assert correct dict/mapping in and out of functions
+Obj = TypeVar("Obj", bound=Mapping)
 
 REGISTRY_PATH_REGEX = r"^(?:HKEY_(?:LOCAL_MACHINE|CURRENT_USER|CLASSES_ROOT|USERS|CURRENT_CONFIG)|HK(?:LM|CU|CR|U|CC))"
 
@@ -214,7 +216,7 @@ def re_search_or_none(pattern: str, string: str):
 
 
 def extract_fields(
-    obj: dict, fields: list[str], *, raise_if_missing: bool = True
+    obj: Mapping, fields: list[str], *, raise_if_missing: bool = True
 ) -> dict:
     """
     Extract values from a dict recursively using key paths
@@ -228,7 +230,7 @@ def extract_fields(
     {'a.b.c': 1, 'a.b': {'c': 1}}
     """
 
-    def traverse(obj: dict, keys: list[str]):
+    def traverse(obj: Mapping, keys: list[str]):
         for key in keys:
             try:
                 obj = obj[key]
@@ -250,7 +252,7 @@ def extract_fields(
     return {k: v for k, v in results.items() if v is not None}
 
 
-def search_fields(obj: dict, fields: list[str], *, regex: str = ""):
+def search_fields(obj: Mapping, fields: list[str], *, regex: str = ""):
     """
     Search a dict for fields using key paths
 
@@ -553,7 +555,7 @@ def search_in_object_multi(
     }
 
 
-def regex_transform(obj: dict[str, Any], map: dict[str, str]) -> dict[str, Any]:
+def regex_transform_keys(obj: dict[str, T], map: dict[str, str]) -> dict[str, T]:
     """
     Apply a regex tranformation to each key in object
 
@@ -563,7 +565,7 @@ def regex_transform(obj: dict[str, Any], map: dict[str, str]) -> dict[str, Any]:
 
     Examples:
 
-    >>> regex_transform({'one.two': 1, 'three.one': 2}, {'^.+\\\\.(.+)$': '\\\\1'})
+    >>> regex_transform_keys({'one.two': 1, 'three.one': 2}, {'^.+\\\\.(.+)$': '\\\\1'})
     {'two': 1, 'one': 2}
     """
     return {
@@ -572,6 +574,35 @@ def regex_transform(obj: dict[str, Any], map: dict[str, str]) -> dict[str, Any]:
         for pattern, replacement in map.items()
         if re.match(pattern, key)
     }
+
+
+# def regex_transform_keys(
+#    obj: dict[str, T], map: dict[str, str], overwrite: bool = False
+# ) -> dict[str, T]:
+#    """
+#    Apply a regex tranformation to each key in object
+#
+#    Each key in the map is a regular expression, and each value is the
+#    substitution pattern. The returned dict contains the substituted keys, and
+#    the original values from obj.
+#
+#    Examples:
+#
+#    >>> regex_transform_keys({'one.two': 1, 'three.one': 2}, {'^.+\\\\.(.+)$': '\\\\1'})
+#    {'two': 1, 'one': 2}
+#    >>> regex_transform_keys({'one.two': 1, 'three.one': 2, 'four.one': 3}, {'^.+\\\\.(.+)$': '\\\\1'})
+#    {'two': 1, 'one': 2}
+#    """
+#    new_keys = set()
+#    return {
+#        subst_key: value
+#        for key, value in obj.items()
+#        for pattern, replacement in map.items()
+#        for subst_key in (re.sub(pattern, replacement, key),)
+#        if re.match(pattern, key)
+#        and overwrite
+#        or subst_key not in new_keys | set(subst_key)
+#    }
 
 
 def ip_proto(addr: str) -> Literal["ipv4", "ipv6"] | None:
