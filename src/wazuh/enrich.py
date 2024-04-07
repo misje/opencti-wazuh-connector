@@ -348,7 +348,7 @@ class Enricher(BaseModel):
                     "StixFile",
                     value=match,
                     size=none_unless_threshold(size, 0),
-                    hashes=hashes,
+                    hashes=hashes if hashes else None,
                     ctime=ctime,
                     mtime=mtime,
                     atime=atime,
