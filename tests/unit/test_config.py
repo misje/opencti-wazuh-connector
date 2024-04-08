@@ -6,7 +6,7 @@ import random
 from pydantic import ValidationError
 
 sys.path.insert(0, os.path.abspath("../../src"))
-from wazuh.config import Config, EnrichmentConfig, OpenSearchConfig
+from wazuh.config import Config, EnrichmentConfig
 
 # random.seed(0)
 

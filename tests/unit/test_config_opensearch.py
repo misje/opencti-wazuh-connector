@@ -9,7 +9,7 @@ from datetime import datetime
 from wazuh.utils import merge_outof
 
 sys.path.insert(0, os.path.abspath("../../src"))
-from wazuh.config import OpenSearchConfig
+from wazuh.opensearch_config import OpenSearchConfig
 
 # random.seed(0)
 
