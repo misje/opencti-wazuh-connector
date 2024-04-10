@@ -15,7 +15,7 @@ file name only. The file name was unique, and only a few results were returned.
 The highlighted **Dropped: 0** indicates that no results were dropped (because
 the limit :py:attr:`~wazuh.config.Config.hits_limit` was met).
 
-The meaning of all the field in the summary table are as follows:
+The meaning of all the fields in the summary table are as follows:
 
 .. list-table:: Enrichment summary table
    :header-rows: 1

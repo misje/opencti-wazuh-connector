@@ -105,7 +105,7 @@ def tlp_marking_from_string(tlp_string: str | None):
     """
     Map a TLP string to a corresponding marking definition, or None
 
-    Any characters ut to and including ":" are stripped and case is ignored.
+    Any characters up to and including ":" are stripped and case is ignored.
 
     Examples:
 
@@ -515,8 +515,8 @@ class StixHelper(BaseModel):
 
     def create_account_from_username(self, username: str | None, **stix_properties):
         """
-        Create a User-Account from a string that may container a username or
-        both a username and a user ID
+        Create a User-Account from a string that may contain a username or both
+        a username and a user ID
 
         If the username is of the form "name(uid=digits)", the uid is extracted
         and the resulting UserAccount will have both account_login and user_id

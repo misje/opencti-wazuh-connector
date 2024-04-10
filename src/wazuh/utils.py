@@ -471,9 +471,9 @@ def non_none(*args, threshold: int = 1) -> bool:
 
     Examples:
 
-    >> non_none(1, None, 3, threshold=2)
+    >>> non_none(1, None, 3, threshold=2)
     True
-    >> none_none(None, None):
+    >>> none_none(None, None):
     False
     """
     return sum(arg is not None for arg in args) >= threshold
@@ -769,7 +769,9 @@ def is_registry_path(path: str) -> bool:
 
 def remove_reg_paths(obj: dict[Any, str]) -> dict[Any, str]:
     """
-    Remove all values from the dict that starts with 'HKEY\\_'
+    Remove all registry paths from the dict values
+
+    :func:`is_registry_path` is used.
 
     Examples:
 
@@ -783,11 +785,11 @@ def comma_string_to_set(values: Any, EType: Type | None = None) -> Any:
     """
     Split a comma-separated string to a set
 
-    This function only splits a string into set of strings. Further
+    This function only splits a string into a set of strings. Further
     validation and coersion is left to pydantic or other validators. Empty
     strings returns empty sets. The special string "all" returns a
-    set(Type) if Type is specified, as a convenient way to return a set
-    with all possible enum values.
+    ``set(Type)`` if :paramref:`Type` is specified, as a convenient way to
+    return a set with all possible enum values.
     """
     if isinstance(values, str):
         if not values:
@@ -844,14 +846,14 @@ def verify_url(
                      AnyUrl created from this argument raises a
                      ValidationError, or if the properties check fail.
 
-    This function is meant to run additional checks on an AnyUrl object or any
-    of its specialised types, like HttpUrl, MySQLDsn etc. It's useful to ensure
-    that credentials are not part of the URL, and its default arguments ensure
-    that username, password, query and fragment are not set.
+    This function's purpose is to run additional checks on an AnyUrl object or
+    any of its specialised types, like HttpUrl, MySQLDsn etc. It's useful to
+    ensure that credentials are not part of the URL, and that its default
+    arguments ensure that username, password, query and fragment are not set.
 
     Although :paramref:`url` may be a string, it's highly recommended to use
-    one of pydantic's URL objects to use suitable UrlConstraints in addition to
-    the checks in this function.
+    one of pydantic's URL classes instead, in order to use suitable
+    UrlConstraints in addition to the checks in this function.
 
     :return:
 
