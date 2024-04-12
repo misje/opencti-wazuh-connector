@@ -1,5 +1,4 @@
 import dateparser
-import json
 import logging
 from datetime import datetime
 from pydantic import (
@@ -11,6 +10,8 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import TypeVar
 from .utils import verify_url
+from .opensearch_dsl import Match, OrderBy, QueryType
+from .opensearch_dsl_helper import dsl_matches_from_string, dsl_order_by_from_string
 
 T = TypeVar("T")
 
@@ -25,14 +26,6 @@ class OpenSearchConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="WAZUH_OPENSEARCH_", validate_assignment=True
     )
-
-    # class Order(Enum):
-    #    ASC = "asc"
-    #    DESC = "desc"
-
-    # class OrderBy(BaseModel):
-    #    field: str
-    #    order: Order
 
     url: AnyHttpUrl | str
     """
@@ -60,32 +53,24 @@ class OpenSearchConfig(BaseSettings):
     Search for alerts in OpenSearch after this point in time, which may be
     specified either as a timestamp or a relative time (like "2 months ago")
     """
-    # TODO: filter?
-    include_match: list | str | None = None
+    include_match: list[Match] | str | None = None
     """
-    Search query to include in all OpenSearch alert searches. It may either be
-    a DSL json object, or alternatively a comma-separated string with key=value
-    items that will be transformed into a number of full-text "match" query. In
-    both cases, the query will be added to a "bool" "must" array.
+    FIXME
     """
-    exclude_match: list | str | None = "data.integration=opencti"
+    exclude_match: list[Match] | str | None = "data.integration=opencti"
     """
-    Search query to include in all OpenSearch alert searches to exclude
-    results. It may either be a DSL json object, or alternatively a
-    comma-separated string with key=value items that will be transformed into a
-    number of full-text "match" query. In both cases, the query will be added
+    FIXME
     to a "bool" "must_not" array. The default value will exclude alerts
     produced by the `wazuh-opencti <https://github.com/misje/wazuh-opencti>`_
     Wazuh integration.
     """
-    # filter: list[str]
     limit: int = Field(gt=0, default=50)
     """
     Maximum number of results to return from the OpenSearch alert query (after
     ordering by timestamp (and rule.level if :py:attr:`order_by_rule_level` is
     True)).
     """
-    order_by: list[dict[str, dict[str, str]]] | str = "timestamp=desc"
+    order_by: list[OrderBy] | str | None = "timestamp:desc"
     """
     How to order alert results before returning :py:attr:`limit` number of
     results. The default and recommended settings is to order by timestamp,
@@ -95,8 +80,16 @@ class OpenSearchConfig(BaseSettings):
 
     Format:
 
-        * timestamp=desc
-        * rule.level=desc,timestamp=desc
+        * timestamp:desc
+        * rule.level:desc,timestamp:desc
+    """
+    filter: QueryType | None = None
+    """
+    Default filter used when searching
+
+    All searches are performed with a :dsl:`Bool query <compound/bool>`. The
+    members :attr:`search_after`, :attr:`include_match` and
+    :attr:`exclude_match` are used in the Bool query's *filter*. FIXME
     """
 
     @field_validator("url", mode="before")
@@ -153,57 +146,22 @@ class OpenSearchConfig(BaseSettings):
         else:
             raise ValueError("timestamp is invalid")
 
-    @field_validator("include_match", "exclude_match", mode="after")
+    @field_validator("include_match", "exclude_match", mode="before")
     @classmethod
-    def parse_match_patterns(cls, patterns_str: str | None) -> list | None:
-        """
-        Parse a string with comma-separated key–value pairs in a list of
-        OpenSearch DSL match query JSON objects
-
-        If the string is a valid JSON array, it is passed on and assumed to be
-        valid DSL.
-
-        Examples:
-
-        >>> Config.parse_match_patterns("foo=bar,baz=qux")
-        [{'match': {'foo': 'bar'}}, {'match': {'baz': 'qux'}}]
-        """
-        if patterns_str is None:
-            return None
-
-        # Do not obther at all to try to validate DSL. If it is valid JSON,
-        # just let the opensearch module attempt to use it:
-        try:
-            dsl = json.loads(patterns_str)
-            if isinstance(dsl, list):
-                return dsl
-        except json.JSONDecodeError:
-            pass
-
-        # Otherwise, ensure that the string contains a list of key–value pairs
-        pairs = [pattern.split("=") for pattern in patterns_str.split(",")]
-        if any(len(pair) != 2 for pair in pairs):
-            raise ValueError(f'The search patterns string "{patterns_str}" is invalid')
-
-        return [{"match": {pair[0]: pair[1]}} for pair in pairs]
+    def parse_match_expression(
+        cls, matches: list[Match] | str | None
+    ) -> list[Match] | None:
+        if isinstance(matches, str):
+            return dsl_matches_from_string(matches)
+        else:
+            return matches
 
     @field_validator("order_by", mode="before")
     @classmethod
-    def parse_order_by(cls, order_by: str) -> list[dict[str, dict[str, str]]]:
-        def verify_order(order: str):
-            if order.lower() not in ["asc", "desc"]:
-                raise ValueError(f"Order not one of [ASC, DESC]: {order}")
-
-            return True
-
-        try:
-            return [
-                {field: {"order": order}}
-                for item in order_by.split(",")
-                for field, order in (item.split("="),)
-                if verify_order(order)
-            ]
-        except ValueError:
-            raise ValueError(
-                "order_by must be a comma-separated list of <field>:<order>"
-            )
+    def parser_order_by_expression(
+        cls, order_by: list[OrderBy] | str | None
+    ) -> list[OrderBy] | None:
+        if isinstance(order_by, str):
+            return dsl_order_by_from_string(order_by)
+        else:
+            return order_by

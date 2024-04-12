@@ -72,6 +72,10 @@ extlinks = {
         "https://github.com/OpenCTI-Platform/connectors/tree/master/%s",
         "OpenCTI connectors on GitHub",
     ),
+    "dsl": (
+        "https://opensearch.org/docs/latest/query-dsl/%s",
+        "OpenSearch DSL query reference",
+    ),
 }
 
 # TODO: gloassary and :term:

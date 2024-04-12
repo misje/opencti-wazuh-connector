@@ -7,6 +7,8 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Iterable, TypeVar
+
+from wazuh.opensearch_config import OpenSearchConfig
 from .stix_helper import TLPLiteral, tlp_marking_from_string, validate_stix_id
 from .utils import comma_string_to_set
 from enum import Enum
@@ -244,10 +246,11 @@ class Config(BaseSettings):
         """
 
     enrich: EnrichmentConfig = EnrichmentConfig()
-    # opensearch: OpenSearchConfig
     """
     Settings for what and how to enrich
     """
+    # opensearch: OpenSearchConfig
+
     max_tlp: TLPLiteral = Field(
         title="Max TLP",
         description="Max TLP to allow for lookups",
