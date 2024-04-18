@@ -1,8 +1,10 @@
 import re
 import ipaddress
 from pydantic import BaseModel, ConfigDict
+from typing import Sequence
 from pycti import OpenCTIConnectorHelper
 from .opensearch import OpenSearchClient
+from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Wildcard
 from .utils import (
     has,
     has_any,
@@ -191,13 +193,8 @@ class AlertSearcher(BaseModel):
             )
         else:
             return self.opensearch.search(
-                must={
-                    "multi_match": {
-                        "query": address,
-                        "fields": fields,
-                    }
-                },
-                must_not={"match": {"agent.ip": address}},
+                must=[MultiMatch(query=address, fields=fields)],
+                must_not=[Match(query=address, field="agent.ip")],
             )
 
     # TODO: wazuh_api: syscollector/id/netiface
@@ -214,7 +211,7 @@ class AlertSearcher(BaseModel):
         ]
         return self.opensearch.search(
             should=[
-                {"multi_match": {"query": value, "fields": fields}}
+                MultiMatch(query=value, fields=fields)
                 for value in [
                     entity["observable_value"].lower(),
                     entity["observable_value"].upper(),
@@ -223,44 +220,40 @@ class AlertSearcher(BaseModel):
         )
 
     def query_traffic(self, *, stix_entity: dict) -> dict | None:
-        query = []
+        query: Sequence[QueryType] = []
         if "src_ref" in stix_entity:
             src_ip = self.helper.api.stix_cyber_observable.read(
                 id=stix_entity["src_ref"]
             )
             if src_ip and "value" in src_ip:
                 query.append(
-                    {
-                        "multi_match": {
-                            "query": src_ip["value"],
-                            "fields": [
-                                "*.LocalIp",
-                                "*.local_address",
-                                "*.nat_source_ip",
-                                "*.sourceIp",
-                                "*.source_address",
-                                "*.src_ip",
-                                "*.srcip",
-                            ],
-                        }
-                    }
+                    MultiMatch(
+                        query=src_ip["value"],
+                        fields=[
+                            "*.LocalIp",
+                            "*.local_address",
+                            "*.nat_source_ip",
+                            "*.sourceIp",
+                            "*.source_address",
+                            "*.src_ip",
+                            "*.srcip",
+                        ],
+                    )
                 )
         if "src_port" in stix_entity:
             query.append(
-                {
-                    "multi_match": {
-                        "query": stix_entity["src_port"],
-                        "fields": [
-                            "*.local_port",
-                            "*.nat_source_port",
-                            "*.sourcePort",
-                            "*.spt",
-                            "*.src_port",
-                            "*.srcport",
-                            "data.IP",
-                        ],
-                    }
-                }
+                MultiMatch(
+                    query=stix_entity["src_port"],
+                    fields=[
+                        "*.local_port",
+                        "*.nat_source_port",
+                        "*.sourcePort",
+                        "*.spt",
+                        "*.src_port",
+                        "*.srcport",
+                        "data.IP",
+                    ],
+                )
             )
         if "dst_ref" in stix_entity:
             dest_ip = self.helper.api.stix_cyber_observable.read(
@@ -268,35 +261,31 @@ class AlertSearcher(BaseModel):
             )
             if dest_ip and "value" in dest_ip:
                 query.append(
-                    {
-                        "multi_match": {
-                            "query": dest_ip["value"],
-                            "fields": [
-                                "*.dest_ip",
-                                "*.destinationIp",
-                                "*.destination_address",
-                                "*.dstip",
-                                "*.nat_destination_ip",
-                                "*.remote_address",
-                            ],
-                        }
-                    }
+                    MultiMatch(
+                        query=dest_ip["value"],
+                        fields=[
+                            "*.dest_ip",
+                            "*.destinationIp",
+                            "*.destination_address",
+                            "*.dstip",
+                            "*.nat_destination_ip",
+                            "*.remote_address",
+                        ],
+                    )
                 )
         if "dst_port" in stix_entity:
             query.append(
-                {
-                    "multi_match": {
-                        "query": stix_entity["dst_port"],
-                        "fields": [
-                            "*.dest_port",
-                            "*.destinationPort",
-                            "*.dpt",
-                            "*.dstport",
-                            "*.nat_destination_port",
-                            "*.remote_port",
-                        ],
-                    }
-                }
+                MultiMatch(
+                    query=stix_entity["dst_port"],
+                    fields=[
+                        "*.dest_port",
+                        "*.destinationPort",
+                        "*.dpt",
+                        "*.dstport",
+                        "*.nat_destination_port",
+                        "*.remote_port",
+                    ],
+                )
             )
 
         if query:
@@ -338,12 +327,7 @@ class AlertSearcher(BaseModel):
             )
         else:
             return self.opensearch.search(
-                must={
-                    "multi_match": {
-                        "query": hostname,
-                        "fields": fields,
-                    }
-                },
+                must=[MultiMatch(query=hostname, fields=fields)]
                 # TODO: configurable?:
                 # data.audit.exe /usr/bin/ssh
                 # data.audit.execve.a* = hostname
@@ -374,16 +358,7 @@ class AlertSearcher(BaseModel):
         # that may be of intereset (not necessarily all the same fields
         # as in File/StixFile:
         filename_searches = [
-            {
-                "regexp": {
-                    field: {
-                        "value": regex_path,
-                        # Search for paths ignoring case for better
-                        # experience on Windows:
-                        "case_insensitive": True,
-                    }
-                }
-            }
+            Regexp(field=field, query=regex_path, case_insensitive=True)
             # Do not add globs here; it will throw:
             for field in [
                 "data.ChildPath",
@@ -404,22 +379,20 @@ class AlertSearcher(BaseModel):
         # Case insensitive would be best too
         return self.opensearch.search(
             should=[
-                {
-                    "multi_match": {
-                        "query": path,
-                        "fields": [
-                            "*.currentDirectory",
-                            "*.directory",
-                            "*.path",
-                            "*.pwd",
-                            "data.SourceFilePath",
-                            "data.TargetPath",
-                            "data.audit.directory.name",
-                            "data.home",
-                            "data.pwd",
-                        ],
-                    }
-                }
+                MultiMatch(
+                    query=path,
+                    fields=[
+                        "*.currentDirectory",
+                        "*.directory",
+                        "*.path",
+                        "*.pwd",
+                        "data.SourceFilePath",
+                        "data.TargetPath",
+                        "data.audit.directory.name",
+                        "data.home",
+                        "data.pwd",
+                    ],
+                )
             ]
             + filename_searches
         )
@@ -487,22 +460,21 @@ class AlertSearcher(BaseModel):
             ]
             return self.opensearch.search(
                 should=[
-                    {
-                        "bool": {
-                            "must": [
-                                {
-                                    "regexp": {
-                                        field: {
-                                            "value": f"(.+[\\\\/])?{esc_command}.*",
-                                            "case_insensitive": True,
-                                        }
-                                    }
-                                }
-                            ]
-                            # TODO: wildcard escape in arg?
-                            + [{"wildcard": {field: f"*{arg}*"}} for arg in args]
-                        }
-                    }
+                    Bool(
+                        must=[
+                            Regexp(
+                                field=field,
+                                query=f"(.+[\\\\/])?{esc_command}.*",
+                                case_insensitive=True,
+                            )
+                        ]
+                        + [
+                            Wildcard(
+                                field=field, query=f"*{arg}*", case_insensitive=True
+                            )
+                            for arg in args
+                        ]
+                    )
                     for field in [
                         "data.win.eventdata.commandLine",
                         "data.win.eventdata.details",
@@ -513,39 +485,32 @@ class AlertSearcher(BaseModel):
                     ]
                 ]
                 + [
-                    {
-                        "bool": {
-                            "must": [
-                                {
-                                    "regexp": {
-                                        "data.command": {
-                                            "value": f"(.+/)?{esc_command}.*",
-                                            "case_insensitive": True,
-                                        }
-                                    }
-                                }
-                            ]
-                            + [
-                                {"wildcard": {"data.command": f"*{arg}*"}}
-                                for arg in args
-                            ]
-                        }
-                    },
-                    {
-                        "bool": {
-                            "must": [{"match": {"data.audit.command": command}}],
-                            "should": [
-                                {
-                                    "multi_match": {
-                                        "query": arg,
-                                        "fields": "data.audit.execve.a*",
-                                    }
-                                }
-                                for arg in args
-                            ],
-                            "minimum_should_match": len(args),
-                        }
-                    },
+                    Bool(
+                        must=[
+                            Regexp(
+                                field="data.command",
+                                query=f"(.+/)?{esc_command}.*",
+                                case_insensitive=True,
+                            )
+                        ]
+                        + [
+                            Wildcard(
+                                field="data.command",
+                                query=f"*{arg}*",
+                                case_insensitive=True,
+                            )
+                            for arg in args
+                        ]
+                    )
+                ]
+                + [
+                    Bool(
+                        must=[Match(field="data.audit.command", query=command)],
+                        should=[
+                            MultiMatch(fields=["data.audit.execve.a*"], query=arg)
+                            for arg in args
+                        ],
+                    )
                 ]
             )
         else:
@@ -614,13 +579,8 @@ class AlertSearcher(BaseModel):
         if username and uid:
             return self.opensearch.search(
                 must=[
-                    {
-                        "multi_match": {
-                            "query": username,
-                            "fields": username_fields,
-                        }
-                    },
-                    {"multi_match": {"query": uid, "fields": uid_fields}},
+                    MultiMatch(query=username, fields=username_fields),
+                    MultiMatch(query=uid, fields=uid_fields),
                 ]
             )
         elif username:

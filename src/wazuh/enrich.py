@@ -2,7 +2,7 @@ from __future__ import annotations
 import stix2
 import re
 import dateparser
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict
 from ntpath import basename
 from enum import Enum
 from typing import Annotated, Any, Callable, Literal
@@ -43,6 +43,9 @@ from .utils import (
     parse_sha256,
     oneof,
 )
+from .enrich_config import EnrichmentConfig
+
+EType = EnrichmentConfig.EntityType
 
 # TODO: Move a lot into stix_helper
 
@@ -82,93 +85,59 @@ class ProcessMeta(BaseModel):
     parent: ProcessMeta | None = None
 
 
-class Type(Enum):
-    AttackPattern = "attack-pattern"
-    Tool = "tool"
-    Account = "user-account"
-    URL = "url"
-    File = "file"
-    Directory = "directory"
-    Domain = "domain-name"
-    IPv4Address = "ipv4-addr"
-    IPv6Address = "ipv6-addr"
-    EMailAddr = "email-addr"
-    RegistryKey = "windows-registry-key"
-    NetworkTraffic = "network-traffic"
-    MAC = "max-addr"
-    UserAgent = "user-agent"
-    Process = "process"
-
-
 class Enricher(BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True
     )  # For OpenCTIConnectorHelper
     helper: OpenCTIConnectorHelper
+    config: EnrichmentConfig
     stix: StixHelper
-    types: set[Type]
     tools: list[stix2.Tool] = []
-
-    @field_validator("types", mode="before")
-    @classmethod
-    def parse_type_string(cls, types):
-        if isinstance(types, str):
-            if not types:
-                return set()
-            elif types == "all":
-                return set(Type)
-            else:
-                # If this is a string, parse it as a comma-separated string with
-                # enum values:
-                return {type_str for type_str in types.split(",")}
-        else:
-            # Otherwise, let pydantic validate whatever it is:
-            return types
 
     def enrich_incident(self, *, incident: stix2.Incident, alerts: list[dict]):
         bundle = []
         # TODO: Create ObservedData too(?)
         # TODO: All of the searched fields in these enrichment functions need a lot of QA
-        if Type.AttackPattern in self.types:
+        if EType.AttackPattern in self.config.types:
             bundle += self.enrich_incident_mitre(incident=incident, alerts=alerts)
-        if Type.Tool in self.types:
+        if EType.Tool in self.config.types:
             bundle += self.enrich_incident_tool(incident=incident, alerts=alerts)
-        if Type.Account in self.types:
+        if EType.Account in self.config.types:
             bundle += self.enrich_accounts(incident=incident, alerts=alerts)
-        if Type.URL in self.types:
+        if EType.URL in self.config.types:
             bundle += self.enrich_urls(incident=incident, alerts=alerts)
-        if Type.EMailAddr in self.types:
+        if EType.EMailAddr in self.config.types:
             bundle += self.enrich_email_addrs(incident=incident, alerts=alerts)
-        if Type.File in self.types:
+        if EType.File in self.config.types:
             bundle += self.enrich_files(incident=incident, alerts=alerts)
-        if Type.Directory in self.types:
+        if EType.Directory in self.config.types:
             bundle += self.enrich_dirs(incident=incident, alerts=alerts)
-        if Type.RegistryKey in self.types:
+        if EType.RegistryKey in self.config.types:
             bundle += self.enrich_reg_keys(incident=incident, alerts=alerts)
-        if Type.IPv4Address in self.types:
+        if EType.IPv4Address in self.config.types:
             bundle += self.enrich_addrs(
                 incident=incident, alerts=alerts, type="IPv4-Addr"
             )
-        if Type.IPv6Address in self.types:
+        if EType.IPv6Address in self.config.types:
             bundle += self.enrich_addrs(
                 incident=incident, alerts=alerts, type="IPv6-Addr"
             )
-        if Type.MAC in self.types:
+        if EType.MAC in self.config.types:
             bundle += self.enrich_macs(incident=incident, alerts=alerts)
-        if Type.UserAgent in self.types:
+        if EType.UserAgent in self.config.types:
             bundle += self.enrich_user_agents(incident=incident, alerts=alerts)
-        if Type.Process in self.types:
+        if EType.Process in self.config.types:
             bundle += self.enrich_processes(incident=incident, alerts=alerts)
         # TODO: enrich software(?)
-        if Type.NetworkTraffic in self.types:
+        if EType.NetworkTraffic in self.config.types:
             bundle += self.enrich_traffic(incident=incident, alerts=alerts)
-        if Type.Domain in self.types:
+        if EType.Domain in self.config.types:
             bundle += self.enrich_domains(incident=incident, alerts=alerts)
 
         return bundle
 
     def fetch_tools(self):
-        if Type.Tool in self.types:
+        if EType.Tool in self.config.types:
             self.helper.connector_logger.info("Building list of tools")
             self.tools = self.helper.api.tool.list()
 

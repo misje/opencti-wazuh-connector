@@ -2,8 +2,8 @@ from stix2.parsing import ParseError
 import urllib3
 import requests
 import concurrent.futures
+import logging
 from datetime import datetime, timedelta
-from pycti import OpenCTIConnectorHelper
 from requests.adapters import HTTPAdapter
 from requests.auth import HTTPBasicAuth
 from urllib3.util import Retry
@@ -21,6 +21,9 @@ from pydantic.networks import IPvAnyAddress
 from typing import Literal
 from os import makedirs
 from os.path import dirname
+from .wazuh_api_config import WazuhAPIConfig
+
+log = logging.getLogger(__name__)
 
 
 class WAPIResult(BaseModel):
@@ -139,16 +142,10 @@ class WazuhAPIClient:
     def __init__(
         self,
         *,
-        helper: OpenCTIConnectorHelper,
-        url: str,
-        username: str,
-        password: str,
+        config: WazuhAPIConfig,
         cache_filename: str,
     ):
-        self.helper = helper
-        self.url = url
-        self.username = username
-        self.password = password
+        self.conf = config
         self.jwt = None
         self.jwt_timestamp = None
         self.cache_filename = cache_filename
@@ -159,6 +156,13 @@ class WazuhAPIClient:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     def _query(self, endpoint, params, *, method="GET", auth=None, headers: dict = {}):
+        if not self.conf.url:
+            raise ValueError("URL is not set")
+        if not self.conf.username:
+            raise ValueError("Username is not set")
+        if not self.conf.password:
+            raise ValueError("Password is not set")
+
         adapter = HTTPAdapter(
             max_retries=Retry(
                 total=3,
@@ -172,14 +176,14 @@ class WazuhAPIClient:
             "Accept": "application/json",
             **headers,
         }
-        http.mount(self.url, adapter)
+        http.mount(str(self.conf.url), adapter)
         # TODO:: allow import of cert
-        http.verify = False
+        http.verify = self.conf.verify_tls
 
         try:
             method_func = {"GET": http.get, "POST": http.post}[method]
             response = method_func(
-                urljoin(self.url, endpoint),
+                urljoin(str(self.conf.url), endpoint),
                 params=params,
                 auth=auth,
             )
@@ -192,25 +196,30 @@ class WazuhAPIClient:
         except requests.JSONDecodeError as e:
             raise self.ParseError(f"Failed to parse JSON response: {e}") from e
         except requests.exceptions.RequestException as e:
-            raise self.ConnectionError(f"Failed to connect to {self.url}: {e}") from e
+            raise self.ConnectionError(
+                f"Failed to connect to {str(self.conf.url)}: {e}"
+            ) from e
 
     def login(self):
-        self.helper.connector_logger.debug(
-            f"Logging into Wazuh API at {self.url} as user {self.username}"
+        if not self.conf.username or not self.conf.password:
+            return
+
+        log.debug(
+            f"Logging into Wazuh API at {str(self.conf.url)} as user {self.conf.username}"
         )
         response = self._query(
             "security/user/authenticate",
             {},
             method="POST",
-            auth=HTTPBasicAuth(self.username, self.password),
+            auth=HTTPBasicAuth(self.conf.username, self.conf.password),
         )
         if "data" not in response and "token" not in response["data"]:
             raise ConnectionError("Failed to authenticate")
 
         self.jwt = response["data"]["token"]
         self.jwt_timestamp = datetime.now()
-        self.helper.connector_logger.info(
-            f"Successfully logged into Wazuh API at {self.url} as user {self.username}"
+        log.info(
+            f"Successfully logged into Wazuh API at {str(self.conf.url)} as user {self.conf.username}"
         )
 
     def query(self, endpoint, params={}):
@@ -225,14 +234,14 @@ class WazuhAPIClient:
         )
 
     def query_agents(self):
-        self.helper.log_info(
+        log.info(
             f"{self.state.agents_cache_validity.scan_time}, {self.state.agents_cache_validity.duration}"
         )
         if self.state.agents_cache_validity.is_valid():
-            self.helper.connector_logger.debug("Agents cache up to date, not querying")
+            log.debug("Agents cache up to date, not querying")
             return
 
-        self.helper.connector_logger.debug("Querying Wazuh agents")
+        log.debug("Querying Wazuh agents")
         response = self.query("agents")
         try:
             self.state.agents = {
@@ -245,14 +254,10 @@ class WazuhAPIClient:
             ) from e
 
         self.state.agents_cache_validity.scan_time = datetime.now()
-        self.helper.connector_logger.info(
-            f"Wazuh agent list retrieved ({len(self.state.agents)} agents)"
-        )
+        log.info(f"Wazuh agent list retrieved ({len(self.state.agents)} agents)")
 
     def query_agent_packages(self, agent_id: str):
-        self.helper.connector_logger.debug(
-            f"Querying packages for Wazuh agent {agent_id}"
-        )
+        log.debug(f"Querying packages for Wazuh agent {agent_id}")
         response = self.query(
             f"syscollector/{agent_id}/packages",
         )  # {"limit": 10_000})
@@ -265,15 +270,13 @@ class WazuhAPIClient:
                 f"Failed to parse response from Wazuh packages query: {e}"
             ) from e
 
-        self.helper.connector_logger.info(
+        log.info(
             f"{len(self.state.agents[agent_id].packages)} packages retrieved for agent {agent_id}"
         )
 
     def query_packages(self):
         if self.state.packages_cache_validity.is_valid():
-            self.helper.connector_logger.debug(
-                "Agent packages cache up to date, not querying"
-            )
+            log.debug("Agent packages cache up to date, not querying")
             return
 
         self.query_agents()
@@ -291,9 +294,7 @@ class WazuhAPIClient:
         self.state.packages_cache_validity.scan_time = datetime.now()
 
     def query_agent_connections(self, agent_id: str):
-        self.helper.connector_logger.debug(
-            f"Querying connections for Wazuh agent {agent_id}"
-        )
+        log.debug(f"Querying connections for Wazuh agent {agent_id}")
         response = self.query(f"syscollector/{agent_id}/ports")
         try:
             self.state.agents[agent_id].connections = TypeAdapter(
@@ -304,15 +305,13 @@ class WazuhAPIClient:
                 f"Failed to parse response from Wazuh connections query: {e}"
             ) from e
 
-        self.helper.connector_logger.info(
+        log.info(
             f"{len(self.state.agents[agent_id].connections)} connections retrieved for agent {agent_id}"
         )
 
     def query_connections(self):
         if self.state.connections_cache_validity.is_valid():
-            self.helper.connector_logger.debug(
-                "Agent connections cache up to date, not querying"
-            )
+            log.debug("Agent connections cache up to date, not querying")
             return
 
         self.query_agents()
@@ -330,9 +329,7 @@ class WazuhAPIClient:
         self.state.connections_cache_validity.scan_time = datetime.now()
 
     def query_agent_processes(self, agent_id: str):
-        self.helper.connector_logger.debug(
-            f"Querying processes for Wazuh agent {agent_id}"
-        )
+        log.debug(f"Querying processes for Wazuh agent {agent_id}")
         response = self.query(f"syscollector/{agent_id}/processes")
         try:
             self.state.agents[agent_id].processes = {
@@ -344,15 +341,13 @@ class WazuhAPIClient:
                 f"Failed to parse response from Wazuh processes query: {e}"
             ) from e
 
-        self.helper.connector_logger.info(
+        log.info(
             f"{len(self.state.agents[agent_id].connections)} processes retrieved for agent {agent_id}"
         )
 
     def query_processes(self):
         if self.state.processes_cache_validity.is_valid():
-            self.helper.connector_logger.debug(
-                "Agent processes cache up to date, not querying"
-            )
+            log.debug("Agent processes cache up to date, not querying")
             return
 
         self.query_agents()
@@ -391,20 +386,20 @@ class WazuhAPIClient:
     #        [future for future in concurrent.futures.as_completed(futures)]
 
     def save_cache(self):
-        self.helper.connector_logger.info(f"Saving cache to {self.cache_filename}")
+        log.info(f"Saving cache to {self.cache_filename}")
         try:
             with open(self.cache_filename, "w", encoding="utf-8") as cache:
                 cache.write(self.state.model_dump_json())
         except (OSError, IOError) as e:
-            self.helper.connector_logger.warning(f"Failed to save cache: {e}")
+            log.warning(f"Failed to save cache: {e}")
 
     def load_cache(self):
-        self.helper.connector_logger.info(f"Loading cache from {self.cache_filename}")
+        log.info(f"Loading cache from {self.cache_filename}")
         try:
             with open(self.cache_filename, "r", encoding="utf-8") as cache:
                 self.state.model_validate_json(cache.read())
         except (OSError, IOError, ValidationError) as e:
-            self.helper.connector_logger.warning(f"Failed to load cache: {e}")
+            log.warning(f"Failed to load cache: {e}")
 
     def find_package(
         self, name: str, version: str | None = None

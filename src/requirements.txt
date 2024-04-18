@@ -2,3 +2,5 @@ pycti==6.0.9
 #regex==2022.3.2 # dateparser does not work with newer versions (yet)
 dateparser
 pydantic
+pydantic_settings
+babel

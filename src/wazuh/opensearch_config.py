@@ -1,21 +1,16 @@
-import dateparser
-import logging
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 from pydantic import (
     AnyHttpUrl,
     AnyUrl,
     Field,
     field_validator,
 )
+from typing import Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import TypeVar
-from .utils import verify_url
+from .utils import parse_human_datetime, truthy, verify_url
 from .opensearch_dsl import Match, OrderBy, QueryType
 from .opensearch_dsl_helper import dsl_matches_from_string, dsl_order_by_from_string
-
-T = TypeVar("T")
-
-log = logging.getLogger(__name__)
 
 
 class OpenSearchConfig(BaseSettings):
@@ -44,20 +39,29 @@ class OpenSearchConfig(BaseSettings):
     """
     User password
     """
+    verify_tls: bool = True
+    """
+    Verify the HTTPS certificate
+
+    Disabling verification is highly discouraged. Use FIXME instead if the certificate is self-signed.
+    """
     index: str = "wazuh-alerts-*"
     """
     Indices to search for Wazuh alerts
     """
-    search_after: datetime | None = None
+    search_after: datetime | timedelta | None = None
     """
     Search for alerts in OpenSearch after this point in time, which may be
     specified either as a timestamp or a relative time (like "2 months ago")
     """
-    include_match: list[Match] | str | None = None
+    # TODO: remove list alternatives?
+    include_match: list[Match] | list[dict[str, dict[str, str]]] = []
     """
     FIXME
     """
-    exclude_match: list[Match] | str | None = "data.integration=opencti"
+    exclude_match: list[Match] | list[dict[str, dict[str, str]]] = [
+        Match(field="data.integration", query="opencti")
+    ]
     """
     FIXME
     to a "bool" "must_not" array. The default value will exclude alerts
@@ -70,7 +74,9 @@ class OpenSearchConfig(BaseSettings):
     ordering by timestamp (and rule.level if :py:attr:`order_by_rule_level` is
     True)).
     """
-    order_by: list[OrderBy] | str | None = "timestamp:desc"
+    order_by: list[OrderBy] | list[dict[str, dict[str, str]]] = [
+        OrderBy(field="timestamp", order="desc")
+    ]
     """
     How to order alert results before returning :py:attr:`limit` number of
     results. The default and recommended settings is to order by timestamp,
@@ -83,13 +89,18 @@ class OpenSearchConfig(BaseSettings):
         * timestamp:desc
         * rule.level:desc,timestamp:desc
     """
-    filter: QueryType | None = None
+    filter: list[QueryType] = []
     """
     Default filter used when searching
 
     All searches are performed with a :dsl:`Bool query <compound/bool>`. The
     members :attr:`search_after`, :attr:`include_match` and
-    :attr:`exclude_match` are used in the Bool query's *filter*. FIXME
+    :attr:`exclude_match` are used in the Bool query's *filter* unless
+    overriden by this setting. i.e. if this setting is non-empty, the values in
+    :attr:`search_after`, :attr:`search_include` and :attr:`search_exclude` are
+    ignored.
+
+    The implicit default filter is FIXME
     """
 
     @field_validator("url", mode="before")
@@ -109,7 +120,7 @@ class OpenSearchConfig(BaseSettings):
         The URL must
 
         * Contain the schemes http or https
-        * Contain a host (TLP not required)
+        * Contain a host (TLD not required)
 
         and must not
 
@@ -123,25 +134,28 @@ class OpenSearchConfig(BaseSettings):
     @field_validator("search_after", mode="before")
     @classmethod
     def parse_lax_datetime(
-        cls, timestamp_str: datetime | str | None
-    ) -> datetime | None:
+        cls, timestamp_str: datetime | timedelta | str | None
+    ) -> datetime | timedelta | None:
         """
         Parse a timestamp-like string, either in an absolute or relative format
 
         Examples:
 
-        >>> Config.parse_lax_datetime(None)
-        >>> Config.parse_lax_datetime('2021-02-03')
+        >>> OpenSearchConfig.parse_lax_datetime(None)
+        >>> OpenSearchConfig.parse_lax_datetime('2021-02-03')
         datetime.datetime(2021, 2, 3, 0, 0)
-
-        TODO: test for relative times
+        >>> OpenSearchConfig.parse_lax_datetime('3 days ago')
+        datetime.timedelta(days=3)
+        >>> OpenSearchConfig.parse_lax_datetime('foo')
+        Traceback (most recent call last):
+        ValueError: timestamp is invalid
         """
         if timestamp_str is None:
             return None
-        if isinstance(timestamp_str, datetime):
+        if isinstance(timestamp_str, (datetime, timedelta)):
             return timestamp_str
 
-        if timestamp := dateparser.parse(timestamp_str):
+        if timestamp := parse_human_datetime(timestamp_str):
             return timestamp
         else:
             raise ValueError("timestamp is invalid")
@@ -151,6 +165,8 @@ class OpenSearchConfig(BaseSettings):
     def parse_match_expression(
         cls, matches: list[Match] | str | None
     ) -> list[Match] | None:
+        if matches is None:
+            return []
         if isinstance(matches, str):
             return dsl_matches_from_string(matches)
         else:
@@ -158,10 +174,19 @@ class OpenSearchConfig(BaseSettings):
 
     @field_validator("order_by", mode="before")
     @classmethod
-    def parser_order_by_expression(
-        cls, order_by: list[OrderBy] | str | None
-    ) -> list[OrderBy] | None:
+    def parser_order_by_expression(cls, order_by: Any) -> list[OrderBy] | None:
+        if order_by is None:
+            return []
         if isinstance(order_by, str):
             return dsl_order_by_from_string(order_by)
         else:
             return order_by
+
+    # TODO: move into a base class and inherit, along with model_config assignment
+    def field_json(self, field: str) -> str:
+        if not truthy(getattr(self, field)):
+            return ""
+
+        # This is super-ugly, but the initial model dump should be json in
+        # order not to get proper serialisation of special types:
+        return json.dumps(json.loads(self.model_dump_json(include={field}))[field])

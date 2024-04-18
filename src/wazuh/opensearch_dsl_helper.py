@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 # from typing import Self # 3.11
-from .opensearch_dsl import Match, OrderBy, Query, QueryType, Regexp, Wildcard
+from .opensearch_dsl import Match, OrderBy, QueryType, Regexp, Wildcard
 
 
 def dsl_multi_regex(

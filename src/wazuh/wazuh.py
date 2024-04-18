@@ -1,12 +1,10 @@
 import json
 import stix2
-import yaml
-import dateparser
-import re
 import ipaddress
+import logging
+from .config import Config
 from .opensearch import OpenSearchClient
 from .wazuh_api import WazuhAPIClient
-from pathlib import Path
 from pycti import (
     CaseIncident,
     CustomObjectCaseIncident,
@@ -18,13 +16,13 @@ from pycti import (
     OpenCTIMetricHandler,
     StixCoreRelationship,
     StixSightingRelationship,
-    get_config_variable,
 )
 from typing import Any, Final
 from datetime import datetime
 from urllib.parse import urljoin
 from functools import reduce
 from .utils import (
+    datetime_string,
     has,
     rule_level_to_severity,
     priority_from_severity,
@@ -39,9 +37,7 @@ from .stix_helper import (
     # StandardID,
     DUMMY_INDICATOR_ID,
     remove_unref_objs,
-    tlp_marking_from_string,
     tlp_allowed,
-    # add_incidents_to_note_refs,
     entity_values,
     entity_name_value,
     incident_entity_relation_type,
@@ -83,39 +79,7 @@ from .enrich import Enricher
 # UUID_RE = r"^a[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$"
 # STIX_ID_REGEX = re.compile(f".+--{UUID_RE}", re.IGNORECASE)
 
-
-def parse_config_datetime(value, setting_name):
-    if value is None:
-        return None
-
-    timestamp = dateparser.parse(value)
-    if not timestamp:
-        raise ValueError(
-            f'The config variable "{setting_name}" datetime expression cannot be parsed: "{value}"'
-        )
-
-    return timestamp
-
-
-# TODO: move into opensearch:
-def parse_match_patterns(patterns: str):
-    """
-    Parse a string like "foo=bar,baz=qux" into
-    [{"match": {"foo": "bar"}}, {"match": {"baz": "qux"}}]
-
-    Parameters
-    ----------
-    patterns : str
-               String of key=value pairs separated by comma
-    """
-    if patterns is None:
-        return None
-
-    pairs = [pattern.split("=") for pattern in patterns.split(",")]
-    if any(len(pair) != 2 for pair in pairs):
-        raise ValueError(f'The match patterns "{patterns}" is invalid')
-
-    return [{"match": {pair[0]: pair[1]}} for pair in pairs]
+log = logging.getLogger(__name__)
 
 
 def parse_incident_create_threshold(threshold: str | int | None) -> int:
@@ -184,366 +148,60 @@ class WazuhConnector:
 
     def __init__(self):
         self.CONNECTOR_VERSION: Final[str] = "0.0.1"
-        # it appears that the dummy indicator has to exist for external references to work (probably not – random and inconsistent):
 
-        config_file_path = Path(__file__).parent.parent.resolve() / "config.yml"
-        config = (
-            yaml.load(open(config_file_path, encoding="utf-8"), Loader=yaml.SafeLoader)
-            if config_file_path.is_file()
-            else {}
-        )
+        self.conf = Config.from_env()
+        # TODO: Add opencti variables to config for doc, enforce required, and
+        # in order to load from yaml (feed opencti dict to helper below):
+        self.helper = OpenCTIConnectorHelper({}, True)
+        # FIXME: remove:
+        self.helper.log_info(self.conf.model_dump_json())
 
-        self.helper = OpenCTIConnectorHelper(config, True)
         self.confidence = (
             int(self.helper.connect_confidence_level)
             if isinstance(self.helper.connect_confidence_level, int)
             else None
         )
-        self.max_tlp = (
-            re.sub(r"^(tlp:)?", "TLP:", tlp, flags=re.IGNORECASE).upper()
-            if isinstance(
-                tlp := get_config_variable(
-                    "WAZUH_MAX_TLP", ["wazuh", "max_tlp"], config, required=True
-                ),
-                str,
-            )
-            else None
-        )
-        self.tlps = (
-            [tlp]
-            if (
-                tlp := tlp_marking_from_string(
-                    get_config_variable(
-                        "WAZUH_TLP",
-                        ["wazuh", "tlp"],
-                        config,
-                        required=True,  # type: ignore
-                    )
-                )
-            )
-            is not None
-            else []
-        )
-        self.hits_limit = get_config_variable(
-            "WAZUH_MAX_HITS", ["wazuh", "max_hits"], config, isNumber=True, default=10
-        )
-        self.hits_abort_limit = (
-            limit
-            if isinstance(
-                limit := get_config_variable(
-                    "WAZUH_MAX_HITS_ABORT",
-                    ["wazuh", "max_hits_abort"],
-                    config,
-                    isNumber=True,
-                    # default=1000,
-                ),
-                int,
-            )
-            else None
-        )
-        self.bundle_abort_limit = (
-            limit
-            if isinstance(
-                limit := get_config_variable(
-                    "WAZUH_MAX_BUNDLES_ABORT",
-                    ["wazuh", "max_bundles_abort"],
-                    config,
-                    isNumber=True,
-                    # default=200,
-                ),
-                int,
-            )
-            else None
-        )
-        self.system_name = get_config_variable(
-            "WAZUH_SYSTEM_NAME", ["wazuh", "system_name"], config, default="Wazuh SIEM"
-        )
-        self.agents_as_systems = get_config_variable(
-            "WAZUH_AGENTS_AS_SYSTEMS",
-            ["wazuh", "agents_as_systems"],
-            config,
-            default=True,
-        )
-        self.search_agent_ip = get_config_variable(
-            "WAZUH_SEARCH_AGENT_IP",
-            ["wazuh", "search_agent_ip"],
-            config,
-            default=False,
-        )
-        self.search_agent_name = get_config_variable(
-            "WAZUH_SEARCH_AGENT_NAME",
-            ["wazuh", "search_agent_name"],
-            config,
-            default=False,
-        )
-        self.search_after = parse_config_datetime(
-            value=get_config_variable(
-                "WAZUH_SEARCH_ONLY_AFTER", ["wazuh", "search_only_after"], config
-            ),
-            setting_name="search_only_after",
-        )
-        self.search_include = get_config_variable(
-            "WAZUH_SEARCH_INCLUDE_MATCH", ["wazuh", "search_include_match"], config
-        )
-        self.search_exclude = get_config_variable(
-            "WAZUH_SEARCH_EXCLUDE_MATCH",
-            ["wazuh", "search_exclude_match"],
-            config,
-            default="data.integration=opencti",
-        )
-        self.create_obs_sightings = get_config_variable(
-            "WAZUH_CREATE_OBSERVABLE_SIGHTINGS",
-            ["wazuh", "create_observable_sightings"],
-            config,
-            default=True,
-        )
-        self.max_extrefs = (
-            maxrefs
-            if isinstance(
-                maxrefs := get_config_variable(
-                    "WAZUH_SIGHTING_MAX_EXTREFS",
-                    ["wazuh", "sighting_max_extrefs"],
-                    config,
-                    isNumber=True,
-                    default=10,
-                ),
-                int,
-            )
-            else 10
-        )
-        self.max_extrefs_per_alert_rule = (
-            maxrefs
-            if isinstance(
-                maxrefs := get_config_variable(
-                    "WAZUH_SIGHTING_MAX_EXTREFS_PER_ALERT_RULE",
-                    ["wazuh", "sighting_max_extrefs_per_alert_rule"],
-                    config,
-                    isNumber=True,
-                    default=1,
-                ),
-                int,
-            )
-            else 1
-        )
-        self.max_notes = (
-            maxrefs
-            if isinstance(
-                maxrefs := get_config_variable(
-                    "WAZUH_SIGHTING_MAX_NOTES",
-                    ["wazuh", "sighting_max_notes"],
-                    config,
-                    isNumber=True,
-                    default=10,
-                ),
-                int,
-            )
-            else 10
-        )
-        self.max_notes_per_alert_rule = (
-            maxrefs
-            if isinstance(
-                maxrefs := get_config_variable(
-                    "WAZUH_SIGHTING_MAX_NOTES_PER_ALERT_RULE",
-                    ["wazuh", "sighting_max_notes_per_alert_rule"],
-                    config,
-                    isNumber=True,
-                    default=1,
-                ),
-                int,
-            )
-            else 1
-        )
-        self.create_sighting_summary = get_config_variable(
-            "WAZUH_SIGHTING_CREATE_SUMMARY_NOTE",
-            ["wazuh", "sighting_summary_note"],
-            config,
-            default=True,
-        )
-        self.create_incident_summary = get_config_variable(
-            "WAZUH_INCIDENT_CREATE_SUMMARY_NOTE",
-            ["wazuh", "incident_create_summary_note"],
-            config,
-            default=True,
-        )
-        self.require_indicator_for_incidents = get_config_variable(
-            "WAZUH_INCIDENT_REQUIRE_INDICATOR",
-            ["wazuh", "incident_require_indicator"],
-            config,
-            default=True,
-        )
-        # TODO: verify modes using Field:
-        self.create_incident = get_config_variable(
-            "WAZUH_INCIDENT_CREATE_MODE",
-            ["wazuh", "incident_create_mode"],
-            config,
-            default="per_sighting",
-        )
-        self.create_incident_threshold = parse_incident_create_threshold(
-            get_config_variable(
-                "WAZUH_INCIDENT_CREATE_THRESHOLD",
-                ["wazuh", "incident_create_threshold"],
-                config,
-            )
-        )
-        self.create_agent_ip_obs = get_config_variable(
-            "WAZUH_CREATE_AGENT_IP_OBSERVABLE",
-            ["wazuh", "create_agent_ip_observable"],
-            config,
-            default=False,
-        )
-        self.create_agent_host_obs = get_config_variable(
-            "WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE",
-            ["wazuh", "create_agent_hostname_observable"],
-            config,
-            default=False,
-        )
-        self.ignore_private_addrs = get_config_variable(
-            "WAZUH_IGNORE_PRIVATE_IP_ADDRS",
-            ["wazuh", "ignore_private_ip_addrs"],
-            config,
-            default=False,
-        )
-        self.ignore_own_entities = get_config_variable(
-            "WAZUH_IGNORE_OWN_ENTITIES",
-            ["wazuh", "ignore_own_entities"],
-            config,
-            default=True,
-        )
-        self.order_by_rule_level = get_config_variable(
-            "WAZUH_ORDER_BY_RULE_LEVEL",
-            ["wazuh", "order_by_rule_level"],
-            config,
-            default=False,
-        )
-        self.enrich_agent = get_config_variable(
-            "WAZUH_ENRICH_AGENT", ["wazuh", "enrich_agent"], config, default=True
-        )
-        self.label_ignore_list = get_config_variable(
-            "WAZUH_LABEL_IGNORE_LIST",
-            ["wazuh", "label_ignore_list"],
-            config,
-            default="hygiene,wazuh",
-        ).split(",")  # type: ignore
-        self.enrich_labels = get_config_variable(
-            "WAZUH_ENRICH_LABEL_ADD_LIST",
-            ["wazuh", "enrich_label_add_list"],
-            config,
-            default="wazuh",
-        ).split(",")  # type: ignore
-        self.create_incident_response = get_config_variable(
-            "WAZUH_CREATE_INCIDENT_RESPONSE",
-            ["wazuh", "create_incident_response"],
-            config,
-            default=False,
-        )
-
         self.stix_common_attrs = {
-            "object_marking_refs": self.tlps,
+            "object_marking_refs": self.conf.tlps,
             "confidence": self.confidence,
         }
         # Add moe useful meta to author?
+        # TODO: a different type than an org.?
         self.author = stix2.Identity(
             id=Identity.generate_id("Wazuh", "system"),
             **self.stix_common_attrs,
-            name=get_config_variable(
-                "WAZUH_AUTHOR_NAME",
-                ["wazuh", "author_name"],
-                config,
-                default="Wazuh",
-            ),
+            name=self.conf.author_name,
             identity_class="organization",
             description="Wazuh",
         )
         self.stix_common_attrs["created_by_ref"] = self.author["id"]
         self.stix = StixHelper(
             common_properties=self.stix_common_attrs,
-            sco_labels=self.enrich_labels,
-            filename_behaviour=get_config_variable(
-                "WAZUH_FILENAME_BEHAVIOUR",
-                ["wazuh", "filename_behaviour"],
-                config,
-                default="create-dir",
-            ),  # type: ignore
+            sco_labels=self.conf.enrich_labels,
+            filename_behaviour=self.conf.enrich.filename_behaviour,
         )
         self.enricher = Enricher(
             helper=self.helper,
             stix=self.stix,
-            types=get_config_variable(
-                "WAZUH_ENRICH_TYPES",
-                ["wazuh", "enrich_types"],
-                config,
-                default=set("attack-pattern"),
-            ),  # type: ignore
+            config=self.conf.enrich,
         )
         self.siem_system = stix2.Identity(
-            id=Identity.generate_id(self.system_name, "system"),
+            id=Identity.generate_id(self.conf.system_name, "system"),
             **self.stix_common_attrs,
-            name=self.system_name,
+            name=self.conf.system_name,
             identity_class="system",
         )
-        self.app_url = get_config_variable(
-            "WAZUH_APP_URL", ["wazuh", "app_url"], config, required=True
-        )
+        self.app_url = str(self.conf.app_url)
         self.alert_searcher = AlertSearcher(
             helper=self.helper,
-            opensearch=OpenSearchClient(
-                url=get_config_variable(  # type: ignore
-                    "WAZUH_OPENSEARCH_URL",
-                    ["wazuh", "opensearch", "url"],
-                    config,
-                    required=True,
-                ),
-                username=get_config_variable(  # type: ignore
-                    "WAZUH_OPENSEARCH_USERNAME",
-                    ["wazuh", "opensearch", "username"],
-                    config,
-                    required=True,
-                ),
-                password=get_config_variable(  # type: ignore
-                    "WAZUH_OPENSEARCH_PASSWORD",
-                    ["wazuh", "opensearch", "password"],
-                    config,
-                    required=True,
-                ),
-                limit=self.hits_limit if isinstance(self.hits_limit, int) else 10,
-                index=get_config_variable(  # type: ignore
-                    "WAZUH_OPENSEARCH_INDEX",
-                    ["wazuh", "opensearch", "index"],
-                    config,
-                    default="wazuh-alerts-*",
-                ),
-                search_after=self.search_after,
-                include_match=parse_match_patterns(self.search_include),  # type: ignore
-                exclude_match=parse_match_patterns(self.search_exclude),  # type: ignore
-                order_by=[{"rule.level": "desc"}] if self.order_by_rule_level else [],
-                # TODO: Use Field to validate. Document that search_after is prepended if defined:
-                # filters=[{"range": {"rule.level": {"gte": 8}}}],
-                # filters=get_config_variable("WAZUH_SEARCH_FILTER", ["wazuh", "search_filter"], config),
-            ),
-            ignore_private_addrs=self.ignore_private_addrs,
-            search_agent_ip=self.search_agent_ip,
-            search_agent_name=self.search_agent_name,
+            opensearch=OpenSearchClient(config=self.conf.opensearch),
+            ignore_private_addrs=self.conf.ignore_private_addrs,
+            search_agent_ip=self.conf.search_agent_ip,
+            search_agent_name=self.conf.search_agent_name,
         )
-        if get_config_variable(
-            "WAZUH_API_USE", ["wazuh", "api", "use"], config, default=False
-        ):
+        if self.conf.api.enabled:
             self.wazuh = WazuhAPIClient(
-                helper=self.helper,
-                url=get_config_variable(  # type: ignore
-                    "WAZUH_API_URL", ["wazuh", "api", "url"], config, required=True
-                ),
-                username=get_config_variable(  # type: ignore
-                    "WAZUH_API_USERNAME",
-                    ["wazuh", "api", "username"],
-                    config,
-                    required=True,
-                ),
-                password=get_config_variable(  # type: ignore
-                    "WAZUH_API_PASSWORD",
-                    ["wazuh", "api", "password"],
-                    config,
-                    required=True,
-                ),
+                config=self.conf.api,
                 cache_filename="/var/cache/wazuh/state.json",
             )
         else:
@@ -593,12 +251,12 @@ class WazuhConnector:
         # Remove:
         self.helper.log_debug(f"ENTITY: {entity}")
 
-        if not tlp_allowed(entity, self.max_tlp):  # type: ignore
-            self.helper.connector_logger.info(f"max tlp: {self.max_tlp}")
+        if not tlp_allowed(entity, self.conf.max_tlp):  # type: ignore
+            self.helper.connector_logger.info(f"max tlp: {self.conf.max_tlp}")
             raise ValueError("Entity ignored because TLP not allowed")
 
         if (
-            self.ignore_own_entities
+            self.conf.ignore_own_entities
             and has(entity, ["createdBy", "standard_id"])
             and entity["createdBy"]["standard_id"] == self.author.id
         ):
@@ -623,10 +281,10 @@ class WazuhConnector:
         # Remove:
         self.helper.log_debug(f"INDS: {obs_indicators}")
 
-        if self.label_ignore_list and "x_opencti_labels" in stix_entity:
+        if self.conf.label_ignore_list and "x_opencti_labels" in stix_entity:
             matching_labels = [
                 label
-                for label in self.label_ignore_list
+                for label in self.conf.label_ignore_list
                 if label in stix_entity["x_opencti_labels"]
             ]
             if matching_labels:
@@ -635,7 +293,7 @@ class WazuhConnector:
         if (
             entity_type == "observable"
             and not obs_indicators
-            and not self.create_obs_sightings
+            and not self.conf.create_obs_sightings
         ):
             self.helper.connector_logger.info(
                 "Observable has no indicators and WAZUH_CREATE_OBSERVABLE_SIGHTINGS is false"
@@ -668,11 +326,12 @@ class WazuhConnector:
             return "No hits found"
 
         if (
-            self.hits_abort_limit is not None
-            and (hit_count := result["hits"]["total"]["value"]) > self.hits_abort_limit
+            self.conf.hits_abort_limit is not None
+            and (hit_count := result["hits"]["total"]["value"])
+            > self.conf.hits_abort_limit
         ):
             raise ValueError(
-                f"Too many hits ({hit_count}) > {self.hits_abort_limit}): aborting"
+                f"Too many hits ({hit_count} > {self.conf.hits_abort_limit}): aborting"
             )
 
         # Use a helper module to create as few sighting objects as possible,
@@ -686,7 +345,7 @@ class WazuhConnector:
                 s = hit["_source"]
                 if (
                     has(s, ["agent", "id"])
-                    and self.agents_as_systems
+                    and self.conf.agents_as_systems
                     # Do not create systems for master/worker, use the Wazuh system instead:
                     and int(s["agent"]["id"]) > 0
                 ):
@@ -705,10 +364,13 @@ class WazuhConnector:
                     "Failed to parse _source: Unexpected JSON structure"
                 ) from e
 
+        bundle += list(agents.values())
+        bundle += self.relate_agents_to_siem(list(agents.values()), self.siem_system)
+
         # TODO: Use in incident and add as targets(?):
-        if self.create_agent_ip_obs:
+        if self.conf.create_agent_ip_obs:
             bundle += self.create_agent_addr_obs(alerts=hits)
-        if self.create_agent_host_obs:
+        if self.conf.create_agent_host_obs:
             bundle += self.create_agent_hostname_obs(alerts=hits)
 
         # TODO: doesn't seem to work? Or bug in OpenCTI. Anyway, add STIXList
@@ -755,7 +417,7 @@ class WazuhConnector:
         self.helper.log_debug(f"COUNTS: {counts}")
 
         if (
-            self.require_indicator_for_incidents
+            self.conf.require_indicator_for_incidents
             and entity_type == "observable"
             and not obs_indicators
         ):
@@ -775,21 +437,18 @@ class WazuhConnector:
                 result=result,
                 sightings_meta=sightings_collector,
                 refs=[sightings_collector.observable_id()]
-                + (sighting_ids if self.create_sighting_summary else [])
+                + (sighting_ids if self.conf.create_sighting_summary else [])
                 + [
                     obj.id
                     for obj in bundle
-                    if self.create_incident_summary and obj.type == "incident"
+                    if self.conf.create_incident_summary and obj.type == "incident"
                 ],
             )
         ]
 
-        bundle += list(agents.values())
-        bundle += self.relate_agents_to_siem(list(agents.values()), self.siem_system)
-
         # NOTE: This must be the lastly created bundle, because it references
         # all other objects in the bundle list:
-        if self.create_incident_response and any(
+        if self.conf.create_incident_response and any(
             isinstance(obj, stix2.Incident) for obj in bundle
         ):
             bundle += self.create_incident_response_case(
@@ -797,11 +456,11 @@ class WazuhConnector:
             )
 
         if (
-            self.bundle_abort_limit is not None
-            and (bundle_count := len(bundle)) > self.bundle_abort_limit
+            self.conf.bundle_abort_limit is not None
+            and (bundle_count := len(bundle)) > self.conf.bundle_abort_limit
         ):
             raise ValueError(
-                f"Bundle is too large ({bundle_count} > {self.bundle_abort_limit}): aborting"
+                f"Bundle is too large ({bundle_count} > {self.conf.bundle_abort_limit}): aborting"
             )
 
         sent_count = len(
@@ -866,7 +525,11 @@ class WazuhConnector:
         ]
 
     def generate_agent_md_tables(self, agent_id: str):
-        if self.wazuh and agent_id in self.wazuh.state.agents and self.enrich_agent:
+        if (
+            self.wazuh
+            and agent_id in self.wazuh.state.agents
+            and self.conf.enrich_agent
+        ):
             agent = self.wazuh.state.agents[agent_id]
             return (
                 "|Key|Value|\n"
@@ -912,8 +575,8 @@ class WazuhConnector:
             # In addition to limit the total number of external references,
             # also limit them per alert rule (pick the last N alerts to get
             # the latest alerts):
-            for alert in alerts[-self.max_extrefs_per_alert_rule :]
-            if (ext_ref_count := ext_ref_count + 1) <= self.max_extrefs
+            for alert in alerts[-self.conf.max_extrefs_per_alert_rule :]
+            if (ext_ref_count := ext_ref_count + 1) <= self.conf.max_extrefs
         ]
 
     def create_alert_ext_ref(self, *, alert):
@@ -921,7 +584,7 @@ class WazuhConnector:
             source_name="Wazuh alert",
             description=alert_md_table(alert),
             url=urljoin(
-                self.app_url,  # type: ignore
+                self.app_url,
                 f'app/discover#/context/wazuh-alerts-*/{alert["_id"]}?_a=(columns:!(_source),filters:!())',
             ),
         )
@@ -941,13 +604,13 @@ class WazuhConnector:
             # In addition to limit the total number of external references,
             # also limit them per alert rule (pick the last N alerts to get
             # the latest alerts):
-            for i, alert in enumerate(alerts[-self.max_notes_per_alert_rule :])
+            for i, alert in enumerate(alerts[-self.conf.max_notes_per_alert_rule :])
             for capped_at in (
-                (i + 1, len(alerts), self.max_notes_per_alert_rule)
-                if len(alerts) > self.max_notes_per_alert_rule
+                (i + 1, len(alerts), self.conf.max_notes_per_alert_rule)
+                if len(alerts) > self.conf.max_notes_per_alert_rule
                 else None,
             )
-            if (note_count := note_count + 1) <= self.max_notes
+            if (note_count := note_count + 1) <= self.conf.max_notes
         ]
 
     def create_alert_note(
@@ -1019,6 +682,7 @@ class WazuhConnector:
         hits_returned = len(result["hits"]["hits"])
         total_hits = result["hits"]["total"]["value"]
         # TODO: link to query if a link to opensearch is possible
+        # TODO: include "filter" and exclude search_after/{include,exclude}_match if so:
         content = (
             "## Wazuh enrichment summary\n"
             "\n\n"
@@ -1028,11 +692,11 @@ class WazuhConnector:
             f"|Duration|{result['took']} ms|\n"
             f"|Hits returned|{hits_returned}|\n"
             f"|Total hits|{total_hits}|\n"
-            f"|Max hits|{self.hits_limit}|\n"
+            f"|Max hits|{self.conf.opensearch.limit}|\n"
             f"|**Dropped**|**{total_hits - hits_returned}**|\n"
-            f"|Search since|{self.search_after.isoformat() + 'Z' if self.search_after else '–'}|\n"
-            f"|Include filter|{json.dumps(self.search_include) if self.alert_searcher.opensearch.include_match else ''}|\n"
-            f"|Exclude filter|{json.dumps(self.search_exclude) if self.alert_searcher.opensearch.exclude_match else ''}|\n"
+            f"|Search since|{datetime_string(self.conf.opensearch.search_after)}|\n"
+            f"|Include filter|{self.conf.opensearch.field_json('include_match')}|\n"
+            f"|Exclude filter|{self.conf.opensearch.field_json('exclude_match')}|\n"
             f"|Connector v.|{self.CONNECTOR_VERSION}|\n"
             "\n"
             "### Alerts overview\n"
@@ -1071,7 +735,7 @@ class WazuhConnector:
     ):
         def log_skipped_incident_creation(level: int):
             self.helper.connector_logger.info(
-                f"Not creating incident because rule level below threshold: {level} < {self.create_incident_threshold}"
+                f"Not creating incident because rule level below threshold: {level} < {self.conf.create_incident_threshold}"
             )
             return True
 
@@ -1085,11 +749,11 @@ class WazuhConnector:
         )
         # TODO:
         # severity = cvss3_to_severity(alert entity['entity_type'] == 'Vulnerability'
-        match self.create_incident:
-            case "per_query":
+        match self.conf.create_incident:
+            case Config.IncidentCreateMode.PerQuery:
                 if (
                     level := sightings_meta.max_rule_level()
-                ) < self.create_incident_threshold:
+                ) < self.conf.create_incident_threshold:
                     log_skipped_incident_creation(level)
                     return []
 
@@ -1108,7 +772,7 @@ class WazuhConnector:
                     severity=rule_level_to_severity(sightings_meta.max_rule_level()),
                     first_seen=sightings_meta.first_seen(),
                     last_seen=sightings_meta.last_seen(),
-                    source=self.system_name,
+                    source=self.conf.system_name,
                 )
                 incidents = [incident]
                 bundle = (
@@ -1124,9 +788,11 @@ class WazuhConnector:
                     )
                 )
 
-            case "per_sighting":
+            case Config.IncidentCreateMode.PerSighting:
                 for sighter_id, meta in sightings.items():
-                    if (level := meta.max_rule_level) < self.create_incident_threshold:
+                    if (
+                        level := meta.max_rule_level
+                    ) < self.conf.create_incident_threshold:
                         log_skipped_incident_creation(level)
                         continue
 
@@ -1143,7 +809,7 @@ class WazuhConnector:
                         severity=rule_level_to_severity(meta.max_rule_level),
                         first_seen=meta.first_seen,
                         last_seen=meta.last_seen,
-                        source=self.system_name,
+                        source=self.conf.system_name,
                     )
                     incidents.append(incident)
                     bundle.append(incident)
@@ -1160,11 +826,11 @@ class WazuhConnector:
                         ],
                     )
 
-            case "per_alert_rule":
+            case Config.IncidentCreateMode.PerAlertRule:
                 for rule_id, meta in sightings_meta.alerts_by_rule_id_meta().items():
                     # Alerts are grouped by ID and all have the same level, so just pick one:
                     alerts_level = meta["alerts"][0]["_source"]["rule"]["level"]
-                    if alerts_level < self.create_incident_threshold:
+                    if alerts_level < self.conf.create_incident_threshold:
                         log_skipped_incident_creation(alerts_level)
                         continue
 
@@ -1189,7 +855,7 @@ class WazuhConnector:
                         severity=rule_level_to_severity(alerts_level),
                         first_seen=meta["first_seen"],
                         last_seen=meta["last_seen"],
-                        source=self.system_name,
+                        source=self.conf.system_name,
                     )
                     incidents.append(incident)
                     bundle.append(incident)
@@ -1203,7 +869,7 @@ class WazuhConnector:
                         incident=incident, alerts=[alert for alert in meta["alerts"]]
                     )
 
-            case "per_alert":
+            case Config.IncidentCreateMode.PerAlert:
                 for sighter_id, meta in sightings_meta.alerts_by_sighter_meta().items():
                     incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted in {meta['sighter_name']}"
                     incidents = [
@@ -1219,7 +885,7 @@ class WazuhConnector:
                             severity=rule_level_to_severity(rule_level),
                             first_seen=sighted_at,
                             last_seen=sighted_at,
-                            source=self.system_name,
+                            source=self.conf.system_name,
                         )
                         for alert in meta["alerts"]
                         for sighted_at in (alert["_source"]["@timestamp"],)
@@ -1227,7 +893,7 @@ class WazuhConnector:
                         for rule_desc in (alert["_source"]["rule"]["description"],)
                         for rule_level in (alert["_source"]["rule"]["level"],)
                         if (
-                            rule_level >= self.create_incident_threshold
+                            rule_level >= self.conf.create_incident_threshold
                             # Just a hack to log some info:
                             or not log_skipped_incident_creation(rule_level)
                         )
@@ -1250,7 +916,7 @@ class WazuhConnector:
                     #        alert
                     #        for alert in meta["alerts"]
                     #        if alert["_source"]["rule"]["level"]
-                    #        >= self.create_incident_threshold
+                    #        >= self.conf.create_incident_threshold
                     #    ]
                     #    for pair in zip(incidents, filtered_alerts, strict=True)
                     #    for incident, alerts in (pair,)
@@ -1258,12 +924,12 @@ class WazuhConnector:
                     #        incident=incident, alerts=alerts
                     #    )
                     # ]
-            case "never":
+            case Config.IncidentCreateMode.Never:
                 return []
 
             case _:
                 raise ValueError(
-                    f'WAZUH_INCIDENT_CREATE_MODE "{self.create_incident}" is invalid'
+                    f'WAZUH_INCIDENT_CREATE_MODE "{self.conf.create_incident}" is invalid'
                 )
 
         return bundle
@@ -1364,7 +1030,7 @@ class WazuhConnector:
             for agent in (alert["_source"]["agent"],)
             if int(agent["id"]) > 0 and "ip" in agent
         }
-        if self.wazuh and self.enrich_agent:
+        if self.wazuh and self.conf.enrich_agent:
             for id, agent in agents.copy().items():
                 if id in self.wazuh.state.agents:
                     api_agent = self.wazuh.state.agents[id].model_dump(
@@ -1437,7 +1103,7 @@ class WazuhConnector:
             for agent in (alert["_source"]["agent"],)
             if int(agent["id"]) > 0
         }
-        if self.wazuh and self.enrich_agent:
+        if self.wazuh and self.conf.enrich_agent:
             for id, agent in agents.copy().items():
                 if id in self.wazuh.state.agents:
                     api_agent = self.wazuh.state.agents[id].model_dump(

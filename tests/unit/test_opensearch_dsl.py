@@ -112,12 +112,12 @@ def test_complex_valid_query():
                                   }
                                ],
                                "filter": [],
-                               "minimum_should_match": null
+                               "minimum_should_match": 1
                             }
                          }
                       ],
                       "filter": [],
-                      "minimum_should_match": null
+                      "minimum_should_match": 1
                    }
                 }
              ],
@@ -140,7 +140,7 @@ def test_empty_bool_throws():
 
 
 def test_range():
-    expected = {"range": {"field": "foo", "gt": "2024", "lt": "2023", "boost": 1.0}}
+    expected = {"range": {"foo": {"gt": "2024", "lt": "2023", "boost": 1.0}}}
     range = Range(field="foo", gt="2024", lt="2023").model_dump(exclude_none=True)
     assert range == expected
 

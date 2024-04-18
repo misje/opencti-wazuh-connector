@@ -6,11 +6,12 @@ import random
 import json
 from pydantic import AnyHttpUrl, ValidationError
 from datetime import datetime
-from wazuh.opensearch_dsl import Match, OrderBy
-from wazuh.utils import merge_outof
 
 sys.path.insert(0, os.path.abspath("../../src"))
 from wazuh.opensearch_config import OpenSearchConfig
+from test_common import osConf
+from wazuh.opensearch_dsl import Match, OrderBy
+from wazuh.utils import merge_outof
 
 # random.seed(0)
 
@@ -26,17 +27,6 @@ timestampshs = [
 @pytest.fixture(params=timestampshs)
 def timestamp_like_string(request):
     return request.param
-
-
-def osConf(**kwargs):
-    return OpenSearchConfig(
-        **merge_outof(
-            kwargs,
-            url="http://example.org",
-            username="foosername",
-            password="fooserpass",
-        )
-    )
 
 
 def test_lax_datetime_parsing(timestamp_like_string):
@@ -104,3 +94,24 @@ def test_order_by_str():
 def test_order_by_invalid_raises():
     with pytest.raises(ValidationError):
         osConf(order_by="foo,bar")
+
+
+def test_order_by_json():
+    osConf(order_by=[{"timestamp": {"order": "desc"}}])
+
+
+def test_exclude_match_json():
+    osConf(exclude_match=[{"match": {"data.integration": "opencti"}}])
+
+
+# Output used in create_summary_note():
+def test_exclude_match_dump():
+    dump = osConf(exclude_match="foo=bar,baz=qux").field_json("exclude_match")
+    expected = '[{"match": {"foo": "bar"}}, {"match": {"baz": "qux"}}]'
+    assert dump == expected
+
+
+def test_exclude_match_dump_empty():
+    dump = osConf(exclude_match=None).field_json("exclude_match")
+    expected = ""
+    assert dump == expected

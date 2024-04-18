@@ -1,10 +1,11 @@
 import stix2
 import re
+import logging
 from pycti import OpenCTIConnectorHelper, Tool, CustomObservableUserAgent
 from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Any, Final, Literal, Mapping, Sequence
 from .utils import (
-    filter_truthly,
+    filter_truthy,
     first_or_none,
     oneof,
     oneof_nonempty,
@@ -15,9 +16,11 @@ from .utils import (
     regex_transform_keys,
     search_fields,
 )
-from enum import Enum
 from ntpath import split
 from collections import OrderedDict
+from .enrich_config import FilenameBehaviour
+
+log = logging.getLogger(__name__)
 
 IPAddr = stix2.IPv4Address | stix2.IPv6Address
 SCO = (
@@ -134,6 +137,8 @@ def tlp_marking_from_string(tlp_string: str | None):
             return stix2.TLP_RED.id
         case "":
             return None
+        case tlp_string if validate_stix_id(tlp_string, "marking-definition"):
+            return tlp_string
         case _:
             raise ValueError(f"{tlp_string} is not a valid marking definition")
 
@@ -327,11 +332,6 @@ def find_hashes(
     return hashes
 
 
-class FilenameBehaviour(Enum):
-    CreateDir = "create-dir"
-    RemovePath = "remove-path"
-
-
 class StixHelper(BaseModel):
     """
     Helper class to simplify creation of STIX entities
@@ -439,7 +439,7 @@ class StixHelper(BaseModel):
                     x_opencti_additional_names=extra_names,
                 )
             ),
-            nested_objs=filter_truthly(dir),
+            nested_objs=filter_truthy(dir),
         )
 
     def create_addr_sco(

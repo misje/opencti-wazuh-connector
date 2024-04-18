@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Sequence
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -9,6 +10,8 @@ from pydantic import (
 )
 from typing import Any, TypeAlias
 from enum import Enum
+
+from wazuh.utils import del_key
 
 
 class Term(BaseModel):
@@ -69,7 +72,11 @@ class Range(BaseModel):
         if type(self).__name__ != "Range":
             return self.model_dump()
 
-        return {type(self).__name__.lower(): handler(self)}
+        return {
+            type(self).__name__.lower(): {
+                self.field: {**del_key("field", handler(self))}
+            }
+        }
 
 
 class Match(BaseModel):
@@ -138,16 +145,16 @@ class Regexp(_Globby):
 
 class Bool(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
-    must: list[
+    must: Sequence[
         Term | Exists | Range | Match | MultiMatch | Wildcard | Regexp | Bool
     ] = []
-    must_not: list[
+    must_not: Sequence[
         Term | Exists | Range | Match | MultiMatch | Wildcard | Regexp | Bool
     ] = []
-    should: list[
+    should: Sequence[
         Term | Exists | Range | Match | MultiMatch | Wildcard | Regexp | Bool
     ] = []
-    filter: list[
+    filter: Sequence[
         Term | Exists | Range | Match | MultiMatch | Wildcard | Regexp | Bool
     ] = []
     minimum_should_match: int | None = None
@@ -157,6 +164,9 @@ class Bool(BaseModel):
         assert any(
             getattr(self, prop) for prop in ["must", "must_not", "should", "filter"]
         )
+        if self.should and self.minimum_should_match is None:
+            self.minimum_should_match = 1
+
         return self
 
     @model_serializer(mode="wrap")
@@ -165,7 +175,9 @@ class Bool(BaseModel):
 
 
 ## Cannot be used in Bool, unfortunately, due to self-referencing:
-QueryType: TypeAlias = Term | Exists | Range | Match | MultiMatch | Regexp | Bool
+QueryType: TypeAlias = (
+    Term | Exists | Range | Match | MultiMatch | Wildcard | Regexp | Bool
+)
 
 
 class SortOrder(Enum):

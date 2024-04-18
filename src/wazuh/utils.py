@@ -1,10 +1,14 @@
 import re
 import ipaddress
+import dateparser
 from typing import Any, Callable, Literal, Mapping, Type, TypeVar
 from os.path import commonprefix
 from pydantic import AnyUrl, ValidationError
+from datetime import datetime, timedelta
+from babel.dates import format_datetime, format_timedelta
 
 T = TypeVar("T")
+U = TypeVar("U")
 Number = TypeVar("Number", int, float)
 # TODO: use typevars to assert correct dict/mapping in and out of functions
 Obj = TypeVar("Obj", bound=Mapping)
@@ -106,6 +110,8 @@ def oneof_nonempty(*keys: str, within: dict, default=None) -> Any:
     Return the first truthly value of the first key that exists in the dict, or
     None.
 
+    See :func:`truthy`
+
     Examples:
 
     >>> oneof_nonempty('foo', 'bar', within={'foo': [], 'bar': 1})
@@ -114,7 +120,9 @@ def oneof_nonempty(*keys: str, within: dict, default=None) -> Any:
     []
     >>> oneof_nonempty('baz', within={'foo': [], 'bar': None})
     """
-    return next((within[key] for key in keys if key in within and within[key]), default)
+    return next(
+        (within[key] for key in keys if key in within and truthy(within[key])), default
+    )
 
 
 def allof_nonempty(*keys: str, within: dict) -> list[Any]:
@@ -164,18 +172,28 @@ def first_of(values: list[Any], type: type) -> Any:
     return first_or_none(list(filter(lambda x: isinstance(x, type), values)))
 
 
-def filter_truthly(*values: Any) -> list[Any]:
+def truthy(value) -> bool:
     """
-    Return a list of all items that are truthly
+    Return the truthiness of a value unless it is a number, in which case
+    return True
+    """
+    return True if isinstance(value, (int, float, complex)) else bool(value)
+
+
+def filter_truthy(*values: Any) -> list[Any]:
+    """
+    Return a list of all items that are truthy (except numbers)
+
+    See :func:`truthy`
 
     Examples:
 
-    >>> filter_truthly(None)
+    >>> filter_truthy(None)
     []
-    >>> filter_truthly(None, 1, '')
-    [1]
+    >>> filter_truthy(None, 1, '', 0)
+    [1, 0]
     """
-    return list(filter(lambda x: x, values))
+    return list(filter(lambda x: truthy(x), values))
 
 
 def listify(value: T | list[T] | None) -> list[T]:
@@ -473,7 +491,7 @@ def non_none(*args, threshold: int = 1) -> bool:
 
     >>> non_none(1, None, 3, threshold=2)
     True
-    >>> none_none(None, None):
+    >>> non_none(None, None)
     False
     """
     return sum(arg is not None for arg in args) >= threshold
@@ -920,3 +938,99 @@ def verify_url(
         )
     else:
         return True
+
+
+def remove_empties(
+    value: Any,
+    is_empty: Callable[[Any], bool] = lambda x: False
+    if isinstance(x, (bool, int))
+    else not bool(x),
+) -> Any:
+    """
+
+    Examples:
+
+    >>> remove_empties({'a': {}, 'b': {'c': 0, 'd': 1}, 'e': [False, None, [], {}]})
+    {'b': {'c': 0, 'd': 1}, 'e': [False]}
+    >>> remove_empties({'a': None, 'b': {'c': 0, 'd': None}, 'e': [3, None]}, lambda x: x is None)
+    {'b': {'c': 0}, 'e': [3]}
+    """
+    if isinstance(value, list):
+        return [
+            x for x in (remove_empties(x, is_empty) for x in value) if not is_empty(x)
+        ]
+    elif isinstance(value, dict):
+        return {
+            key: val
+            for key, val in (
+                (key, remove_empties(val, is_empty)) for key, val in value.items()
+            )
+            if not is_empty(val)
+        }
+    else:
+        return value
+
+
+def parse_human_datetime(timestamp: str) -> datetime | timedelta | None:
+    """
+    Parse a string containing a date, time or interval into a
+    datetime/timedelta object
+
+    Examples:
+
+    >>> parse_human_datetime('2024-01-01 14:42')
+    datetime.datetime(2024, 1, 1, 14, 42)
+    >>> d1 = parse_human_datetime('3 days ago')
+    >>> d2 = parse_human_datetime('3 days ago')
+    >>> d1 == d2 == timedelta(days=3)
+    True
+    """
+    # Use an anchor in order to reliably calculate a timedelta:
+    anchor = datetime.now()
+    parsed = dateparser.parse(timestamp, settings={"RELATIVE_BASE": anchor})
+    if parsed is None:
+        return None
+
+    # In order to distinguish datetimes and timedeltas, parse the string again
+    # with a different anchor. If the result is the same, do not calculate a
+    # delta:
+    parsed2 = dateparser.parse(
+        timestamp, settings={"RELATIVE_BASE": anchor + timedelta(seconds=1)}
+    )
+    if parsed2 == parsed:
+        return parsed
+
+    return anchor - parsed
+
+
+def del_key(key: T, obj: dict[T, U]) -> dict[T, U]:
+    """
+    Remove a key from a dict and return the new dict
+
+    Examples:
+
+    >>> del_key('foo', {'foo': 'bar', 'baz': 'qux'})
+    {'baz': 'qux'}
+    """
+    del obj[key]
+    return obj
+
+
+# TODO: find a way to override locale for tests (setlocale doesn't work)
+def datetime_string(timestamp: datetime | timedelta | None, default="–") -> str:
+    """
+    FIXME
+
+    Examples:
+
+    >>> datetime_string(datetime(2024, 1, 2, 3, 4, 5))
+    '2. jan. 2024, 03:04:05'
+    >>> datetime_string(timedelta(seconds=42))
+    '42 sekunder'
+    """
+    if isinstance(timestamp, datetime):
+        return format_datetime(timestamp)
+    elif isinstance(timestamp, timedelta):
+        return format_timedelta(timestamp)
+    else:
+        return default
