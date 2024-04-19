@@ -269,11 +269,11 @@ class Config(BaseSettings):
     will be created. However, a sighting may still be created.
     :py:const:`AlertRuleSeverity` may also be used",
     """
-    create_agent_ip_obs: bool = True
+    create_agent_ip_observable: bool = True
     """
     Whether to create an IP address observable and relate it to agent systems
     """
-    create_agent_host_obs: bool = True
+    create_agent_hostname_observable: bool = True
     """
     Whether to create hostname observable and relate it to agent systems
     """

@@ -368,9 +368,9 @@ class WazuhConnector:
         bundle += self.relate_agents_to_siem(list(agents.values()), self.siem_system)
 
         # TODO: Use in incident and add as targets(?):
-        if self.conf.create_agent_ip_obs:
+        if self.conf.create_agent_ip_observable:
             bundle += self.create_agent_addr_obs(alerts=hits)
-        if self.conf.create_agent_host_obs:
+        if self.conf.create_agent_hostname_observable:
             bundle += self.create_agent_hostname_obs(alerts=hits)
 
         # TODO: doesn't seem to work? Or bug in OpenCTI. Anyway, add STIXList

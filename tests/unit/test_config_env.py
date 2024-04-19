@@ -56,7 +56,7 @@ def set_env():
     os.environ["WAZUH_ENRICH_AGENT"] = "true"
     os.environ["WAZUH_ENRICH_LABEL_ADD_LIST"] = "wazuh_ignore"
     os.environ["WAZUH_CREATE_AGENT_IP_OBSERVABLE"] = "true"
-    os.environ["WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE"] = "true"
+    os.environ["WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE"] = "false"
     os.environ["WAZUH_ENRICH_FILENAME_BEHAVIOUR"] = "create-dir,remove-path"
     os.environ["WAZUH_IGNORE_OWN_ENTITIES"] = "false"
     os.environ["WAZUH_LABEL_IGNORE_LIST"] = "hygiene,wazuh_ignore,foobar"
@@ -77,8 +77,8 @@ def test_config_from_env():
         "app_url": AnyHttpUrl("https://wazuh.example.org/"),
         "author_name": "Wazuh",
         "bundle_abort_limit": 500,
-        "create_agent_host_obs": False,
-        "create_agent_ip_obs": False,
+        "create_agent_hostname_observable": False,
+        "create_agent_ip_observable": True,
         "create_incident": Config.IncidentCreateMode.PerSighting,
         "create_incident_response": True,
         "create_incident_summary": True,
