@@ -2,6 +2,7 @@ from __future__ import annotations
 import stix2
 import re
 import dateparser
+import logging
 from pydantic import BaseModel, ConfigDict
 from ntpath import basename
 from enum import Enum
@@ -19,12 +20,14 @@ from .stix_helper import (
 from .utils import (
     REGISTRY_PATH_REGEX,
     create_if,
+    field_or_empty,
     first_field,
     has,
     has_atleast,
     first_or_none,
     first_or_empty,
     first_of,
+    in_str_list,
     is_registry_path,
     join_values,
     none_unless_threshold,
@@ -44,6 +47,8 @@ from .utils import (
     oneof,
 )
 from .enrich_config import EnrichmentConfig
+
+log = logging.getLogger(__name__)
 
 EType = EnrichmentConfig.EntityType
 
@@ -83,6 +88,23 @@ class ProcessMeta(BaseModel):
     creator: AccountMeta | None = None
     image: FileMeta | None = None
     parent: ProcessMeta | None = None
+
+
+def infer_protos_from_alert(alert: dict) -> set[str]:
+    protos = set()
+
+    if "sshd" in field_or_empty(alert, "rule.groups", list):
+        protos.add("ssh")
+    if "smbd" in field_or_empty(alert, "rule.groups", []):
+        protos.add("smb")
+    if any(
+        keyword in field_or_empty(alert, "rule.groups", str)
+        for keyword in ("ftpd", "msftp", "proftpd", "vsftpd", "pure-ftpd")
+    ):
+        protos.add("ftp")
+    # TODO: http/https
+
+    return protos
 
 
 class Enricher(BaseModel):
@@ -798,7 +820,8 @@ class Enricher(BaseModel):
                     search_fields(
                         alert["_source"], ["data.win.eventdata.protocol"]
                     ).values()
-                ),
+                )
+                + list(infer_protos_from_alert(alert["_source"])),
             )
             # Protocols are required:
             if protocols

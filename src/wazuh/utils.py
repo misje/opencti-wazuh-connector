@@ -10,6 +10,7 @@ from babel.dates import format_datetime, format_timedelta
 T = TypeVar("T")
 U = TypeVar("U")
 Number = TypeVar("Number", int, float)
+SimpleTypeType = TypeVar("SimpleTypeType", type(int), type(str), type(dict), type(list))
 # TODO: use typevars to assert correct dict/mapping in and out of functions
 Obj = TypeVar("Obj", bound=Mapping)
 
@@ -271,7 +272,7 @@ def extract_fields(
     return {k: v for k, v in results.items() if v is not None}
 
 
-def search_fields(obj: Mapping, fields: list[str], *, regex: str = ""):
+def search_fields(obj: Mapping, fields: list[str], *, regex: str = "") -> dict:
     """
     Search a dict for fields using key paths
 
@@ -293,7 +294,7 @@ def search_fields(obj: Mapping, fields: list[str], *, regex: str = ""):
 
 
 # TODO: return value can be anything:
-def search_field(obj: dict, field: str, *, regex: str = "") -> str | None:
+def search_field(obj: Mapping, field: str, *, regex: str = "") -> str | None:
     """
     Search a dict for a field using a key path
 
@@ -305,6 +306,37 @@ def search_field(obj: dict, field: str, *, regex: str = "") -> str | None:
     'bar'
     """
     return search_fields(obj, [field], regex=regex).get(field)
+
+
+def field_or_empty(obj: Mapping, field: str, type: SimpleTypeType = None) -> Any:
+    """
+    Extract a field from an object or create a default value
+
+    FIXME: more info
+
+    Examples:
+
+    >>> field_or_empty({'a': {'b': 1}}, 'a.b')
+    1
+    >>> field_or_empty({'a': {'b': 1}}, 'c', list)
+    []
+    >>> field_or_empty({'a': {'b': 1}}, 'c', str)
+    ''
+    >>> field_or_empty({'a': {'b': 1}}, 'd')
+    Traceback (most recent call last):
+    ValueError: Field d is not found, and no default type is specified
+    """
+    value = search_field(obj, field)
+    default_values = {int: 0, str: "", dict: {}, list: []}
+    if value is None:
+        if type is None:
+            raise ValueError(
+                f"Field {field} is not found, and no default type is specified"
+            )
+
+        return default_values[type]
+    else:
+        return value
 
 
 def first_field(obj: dict, *fields: str, regex: str = "") -> Any:
@@ -1034,3 +1066,29 @@ def datetime_string(timestamp: datetime | timedelta | None, default="–") -> st
         return format_timedelta(timestamp)
     else:
         return default
+
+
+def in_str_list(
+    value: str | tuple[str, ...], str_list: str, *, sep_regex: str = r",\s*"
+) -> bool:
+    """
+    Is a string within a list represented as a list
+
+    Examples:
+
+    >>> in_str_list('foo', 'foo, bar')
+    True
+    >>> in_str_list('foo', 'foo,bar')
+    True
+    >>> in_str_list('baz', 'foo,bar')
+    False
+    >>> in_str_list('baz', 'foo bar   baz', sep_regex='\\s+')
+    True
+    >>> in_str_list(('foo', 'bar'), 'qux,bar')
+    True
+    """
+    values = re.split(sep_regex, str_list)
+    if isinstance(value, tuple):
+        return any(candidate in values for candidate in value)
+    else:
+        return value in values

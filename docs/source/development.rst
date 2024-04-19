@@ -12,3 +12,5 @@ Helper modules
    utils
    stix_helper
    enricher
+   opensearch
+   opensearch_dsl
