@@ -10,6 +10,7 @@ from babel.dates import format_datetime, format_timedelta
 
 T = TypeVar("T")
 U = TypeVar("U")
+EnumType = TypeVar("EnumType", bound=Enum)
 Number = TypeVar("Number", int, float)
 SimpleTypeType = TypeVar("SimpleTypeType", type(int), type(str), type(dict), type(list))
 # TODO: use typevars to assert correct dict/mapping in and out of functions
@@ -832,16 +833,32 @@ def remove_reg_paths(obj: dict[Any, str]) -> dict[Any, str]:
     return {k: v for k, v in obj.items() if not is_registry_path(v)}
 
 
-# TODO: require Type to be bound to (subclass of) Enum (T = TypeVar('T', bound=Enum)?
-def comma_string_to_set(values: Any, EType: Type | None = None) -> Any:
+def comma_string_to_set(
+    values: Any, EType: Type[EnumType] | None = None
+) -> set[str] | set[EnumType]:
     """
     Split a comma-separated string to a set
 
     This function only splits a string into a set of strings. Further
     validation and coersion is left to pydantic or other validators. Empty
     strings returns empty sets. The special string "all" returns a
-    ``set(Type)`` if :paramref:`Type` is specified, as a convenient way to
+    ``set(Type)`` if :paramref:`EType` is specified, as a convenient way to
     return a set with all possible enum values.
+
+    Note that a set of enum values are only only return when :paramref:`EType`
+    is set and when :paramref:`values` is "all". Otherwise, a set of strings is
+    returned. Converting these values to enum values is left for pydantic to
+    validate.
+
+    Examples:
+
+    >>> sorted(comma_string_to_set('foo,bar, foo'))
+    ['bar', 'foo']
+    >>> class FooEnum(Enum):
+    ...   Foo = 'foo'
+    ...   Bar = 'bar'
+    >>> comma_string_to_set('all', FooEnum)
+    {<FooEnum.Foo: 'foo'>, <FooEnum.Bar: 'bar'>}
     """
     if isinstance(values, str):
         if not values:
@@ -851,7 +868,7 @@ def comma_string_to_set(values: Any, EType: Type | None = None) -> Any:
         else:
             # If this is a string, parse it as a comma-separated string with
             # enum values:
-            return {type_str for type_str in values.split(",")}
+            return {type_str for type_str in re.split(r",\s*", values)}
     else:
         # Otherwise, let pydantic validate whatever it is:
         return values
