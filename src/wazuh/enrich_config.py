@@ -2,8 +2,7 @@ from pydantic import (
     Field,
     field_validator,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import TypeVar
+from pydantic_settings import SettingsConfigDict
 from .utils import comma_string_to_set
 from .config_base import ConfigBase
 from enum import Enum

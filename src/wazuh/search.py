@@ -29,8 +29,6 @@ class AlertSearcher(BaseModel):
     search_agent_ip: bool
     search_agent_name: bool
 
-    # TODO: UserAgent:
-    # data.aws.userAgent
     def search(self, entity: dict, stix_entity: dict) -> dict | None:
         match entity["entity_type"]:
             case "StixFile" | "Artifact":
@@ -65,6 +63,8 @@ class AlertSearcher(BaseModel):
                 return self.query_vulnerability(stix_entity=stix_entity)
             case "User-Account":
                 return self.query_account(stix_entity=stix_entity)
+            case "User-Agent":
+                return self.query_user_agent(stix_entity=stix_entity)
             case _:
                 raise ValueError(
                     f'{entity["entity_type"]} is not a supported entity type'
@@ -589,3 +589,8 @@ class AlertSearcher(BaseModel):
             return self.opensearch.search_multi(fields=uid_fields, value=uid)
         else:
             return None
+
+    def query_user_agent(self, *, stix_entity: dict) -> dict | None:
+        return self.opensearch.search_multi(
+            value=stix_entity["value"], fields=["data.aws.userAgent"]
+        )

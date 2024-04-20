@@ -1,7 +1,12 @@
 import stix2
 import re
 import logging
-from pycti import OpenCTIConnectorHelper, Tool, CustomObservableUserAgent
+from pycti import (
+    OpenCTIConnectorHelper,
+    Tool,
+    CustomObservableHostname,
+    CustomObservableUserAgent,
+)
 from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Any, Final, Literal, Mapping, Sequence
 from .utils import (
@@ -31,6 +36,7 @@ SCO = (
     | stix2.EmailAddress
     | stix2.EmailMessage
     | stix2.File
+    | CustomObservableHostname
     | IPAddr
     | stix2.MACAddress
     | stix2.Mutex
@@ -39,6 +45,7 @@ SCO = (
     | stix2.Software
     | stix2.URL
     | stix2.UserAccount
+    | CustomObservableUserAgent
     | stix2.WindowsRegistryKey
     | stix2.X509Certificate
 )
@@ -490,6 +497,8 @@ class StixHelper(BaseModel):
                 return _create_sco(stix2.DomainName, value=value)
             case "Email-Addr":
                 return _create_sco(stix2.EmailAddress, value=value)
+            case "Hostname":
+                return _create_sco(CustomObservableHostname, value=value)
             case "IPv4-Addr":
                 return _create_sco(stix2.IPv4Address, value=value)
             case "IPv6-Addr":
