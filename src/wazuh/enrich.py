@@ -53,6 +53,7 @@ log = logging.getLogger(__name__)
 EType = EnrichmentConfig.EntityType
 
 # TODO: Move a lot into stix_helper
+# TODO: set last_seen in related-to relationships
 
 TransformCallback = Callable[
     [Annotated[Any, "Field from search"]],

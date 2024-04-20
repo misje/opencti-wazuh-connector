@@ -177,7 +177,7 @@ class WazuhConnector:
         self.stix_common_attrs["created_by_ref"] = self.author["id"]
         self.stix = StixHelper(
             common_properties=self.stix_common_attrs,
-            sco_labels=self.conf.enrich_labels,
+            sco_labels=list(self.conf.enrich_labels),
             filename_behaviour=self.conf.enrich.filename_behaviour,
         )
         self.enricher = Enricher(

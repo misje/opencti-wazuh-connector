@@ -4,8 +4,8 @@ from pydantic import (
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import TypeVar
-
 from .utils import comma_string_to_set
+from .config_base import ConfigBase
 from enum import Enum
 
 # TODO: test if a member has a union (e.g. TLPLiteral|str), and doesn't have a
@@ -33,7 +33,7 @@ class FilenameBehaviour(Enum):
     # IndividualParentDirs
 
 
-class EnrichmentConfig(BaseSettings):
+class EnrichmentConfig(ConfigBase):
     """
     This configuration dictates how the connector should enrich incidents with
     observables and other entities
@@ -150,13 +150,12 @@ class EnrichmentConfig(BaseSettings):
         URL = "url"
         UserAgent = "user-agent"
 
-    types: set[EntityType] | str = Field(title="Enrichment types", default=set())
+    types: set[EntityType] = Field(title="Enrichment types", default=set())
     """
     Which entity types to enrich
     """
 
-    # TODO: here and elsewhere: custom EnvSetttingsSource that transforms from string:
-    filename_behaviour: set[FilenameBehaviour] | str = {
+    filename_behaviour: set[FilenameBehaviour] = {
         FilenameBehaviour.CreateDir,
         FilenameBehaviour.RemovePath,
     }

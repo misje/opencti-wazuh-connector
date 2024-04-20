@@ -11,9 +11,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from .utils import parse_human_datetime, truthy, verify_url
 from .opensearch_dsl import Match, OrderBy, QueryType
 from .opensearch_dsl_helper import dsl_matches_from_string, dsl_order_by_from_string
+from .config_base import ConfigBase
 
 
-class OpenSearchConfig(BaseSettings):
+class OpenSearchConfig(ConfigBase):
     """
     Configuration used for the opensearch module to connect to OpenSearch
     """
@@ -22,7 +23,7 @@ class OpenSearchConfig(BaseSettings):
         env_prefix="WAZUH_OPENSEARCH_", validate_assignment=True
     )
 
-    url: AnyHttpUrl | str
+    url: AnyHttpUrl
     """
     URL, including port and path, if neccessary, but must not include username
     and password
@@ -54,14 +55,11 @@ class OpenSearchConfig(BaseSettings):
     Search for alerts in OpenSearch after this point in time, which may be
     specified either as a timestamp or a relative time (like "2 months ago")
     """
-    # TODO: remove list alternatives?
-    include_match: list[Match] | list[dict[str, dict[str, str]]] = []
+    include_match: list[Match] = []
     """
     FIXME
     """
-    exclude_match: list[Match] | list[dict[str, dict[str, str]]] = [
-        Match(field="data.integration", query="opencti")
-    ]
+    exclude_match: list[Match] = [Match(field="data.integration", query="opencti")]
     """
     FIXME
     to a "bool" "must_not" array. The default value will exclude alerts
@@ -74,9 +72,7 @@ class OpenSearchConfig(BaseSettings):
     ordering by timestamp (and rule.level if :py:attr:`order_by_rule_level` is
     True)).
     """
-    order_by: list[OrderBy] | list[dict[str, dict[str, str]]] = [
-        OrderBy(field="timestamp", order="desc")
-    ]
+    order_by: list[OrderBy] = [OrderBy(field="timestamp", order="desc")]
     """
     How to order alert results before returning :py:attr:`limit` number of
     results. The default and recommended settings is to order by timestamp,

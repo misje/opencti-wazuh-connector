@@ -96,14 +96,6 @@ def test_order_by_invalid_raises():
         osConf(order_by="foo,bar")
 
 
-def test_order_by_json():
-    osConf(order_by=[{"timestamp": {"order": "desc"}}])
-
-
-def test_exclude_match_json():
-    osConf(exclude_match=[{"match": {"data.integration": "opencti"}}])
-
-
 # Output used in create_summary_note():
 def test_exclude_match_dump():
     dump = osConf(exclude_match="foo=bar,baz=qux").field_json("exclude_match")

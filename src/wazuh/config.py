@@ -14,6 +14,7 @@ from .opensearch_config import OpenSearchConfig
 from .enrich_config import EnrichmentConfig
 from .stix_helper import TLPLiteral, tlp_marking_from_string, validate_stix_id
 from .utils import comma_string_to_set, verify_url
+from .config_base import ConfigBase
 from enum import Enum
 
 
@@ -26,7 +27,7 @@ from enum import Enum
 # TODO: add aliases to create sensible env names
 # TODO: Use autodoc_pydantic_field_doc_policy=docstring and move and improve
 # format of description into docstrings
-class Config(BaseSettings):
+class Config(ConfigBase):
     """
     FIXME
     """
@@ -316,7 +317,7 @@ class Config(BaseSettings):
        * - IP address
          - (current public-facing IP address)
     """
-    label_ignore_list: set[str] | str = Field(
+    label_ignore_list: set[str] = Field(
         default={"hygiene", "wazuh_ignore"},
     )
     """
@@ -327,7 +328,7 @@ class Config(BaseSettings):
     connector from running on its own enriched data. See FIXREF recursion.
     """
     # TODO: Fix wazuh.py to support set:
-    enrich_labels: list[str] = Field(
+    enrich_labels: set[str] = Field(
         default=["wazuh_ignore"],
     )
     """
@@ -350,7 +351,7 @@ class Config(BaseSettings):
     <exploring-entities/#systems>` that will be used as author for all created
     entities
     """
-    app_url: AnyHttpUrl | str
+    app_url: AnyHttpUrl
 
     @field_validator("max_tlp", mode="before")
     @classmethod

@@ -1,9 +1,10 @@
 from pydantic import AnyHttpUrl, AnyUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from .utils import verify_url
+from .config_base import ConfigBase
 
 
-class WazuhAPIConfig(BaseSettings):
+class WazuhAPIConfig(ConfigBase):
     """
     FIXME
     """
@@ -12,7 +13,7 @@ class WazuhAPIConfig(BaseSettings):
 
     enabled: bool = False
     # Compute from opensearch?
-    url: AnyHttpUrl | str | None = None
+    url: AnyHttpUrl | None = None
     username: str | None = None
     password: str | None = None
     verify_tls: bool = True

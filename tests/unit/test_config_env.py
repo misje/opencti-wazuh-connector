@@ -109,9 +109,9 @@ def test_config_from_env():
             },
         },
         "enrich_agent": True,
-        "enrich_labels": [
+        "enrich_labels": {
             "wazuh_ignore",
-        ],
+        },
         "hits_abort_limit": 1000,
         "ignore_own_entities": False,
         "ignore_private_addrs": True,

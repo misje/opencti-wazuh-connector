@@ -91,8 +91,6 @@ class ConfigBase(BaseSettings):
     def from_env(cls):
         return cls.model_validate({})
 
-    # TODO: http validator
-
     @classmethod
     def settings_customise_sources(
         cls,
