@@ -76,6 +76,7 @@ extlinks = {
         "https://opensearch.org/docs/latest/query-dsl/%s",
         "OpenSearch DSL query reference",
     ),
+    "pydantic": ("https://docs.pydantic.dev/2.7/%s", "Pydantic documentation"),
 }
 
 # TODO: gloassary and :term:

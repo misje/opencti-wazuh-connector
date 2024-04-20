@@ -22,6 +22,7 @@ def dsl_multi_wildcard(
     ]
 
 
+# TODO: remove: no longer in used
 def dsl_matches_from_string(terms: str, sep: str = "=") -> list[Match]:
     pairs = [term.split(sep) for term in terms.split(",")]
     if any(len(pair) != 2 for pair in pairs):
@@ -30,6 +31,7 @@ def dsl_matches_from_string(terms: str, sep: str = "=") -> list[Match]:
     return [Match(field=pair[0], query=pair[1]) for pair in pairs]
 
 
+# TODO: remove: no longer in used
 def dsl_order_by_from_string(terms: str, sep: str = ":") -> list[OrderBy]:
     pairs = [term.split(sep) for term in terms.split(",")]
     if any(len(pair) != 2 for pair in pairs):

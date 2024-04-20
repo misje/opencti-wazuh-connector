@@ -1,6 +1,7 @@
 import re
 import ipaddress
 import dateparser
+from enum import Enum
 from typing import Any, Callable, Literal, Mapping, Type, TypeVar
 from os.path import commonprefix
 from pydantic import AnyUrl, ValidationError
@@ -831,6 +832,7 @@ def remove_reg_paths(obj: dict[Any, str]) -> dict[Any, str]:
     return {k: v for k, v in obj.items() if not is_registry_path(v)}
 
 
+# TODO: require Type to be bound to (subclass of) Enum (T = TypeVar('T', bound=Enum)?
 def comma_string_to_set(values: Any, EType: Type | None = None) -> Any:
     """
     Split a comma-separated string to a set
@@ -1092,3 +1094,23 @@ def in_str_list(
         return any(candidate in values for candidate in value)
     else:
         return value in values
+
+
+def is_enum_set(value: Any) -> bool:
+    """
+    Examples:
+
+    >>> class Foo(Enum):
+    ...   Bar = 'bar'
+    ...   Baz = 'baz'
+    >>> qux = {Foo.Bar, Foo.Baz}
+    >>> is_enum_set(qux)
+    True
+    >>> is_enum_set(set())
+    True
+    >>> is_enum_set(set('foo'))
+    False
+    """
+    return isinstance(value, set) and all(
+        issubclass(type(item), Enum) for item in value
+    )
