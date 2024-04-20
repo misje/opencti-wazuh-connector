@@ -23,6 +23,7 @@ from urllib.parse import urljoin
 from functools import reduce
 from .utils import (
     datetime_string,
+    field_or_default,
     has,
     rule_level_to_severity,
     priority_from_severity,
@@ -423,6 +424,15 @@ class WazuhConnector:
         ):
             self.helper.connector_logger.info(
                 "Not creating incident because entity is an observable, an indicator is required and no indicators are found"
+            )
+        elif entity_type == "vulnerability" and not (
+            (score_threshold := self.conf.vulnerability_incident_cvss3_score_threshold)
+            is not None
+            and field_or_default(stix_entity, "x_openti_cvss_base_score", 11)
+            > score_threshold
+        ):
+            self.helper.connector_logger.info(
+                "Not creating incident because entity is an indicator, and CVSS3 score is not present, threshold is not set, or threshold is no met"
             )
         else:
             bundle += self.create_incidents(

@@ -341,6 +341,21 @@ def field_or_empty(obj: Mapping, field: str, type: SimpleTypeType = None) -> Any
         return value
 
 
+def field_or_default(obj: Mapping, field: str, default: Any) -> Any:
+    """
+    Return the result from search_field if there is a result, otherwise a
+    default value
+
+    Examples:
+
+    >>> field_or_default({'a': {'b': 'foo'}}, 'a.b', 'bar')
+    'foo'
+    >>> field_or_default({'a': {'b': 'foo'}}, 'b.c', 'bar')
+    'bar'
+    """
+    return result if (result := search_field(obj, field)) is not None else default
+
+
 def first_field(obj: dict, *fields: str, regex: str = "") -> Any:
     """
     Return the first field found in obj using search_field, or None
@@ -857,8 +872,9 @@ def comma_string_to_set(
     >>> class FooEnum(Enum):
     ...   Foo = 'foo'
     ...   Bar = 'bar'
-    >>> comma_string_to_set('all', FooEnum)
-    {<FooEnum.Foo: 'foo'>, <FooEnum.Bar: 'bar'>}
+    >>> all = {FooEnum.Foo, FooEnum.Bar}
+    >>> comma_string_to_set('all', FooEnum) == all
+    True
     """
     if isinstance(values, str):
         if not values:

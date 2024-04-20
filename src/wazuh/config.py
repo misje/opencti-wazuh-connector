@@ -256,6 +256,21 @@ class Config(ConfigBase):
 
     See :attr:`IncidentCreateMode`.
     """
+    vulnerability_incident_cvss3_score_threshold: float | None = Field(
+        ge=0, le=10, default=None
+    )
+    """
+    Minimum vulnerability CVSS3 score needed to create incidents
+
+    Creating incidents for every vulnerability (or several incidents, depending
+    on :attr:`create_incident`) can quickly become very noisy. This setting
+    ensures that incidents are only created for vulenerability sightings if a
+    CVSS3 score is present in the vulnerability, and if that score is high
+    enough. If this setting is None, incidents will never be created.
+
+    Sightings will always be created, regardless of whether the CVSS3 score is
+    present and above the threshold.
+    """
     # TODO: low,medium,high etc too:
     create_incident_threshold: int = Field(
         ge=1,
