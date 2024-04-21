@@ -9,6 +9,7 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Iterable
 
+from .search_config import SearchConfig
 from .wazuh_api_config import WazuhAPIConfig
 from .opensearch_config import OpenSearchConfig
 from .enrich_config import EnrichmentConfig
@@ -107,6 +108,10 @@ class Config(ConfigBase):
         Critical severity
         """
 
+    search: SearchConfig = Field(default_factory=lambda: SearchConfig())
+    """
+    Settings for how searching should be performed
+    """
     enrich: EnrichmentConfig = Field(default_factory=lambda: EnrichmentConfig())
     """
     Settings for what and how to enrich
@@ -165,16 +170,6 @@ class Config(ConfigBase):
     <exploring-entities/#systems>` should be created for every agent referenced
     in sightings and incidents. If set to false, :py:attr:`system_name` will be
     used instead.
-    """
-    search_agent_ip: bool = False
-    """
-    Whether to include agents' addresses when searching for IPv4/IPv6 address
-    observables
-    """
-    search_agent_name: bool = False
-    """
-    Whether to search agents' names (typically, but not necessarily, hostnames)
-    when searching for domain name and hostname observables
     """
     create_obs_sightings: bool = True
     """
@@ -292,11 +287,6 @@ class Config(ConfigBase):
     create_agent_hostname_observable: bool = True
     """
     Whether to create hostname observable and relate it to agent systems
-    """
-    ignore_private_addrs: bool = True
-    """
-    Whether to ignore IP addresses in private address spaces when searching for
-    IP address observables
     """
     ignore_own_entities: bool = False
     """

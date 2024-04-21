@@ -4,6 +4,8 @@ import logging
 from pydantic import BaseModel, ConfigDict
 from typing import Sequence
 from pycti import OpenCTIConnectorHelper
+
+from .search_config import SearchConfig
 from .opensearch import OpenSearchClient
 from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Wildcard
 from .utils import (
@@ -26,9 +28,7 @@ class AlertSearcher(BaseModel):
     )  # For OpenCTIConnectorHelper
     helper: OpenCTIConnectorHelper  # for logging only
     opensearch: OpenSearchClient
-    ignore_private_addrs: bool
-    search_agent_ip: bool
-    search_agent_name: bool
+    config: SearchConfig
 
     def search(self, entity: dict, stix_entity: dict) -> dict | None:
         match entity["entity_type"]:
@@ -183,11 +183,14 @@ class AlertSearcher(BaseModel):
         ]
         address = entity["observable_value"]
         # This throws if the value is not an IP address. Accept this:
-        if self.ignore_private_addrs and ipaddress.ip_address(address).is_private:
+        if (
+            self.config.ignore_private_addrs
+            and ipaddress.ip_address(address).is_private
+        ):
             log.info(f"Ignoring private IP address {address}")
             return None
 
-        if self.search_agent_ip:
+        if self.config.lookup_agent_ip:
             return self.opensearch.search_multi(
                 fields=fields,
                 value=address,
@@ -322,7 +325,7 @@ class AlertSearcher(BaseModel):
             # Don't search for data.office365.ParticipantInfo.ParticipatingDomains. Too many results. and not useful?
         ]
         hostname = entity["observable_value"]
-        if self.search_agent_name:
+        if self.config.lookup_agent_name:
             return self.opensearch.search_multi(
                 fields=fields,
                 value=hostname,

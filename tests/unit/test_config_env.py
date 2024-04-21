@@ -40,8 +40,9 @@ def set_env():
     os.environ["WAZUH_AUTHOR_NAME"] = "Wazuh"
     os.environ["WAZUH_ORDER_BY_RULE_LEVEL"] = "true"
     os.environ["WAZUH_ALERTS_AS_NOTES"] = "true"
-    os.environ["WAZUH_SEARCH_AGENT_IP"] = "false"
-    os.environ["WAZUH_SEARCH_AGENT_NAME"] = "false"
+    os.environ["WAZUH_SEARCH_LOOKUP_AGENT_IP"] = "false"
+    os.environ["WAZUH_SEARCH_LOOKUP_AGENT_NAME"] = "true"
+    os.environ["WAZUH_SEARCH_IGNORE_PRIVATE_ADDRS"] = "false"
     os.environ["WAZUH_CREATE_OBSERVABLE_SIGHTINGS"] = "true"
     os.environ["WAZUH_MAX_TLP"] = "TLP:RED"
     os.environ["WAZUH_TLP"] = "TLP:AMBER"
@@ -114,9 +115,13 @@ def test_config_from_env():
         "enrich_labels": {
             "wazuh_ignore",
         },
+        "search": {
+            "lookup_agent_ip": False,
+            "lookup_agent_name": True,
+            "ignore_private_addrs": False,
+        },
         "hits_abort_limit": 1000,
         "ignore_own_entities": False,
-        "ignore_private_addrs": True,
         "label_ignore_list": {
             "foobar",
             "hygiene",
@@ -152,8 +157,6 @@ def test_config_from_env():
             "verify_tls": False,
         },
         "require_indicator_for_incidents": True,
-        "search_agent_ip": False,
-        "search_agent_name": False,
         "system_name": "Wazuh SIEM",
         "tlps": {
             "marking-definition--826578e1-40ad-459f-bc73-ede076f81f37",

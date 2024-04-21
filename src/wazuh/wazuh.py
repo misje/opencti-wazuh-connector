@@ -197,9 +197,7 @@ class WazuhConnector:
         self.alert_searcher = AlertSearcher(
             helper=self.helper,
             opensearch=OpenSearchClient(config=self.conf.opensearch),
-            ignore_private_addrs=self.conf.ignore_private_addrs,
-            search_agent_ip=self.conf.search_agent_ip,
-            search_agent_name=self.conf.search_agent_name,
+            config=self.conf.search,
         )
         if self.conf.api.enabled:
             self.wazuh = WazuhAPIClient(

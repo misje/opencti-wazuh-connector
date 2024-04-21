@@ -9,6 +9,9 @@ FIXME
 .. automodule:: wazuh.opensearch_config
    :members:
 
+.. automodule:: wazuh.search_config
+   :members:
+
 .. automodule:: wazuh.enrich_config
    :members:
 
