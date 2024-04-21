@@ -12,6 +12,7 @@ Overview
    :maxdepth: 2
 
    enrichment
+   glossary
 
 
 Installation
