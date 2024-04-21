@@ -515,6 +515,8 @@ class StixHelper(BaseModel):
                 )
             case "StixFile":
                 return self.create_file(names=listify(value), **properties)
+            case "Software":
+                return _create_sco(stix2.Software, name=value, **properties)
             case "User-Agent":
                 return _create_sco(CustomObservableUserAgent, value=value)
             case "Windows-Registry-Key":
@@ -578,3 +580,6 @@ class StixHelper(BaseModel):
     #    }
 
     #    return [self.create_file(list(names), hash) for hash, names in files.items()]
+
+    # TODO: create and use:
+    # def create_relationship(self, from: str, to: str, type: str, )

@@ -9,7 +9,7 @@ from pydantic import (
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Iterable
 
-from wazuh.wazuh_api_config import WazuhAPIConfig
+from .wazuh_api_config import WazuhAPIConfig
 from .opensearch_config import OpenSearchConfig
 from .enrich_config import EnrichmentConfig
 from .stix_helper import TLPLiteral, tlp_marking_from_string, validate_stix_id

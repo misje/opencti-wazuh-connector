@@ -19,6 +19,34 @@ Obj = TypeVar("Obj", bound=Mapping)
 REGISTRY_PATH_REGEX = r"^(?:HKEY_(?:LOCAL_MACHINE|CURRENT_USER|CLASSES_ROOT|USERS|CURRENT_CONFIG)|HK(?:LM|CU|CR|U|CC))"
 
 
+class SafeProxy:
+    """
+    Helper class that forwards member calls on a type if it is not None,
+    otherwise just returns None
+
+    This utility is useful when manipulating objects that may be None without
+    having to catch exceptions or implemention guards.
+
+    Examples:
+
+    >>> SafeProxy('foo').upper()
+    'FOO'
+    >>> SafeProxy(None).upper()
+    >>> SafeProxy({'foo': 'bar'}).get('foo', 'baz')
+    'bar'
+    >>> SafeProxy(None).get('foo', 'baz')
+    """
+
+    def __init__(self, value: Any | None):
+        self.value = value
+
+    def __getattr__(self, attr):
+        if self.value is None:
+            return lambda *args, **kwargs: None
+        else:
+            return getattr(self.value, attr)
+
+
 def has(
     obj: dict,
     spec: list[str],
@@ -258,7 +286,7 @@ def extract_fields(
                 obj = obj[key]
             except (KeyError, TypeError) as e:
                 if raise_if_missing:
-                    raise e
+                    raise e from None
                 else:
                     return None
 
@@ -522,6 +550,8 @@ def list_or_empty(obj: dict, key: str):
     """
     Return list at the given key or an empty list if it does not exist.
 
+    The value at :paramref:`key` must be a list.
+
     Examples:
 
     >>> list_or_empty({'a': [1, 2]}, 'a')
@@ -530,6 +560,25 @@ def list_or_empty(obj: dict, key: str):
     []
     """
     return obj[key] if key in obj else []
+
+
+def lists_or_empty(obj: Mapping, *keys: str):
+    """
+    Return a concatenated list of all lists at the given keys
+
+    If any of the keys do not exist, nothing happends. However, if the key
+    exist, it must be a list.
+
+    Examples:
+
+    >>> lists_or_empty({'a': [1, 2], 'c': [3]}, 'a', 'b', 'c')
+    [1, 2, 3]
+    >>> lists_or_empty({}, 'a')
+    []
+    """
+    return [
+        item for key in keys if key in obj for items in (obj[key],) for item in items
+    ]
 
 
 def non_none(*args, threshold: int = 1) -> bool:
@@ -1147,3 +1196,26 @@ def is_enum_set(value: Any) -> bool:
     return isinstance(value, set) and all(
         issubclass(type(item), Enum) for item in value
     )
+
+
+def float_or_none(value: str | None, *, accept_invalid=False) -> float | None:
+    """
+    Return string as float unless it is null, then return null
+
+    Examples:
+
+    >>> float_or_none('123.4')
+    123.4
+    >>> float_or_none(None)
+    >>> float_or_none('foo')
+    Traceback (most recent call last):
+    ValueError: could not convert string to float: 'foo'
+    >>> float_or_none('foo', accept_invalid=True)
+    """
+    try:
+        return float(value) if value is not None else None
+    except ValueError as e:
+        if accept_invalid:
+            return None
+        else:
+            raise e from None

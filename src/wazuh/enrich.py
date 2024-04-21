@@ -5,30 +5,29 @@ import dateparser
 import logging
 from pydantic import BaseModel, ConfigDict
 from ntpath import basename
-from enum import Enum
-from typing import Annotated, Any, Callable, Literal
+from typing import Annotated, Any, Callable, Literal, Mapping
 from pycti import (
     AttackPattern,
     OpenCTIConnectorHelper,
     StixCoreRelationship,
 )
 from .stix_helper import (
+    STIXList,
     StixHelper,
     SCOBundle,
     find_hashes,
 )
 from .utils import (
     REGISTRY_PATH_REGEX,
+    SafeProxy,
     create_if,
     field_or_empty,
     first_field,
+    float_or_none,
     has,
     has_atleast,
     first_or_none,
     first_or_empty,
-    first_of,
-    in_str_list,
-    is_registry_path,
     join_values,
     none_unless_threshold,
     remove_reg_paths,
@@ -36,7 +35,6 @@ from .utils import (
     search_field,
     field_compare,
     non_none,
-    regex_transform_keys,
     ip_proto,
     ip_protos,
     connection_string,
@@ -151,11 +149,16 @@ class Enricher(BaseModel):
             bundle += self.enrich_user_agents(incident=incident, alerts=alerts)
         if EType.Process in self.config.types:
             bundle += self.enrich_processes(incident=incident, alerts=alerts)
-        # TODO: enrich software(?)
+        if EType.Software in self.config.types:
+            bundle += self.enrich_software(incident=incident, alerts=alerts)
         if EType.NetworkTraffic in self.config.types:
             bundle += self.enrich_traffic(incident=incident, alerts=alerts)
         if EType.Domain in self.config.types:
             bundle += self.enrich_domains(incident=incident, alerts=alerts)
+        # NOTE: references Software objects (if found), so be sure to position
+        # after enrich_software:
+        if EType.Vulnerability in self.config.types:
+            bundle += self.enrich_vulnerabilities(incident=incident, alerts=alerts)
 
         return bundle
 
@@ -745,6 +748,32 @@ class Enricher(BaseModel):
 
         return bundle
 
+    def enrich_software(self, *, incident: stix2.Incident, alerts: list[dict]):
+        # TODO: search more than just this field:
+        return [
+            stix2.Software(
+                name=fields["name"],
+                version=fields.get("version"),
+                allow_custom=True,
+                **self.stix.common_properties,
+                labels=self.stix.sco_labels,
+            )
+            for alert in alerts
+            for fields in (
+                simplify_field_names(
+                    search_fields(
+                        alert["_source"],
+                        [
+                            "data.vulnerability.package.name",
+                            "data.vulnerability.package.version",
+                        ],
+                    )
+                ),
+            )
+            # Ensure that the required property 'name' is found:
+            if "name" in fields
+        ]
+
     def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):
         # TODO: Add domainnames too if relevant in any fields
         from_addr_fields = [
@@ -895,6 +924,86 @@ class Enricher(BaseModel):
             ),
         )
 
+    def enrich_vulnerabilities(
+        self, *, incident: stix2.Incident, alerts: list[dict]
+    ) -> STIXList:
+        bundle: STIXList = []
+        for alert in alerts:
+            if not has(alert["_source"], ["data", "vulnerability"]):
+                continue
+
+            fields = simplify_field_names(
+                search_fields(
+                    alert["_source"],
+                    [
+                        "data.vulnerability.cve",  # name
+                        "data.vulnerability.cvss.cvss3.base_score",  # x_opencti_cvss_base_score
+                        "data.vulnerability.cvss.cvss3.vector.attack_vector",  # x_opencti_cvss_attack_vector
+                        "data.vulnerability.cvss.cvss3.vector.integrity_impact ",  # x_opencti_cvss_integrity_impact
+                        "data.vulnerability.cvss.cvss3.vector.availability",  # x_opencti_cvss_availability_impact
+                        "data.vulnerability.cvss.cvss3.vector.confidentiality_impact",  # x_opencti_cvss_confidentiality_impact
+                        "data.vulnerability.severity",  # x_opencti_cvss_base_severity (probably – worth double-checking)
+                        # "data.vulnerability.references",
+                        "data.vulnerability.title",  # for Software 'has' rel. desc.
+                        "data.vulnerability.published",  # for Software 'has' rel. start_time
+                        # Don't fetch description: opencti's vulnerability
+                        # connectors typically provides a better description
+                    ],
+                )
+            )
+            vuln = stix2.Vulnerability(
+                name=fields["cve"],
+                x_opencti_cvss_base_score=float_or_none(
+                    fields.get("cvss.cvss3.base_score")
+                ),
+                x_opencti_cvss_attack_vector=fields.get(
+                    "cvss.cvss3.vector.attack_vector"
+                ),
+                x_opencti_cvss_integrity_impact=fields.get(
+                    "cvss.cvss3.vector.integrity_impact"  # FIXME:  nowork?
+                ),
+                x_opencti_cvss_availability_impact=fields.get(
+                    "cvss.cvss3.vector.availability"
+                ),
+                x_opencti_cvss_confidentiality_impact=fields.get(
+                    "cvss.cvss3.vector.confidentiality_impact"
+                ),
+                x_opencti_cvss_base_severity=SafeProxy(fields.get("severity")).upper(),
+                # TODO: Not sure how to provide source_name to references
+                # when an URL is all the available information. Perhaps
+                # best leave it, since OpenCTI should have good references
+                # (although Wazuh provides alterantive, completing
+                # resources):
+                # external_references=[]
+                allow_custom=True,
+                **self.stix.common_properties,
+                labels=self.stix.sco_labels,
+            )
+            bundle += [vuln]
+
+            # enrich_software() will create softeare SCOs (if enabled). Create
+            # a ref to a software object to be used in a "has"
+            # relationship, and only include it if that softeware object has
+            # previously been created (honour
+            # EnrichmentConfig.EntityType.Software):
+            if EType.Software in self.config.types and (
+                sw_ref := self.software_ref_from_vuln_alert(alert)
+            ):
+                bundle += (
+                    stix2.Relationship(
+                        id=StixCoreRelationship.generate_id("has", sw_ref, vuln.id),
+                        created=alert["_source"]["@timestamp"],
+                        **self.stix.common_properties,
+                        relationship_type="has",
+                        description=fields["title"],
+                        source_ref=sw_ref,
+                        target_ref=vuln.id,
+                        start_time=dateparser.parse(fields["published"]),
+                    ),
+                )
+
+        return bundle
+
     # TODO: Add a precondition callable that takes an alert and returns bool.
     def create_enrichment_obs_from_search(
         self,
@@ -1018,3 +1127,19 @@ class Enricher(BaseModel):
                 ),
             )
         ]
+
+    def software_ref_from_vuln_alert(self, alert: Mapping) -> str | None:
+        sw_fields = simplify_field_names(
+            search_fields(
+                alert["_source"],
+                [
+                    "data.vulnerability.package.name",
+                    "data.vulnerability.package.version",
+                ],
+            )
+        )
+        return (
+            stix2.Software(name=sw_fields["name"], version=sw_fields.get("version")).id
+            if "name" in sw_fields
+            else None
+        )

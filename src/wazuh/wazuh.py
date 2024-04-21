@@ -25,6 +25,7 @@ from .utils import (
     datetime_string,
     field_or_default,
     has,
+    lists_or_empty,
     rule_level_to_severity,
     priority_from_severity,
     max_severity,
@@ -282,14 +283,14 @@ class WazuhConnector:
         # Remove:
         self.helper.log_debug(f"INDS: {obs_indicators}")
 
-        if self.conf.label_ignore_list and "x_opencti_labels" in stix_entity:
+        if self.conf.label_ignore_list:
             matching_labels = [
                 label
                 for label in self.conf.label_ignore_list
-                if label in stix_entity["x_opencti_labels"]
+                if label in lists_or_empty(stix_entity, "labels", "x_opencti_labels")
             ]
             if matching_labels:
-                return f"Ignoring observable because it has the following label(s): {', '.join(matching_labels)}"
+                return f"Ignoring entity because it has the following label(s): {', '.join(matching_labels)}"
 
         if (
             entity_type == "observable"

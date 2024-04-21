@@ -106,6 +106,8 @@ def test_config_from_env():
                 EnrichmentConfig.EntityType.AttackPattern,
                 EnrichmentConfig.EntityType.Account,
                 EnrichmentConfig.EntityType.Directory,
+                EnrichmentConfig.EntityType.Software,
+                EnrichmentConfig.EntityType.Vulnerability,
             },
         },
         "enrich_agent": True,

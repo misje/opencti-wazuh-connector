@@ -140,14 +140,49 @@ class EnrichmentConfig(ConfigBase):
         FIXME: size and othes
         """
         IPv4Address = "ipv4-addr"
+        """
+        FIXME
+        """
         IPv6Address = "ipv6-addr"
+        """
+        FIXME
+        """
         MAC = "mac-addr"
+        """
+        FIXME
+        """
         NetworkTraffic = "network-traffic"
+        """
+        FIXME
+        """
         Process = "process"
+        """
+        FIXME
+        """
         RegistryKey = "windows-registry-key"
+        """
+        FIXME
+        """
+        Software = "software"
+        """
+        FIXME
+        """
         Tool = "tool"
+        """
+        FIXME
+        """
         URL = "url"
+        """
+        FIXME
+        """
         UserAgent = "user-agent"
+        """
+        FIXME
+        """
+        Vulnerability = "vulnerability"
+        """
+        FIXME
+        """
 
     types: set[EntityType] = Field(title="Enrichment types", default=set())
     """
