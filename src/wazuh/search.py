@@ -1,5 +1,6 @@
 import re
 import ipaddress
+import logging
 from pydantic import BaseModel, ConfigDict
 from typing import Sequence
 from pycti import OpenCTIConnectorHelper
@@ -16,7 +17,7 @@ from .utils import (
 from hashlib import sha256
 from ntpath import basename
 
-# TODO: Export list of fields for varius categories, like "file_fields", "dir_fields" etc.
+log = logging.getLogger(__name__)
 
 
 class AlertSearcher(BaseModel):
@@ -183,7 +184,7 @@ class AlertSearcher(BaseModel):
         address = entity["observable_value"]
         # This throws if the value is not an IP address. Accept this:
         if self.ignore_private_addrs and ipaddress.ip_address(address).is_private:
-            self.helper.connector_logger.info(f"Ignoring private IP address {address}")
+            log.info(f"Ignoring private IP address {address}")
             return None
 
         if self.search_agent_ip:
@@ -302,6 +303,7 @@ class AlertSearcher(BaseModel):
             ],
             value=stix_entity["value"],
         )
+        # Consier searching in data.gcp.protoPayload.metadata.event (.parameter.value=) (field is not indexed, though, "unknwon")
 
     def query_domain(
         self,
@@ -413,11 +415,11 @@ class AlertSearcher(BaseModel):
                 try:
                     hash = sha256(bytes.fromhex(stix_entity["data"])).hexdigest()
                 except ValueError:
-                    self.helper.connector_logger.warning(
+                    log.warning(
                         f"Windows-Registry-Value-Type binary string could not be parsed as a hex string: {stix_entity['data']}"
                     )
             case _:
-                self.helper.connector_logger.info(
+                log.info(
                     f"Windos-Registry-Value-Type of type {stix_entity['data_type']} is not supported"
                 )
                 return None
@@ -442,7 +444,7 @@ class AlertSearcher(BaseModel):
             if len(tokens) < 1:
                 return None
 
-            self.helper.log_debug(tokens)
+            log.debug(tokens)
             command = basename(tokens[0])
             esc_command = escape_lucene_regex(command)
             args = [
