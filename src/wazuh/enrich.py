@@ -21,6 +21,7 @@ from .utils import (
     REGISTRY_PATH_REGEX,
     SafeProxy,
     create_if,
+    dict_member_list_first_or_remove,
     field_or_empty,
     first_field,
     float_or_none,
@@ -352,26 +353,30 @@ class Enricher(BaseModel):
             }
             for alert in alerts
             for field, match in remove_reg_paths(
-                search_fields(
-                    alert["_source"],
-                    [
-                        "data.ChildPath",
-                        "data.ParentPath",
-                        "data.Path",
-                        "data.TargetFilename",
-                        "data.TargetPath",
-                        "data.audit.file.name",
-                        "data.audit.file.name",
-                        "data.file",
-                        "data.osquery.columns.path",
-                        "data.sca.check.file",
-                        "data.smbd.filename",
-                        "data.smbd.new_filename",
-                        "data.virustotal.source.file",
-                        "data.win.eventdata.file",
-                        "data.win.eventdata.filePath",
-                        "syscheck.path",
-                    ],
+                # data.sca.check.file sometimes provides a list (so far with
+                # only one file). Flatten:
+                dict_member_list_first_or_remove(
+                    search_fields(
+                        alert["_source"],
+                        [
+                            "data.ChildPath",
+                            "data.ParentPath",
+                            "data.Path",
+                            "data.TargetFilename",
+                            "data.TargetPath",
+                            "data.audit.file.name",
+                            "data.audit.file.name",
+                            "data.file",
+                            "data.osquery.columns.path",
+                            "data.sca.check.file",
+                            "data.smbd.filename",
+                            "data.smbd.new_filename",
+                            "data.virustotal.source.file",
+                            "data.win.eventdata.file",
+                            "data.win.eventdata.filePath",
+                            "syscheck.path",
+                        ],
+                    )
                 )
             ).items()
             for size in (
@@ -613,6 +618,7 @@ class Enricher(BaseModel):
             )
             # OpenCTI requires command_line, even if the STIX standard does not:
             if "commandLine" not in data:
+                log.info("Not enriching Process because commandLine is empty")
                 continue
 
             bundle += self.create_process(

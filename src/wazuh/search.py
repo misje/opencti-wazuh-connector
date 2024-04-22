@@ -5,28 +5,34 @@ from pydantic import BaseModel, ConfigDict
 from typing import Sequence
 from pycti import OpenCTIConnectorHelper
 
-from .search_config import SearchConfig
+from .search_config import SearchConfig, FileSearchOption
 from .opensearch import OpenSearchClient
-from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Wildcard
+from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Term, Wildcard
 from .utils import (
+    field_as_list,
+    get_path_sep,
     has,
     has_any,
     oneof_nonempty,
     list_or_empty,
     escape_lucene_regex,
     escape_path,
+    regex_transform_keys,
+    search_fields,
 )
 from hashlib import sha256
-from ntpath import basename
+from ntpath import basename, isabs
 
 log = logging.getLogger(__name__)
+
+FOpt = FileSearchOption
 
 
 class AlertSearcher(BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True
     )  # For OpenCTIConnectorHelper
-    helper: OpenCTIConnectorHelper  # for logging only
+    helper: OpenCTIConnectorHelper
     opensearch: OpenSearchClient
     config: SearchConfig
 
@@ -71,86 +77,201 @@ class AlertSearcher(BaseModel):
                     f'{entity["entity_type"]} is not a supported entity type'
                 )
 
-    # TODO: setting: refuse to search unless path is set (parent dir or in filename)
-    # TODO: when parent_directory_ref is available, use that as search path. Optionally search for filenames with paths too.
+    # TODO: wazuh_api: syscheck/id/{file,sha256}
     def query_file(self, *, entity: dict, stix_entity: dict) -> dict | None:
-        # TODO: wazuh_api: syscheck/id/{file,sha256}
-        # TODO: Use name as well as hash if defined (optional, config)
-        # TODO: if the hash is found in a reg.key value, that is also returned as a match. Okay? An enriched reg.key will be creaeted anyway.
-        if (
-            entity["entity_type"] == "StixFile"
-            and "name" in stix_entity
-            and not has_any(stix_entity, ["hashes"], ["SHA-256", "SHA-1", "MD5"])
-        ):
-            # size? use size too if so.
-            # ideally drop regex if path is an absolute path. A bit
-            # complicated if x_opencti_additional_names
-            filenames = list(
-                map(
-                    # Escape any regex characters and normalise path
-                    # escape characters:
-                    lambda a: escape_lucene_regex(escape_path(a)),
-                    [stix_entity["name"]]
-                    + list_or_empty(stix_entity, "x_opencti_additional_names"),
+        """
+        Search File/Artifact SCO for hashes, filename/paths and/or size
+        """
+
+        # - path must have OS separator
+
+        ##. If the entity is an Artifact: Search hashes (SHA-256, SHA-1, MD5)
+        ##. If the entity is a File:
+
+        #  #. If the entity has no hashes
+
+        # Search filenames:
+        # -----------------
+
+        # .. mermaid::
+
+        #    flowchart TD
+        #        A[Search Artifact/File] --> B{Artifact?}
+        #        B -- Yes --> C{Has hashes?}
+        #        C -- Yes --> D[Search hashes]
+        #        C -- No --> N[No queryable data]
+        #        B -- "No (implies File)" --> E{SearchAdditionalFilenames?}
+        #        E -- No --> F{IncludeParentDirRef?}
+        #        E -- Yes --> G[Add x_opencti_additional_names to name list] --> F
+        #        F -- Yes --> H[Replace path with that of parent dir] --> J
+        #        F -- No --> I{BasenameOnly}
+        #        I -- No --> J
+        #        I -- Yes --> K[Remove path] --> J
+        #        J{
+        fopts = self.config.filesearch_options
+        # Ensure that one of the three hash fields are non-zero:
+        has_hash = bool(
+            search_fields(
+                stix_entity,
+                ["hashes.SHA-256", "hashes.SHA-1", "hashes.MD5"],
+                regex=".+",
+            )
+        )
+        log.debug(f"Does file/Artifact have a hash: {has_hash}")
+        # The only search options for an Artifact is looking up its hashes
+        if entity["entity_type"] == "Artifact":
+            if not has_hash:
+                # Should be impossible:
+                log.warning("Artifact does not have any hashes")
+                return None
+            else:
+                log.debug("Searching for hashes in Artifact")
+                return self.opensearch.search(
+                    should=self.hash_query_list(stix_entity["hashes"])
+                )
+
+        filenames = field_as_list(stix_entity, "name") + (
+            list_or_empty(stix_entity, "x_opencti_additional_names")
+            if FOpt.SearchAdditionalFilenames in fopts
+            else []
+        )
+        log.debug(f"File filenames: {filenames}")
+        parent_path = (
+            parent_dir["path"]
+            if FOpt.IncludeParentDirRef in fopts
+            and "parent_directory_ref" in stix_entity
+            and (
+                parent_dir := self.helper.api.stix_cyber_observable.read(
+                    id=stix_entity["parent_directory_ref"]
                 )
             )
-            return self.opensearch.search_multi_regex(
-                fields=[
-                    "data.ChildPath",  # panda paps
-                    "data.ParentPath",  # panda paps
-                    "data.Path",  # panda paps
-                    "data.TargetPath",  # panda paps
-                    "data.audit.execve.a1",
-                    "data.audit.execve.a2",
-                    "data.audit.execve.a3",
-                    "data.audit.execve.a4",
-                    "data.audit.execve.a5",
-                    "data.audit.execve.a6",
-                    "data.audit.execve.a7",
-                    "data.audit.file.name",
-                    "data.file",
-                    "data.office365.SourceFileName",
-                    "data.osquery.columns.path",
-                    "data.sca.check.file",
-                    "data.smbd.filename",
-                    "data.smbd.new_filename",
-                    "data.virustotal.source.file",
-                    "data.win.eventdata.file",
-                    "data.win.eventdata.filePath",
-                    "data.win.eventdata.image",
-                    "data.win.eventdata.parentImage",
-                    "data.win.eventdata.targetFilename",
-                    "syscheck.path",
-                ],
-                # Search for paths ignoring case for better experience
-                # on Windows:
-                case_insensitive=True,
-                regexp="|".join(
-                    [
-                        # Unless the filename starts with a separator
-                        # or drive letter (simple approximation, but it
-                        # should cover most paths in alerts), assuming
-                        # this is full path, prepend a regex that
-                        # ignores everything up to and including a path
-                        # separator before the filename:
-                        f if re.match(r"^(?:[/\\]|[A-Za-z]:)", f) else f".*[/\\\\]*{f}"
-                        for filename in filenames
-                        # Support any number of backslash escapes in
-                        # paths (many variants are seen in the wild):
-                        for f in (filename.replace(r"\\", r"\\{2,}"),)
-                    ]
-                ),
-            )
-        elif has(stix_entity, ["hashes", "SHA-256"]):
-            return self.opensearch.search_multi(
-                fields=["*sha256*"], value=stix_entity["hashes"]["SHA-256"]
-            )
-        elif has(stix_entity, ["hashes", "SHA-1"]):
-            return self.opensearch.search_multi(
-                fields=["*sha1*"], value=stix_entity["hashes"]["SHA-1"]
-            )
-        else:
+            else None
+        )
+        log.debug(f"File parent path: {parent_path}")
+        size = (
+            stix_entity["size"]
+            if "size" in stix_entity and FOpt.SearchSize in fopts
+            else None
+        )
+        log.debug(f"File size: {size}")
+
+        if not has_hash and FOpt.SearchFilenameOnly not in fopts:
+            log.info("Observable has no hashes and SearchFilenameOnly is disabled")
             return None
+        if not has_hash and not filenames:
+            log.info("Observable has no hashes and no file names")
+            return None
+
+        paths = list(
+            {
+                parent_path + sep + filename if parent_path else filename
+                for rawname in filenames
+                for filename in (
+                    (
+                        basename(rawname)
+                        # Remove path from filename if setting says so, or if
+                        # there already is a parent_path from
+                        # parent_directory_ref:
+                        if FOpt.BasenameOnly in fopts or parent_path
+                        else rawname
+                    ),
+                )
+                for sep in ((get_path_sep(parent_path) if parent_path else None),)
+            }
+        )
+        log.debug(f"File paths: {paths}")
+
+        fields = [
+            "data.ChildPath",  # panda paps
+            "data.ParentPath",  # panda paps
+            "data.Path",  # panda paps
+            "data.TargetPath",  # panda paps
+            "data.audit.execve.a1",
+            "data.audit.execve.a2",
+            "data.audit.execve.a3",
+            "data.audit.execve.a4",
+            "data.audit.execve.a5",
+            "data.audit.execve.a6",
+            "data.audit.execve.a7",
+            "data.audit.file.name",
+            "data.file",
+            "data.office365.SourceFileName",
+            "data.osquery.columns.path",
+            "data.sca.check.file",
+            "data.smbd.filename",
+            "data.smbd.new_filename",
+            "data.virustotal.source.file",
+            "data.win.eventdata.file",
+            "data.win.eventdata.filePath",
+            "data.win.eventdata.image",
+            "data.win.eventdata.parentImage",
+            "data.win.eventdata.targetFilename",
+            "syscheck.path",
+        ]
+
+        must: list[QueryType] = []
+        if has_hash:
+            must += [Bool(should=self.hash_query_list(stix_entity["hashes"]))]
+        elif size is not None:
+            must += [MultiMatch(query=str(size), fields=["syscheck.size*"])]
+
+        if FOpt.SearchNameAndHash in fopts or (
+            not has_hash and FOpt.SearchFilenameOnly in fopts
+        ):
+            if FOpt.AllowRegexp not in fopts:
+                log.debug("Not allowed to use regexp")
+                abs_paths = [path for path in paths if isabs(path)]
+                log.debug(f"Absolute paths: {abs_paths}")
+                if not abs_paths:
+                    if FOpt.RequireAbsPath in fopts:
+                        log.info(
+                            "RequireAbsPath is set, Regexp is not allowed and no paths are absolute"
+                        )
+                    else:
+                        log.warning("Regexp is not allowed, and no paths are absolute")
+
+                    if not has_hash:
+                        return None
+
+                must += [MultiMatch(query=path, fields=fields) for path in paths]
+            elif FOpt.RequireAbsPath not in fopts or all(isabs(path) for path in paths):
+                paths = list(
+                    map(
+                        # Escape any regex characters and normalise path
+                        # escape characters:
+                        lambda a: escape_lucene_regex(escape_path(a)),
+                        paths,
+                    )
+                )
+                must += [
+                    Bool(
+                        should=[
+                            Regexp(
+                                field=field,
+                                case_insensitive=(FOpt.CaseInsensitive in fopts),
+                                query="|".join(
+                                    [
+                                        # Unless the path is considered absolute,
+                                        # prepend a regex that ignores everything up to
+                                        # and including a path separator before the
+                                        # filename:
+                                        p if isabs(path) else f".*[/\\\\]*{p}"
+                                        for path in paths
+                                        # Support any number of backslash escapes in
+                                        # paths (many variants are seen in the wild):
+                                        for p in (path.replace(r"\\", r"\\{2,}"),)
+                                    ]
+                                ),
+                            )
+                            for field in fields
+                        ]
+                    )
+                ]
+            elif FOpt.RequireAbsPath in fopts:
+                log.warning("RequireAbsPath is set and no paths are absolute")
+                return None
+
+        return self.opensearch.search(must)
 
     # TODO: wazuh_api: syscollector/id/netaddr?proto={ipv4,ipv6}
     def query_addr(self, *, entity: dict) -> dict | None:
@@ -599,3 +720,11 @@ class AlertSearcher(BaseModel):
         return self.opensearch.search_multi(
             value=stix_entity["value"], fields=["data.aws.userAgent"]
         )
+
+    def hash_query_list(self, hashes: dict) -> list[MultiMatch]:
+        return [
+            MultiMatch(query=query, fields=[field])
+            for field, query in regex_transform_keys(
+                hashes, {"SHA-256": "*sha256*", "SHA-1": "*sha1*", "MD5": "*md5*"}
+            ).items()
+        ]

@@ -384,6 +384,21 @@ def field_or_default(obj: Mapping, field: str, default: Any) -> Any:
     return result if (result := search_field(obj, field)) is not None else default
 
 
+def field_as_list(obj: Mapping, field: str) -> list[Any]:
+    """
+    Return the result from search_field as a single-element list, or [] if no
+    result
+
+    Examples:
+
+    >>> field_as_list({'a': {'b': 'foo'}}, 'a.b')
+    ['foo']
+    >>> field_as_list({}, 'a')
+    []
+    """
+    return [result] if (result := search_field(obj, field)) is not None else []
+
+
 def first_field(obj: dict, *fields: str, regex: str = "") -> Any:
     """
     Return the first field found in obj using search_field, or None
@@ -883,7 +898,7 @@ def is_registry_path(path: str) -> bool:
     )
 
 
-def remove_reg_paths(obj: dict[Any, str]) -> dict[Any, str]:
+def remove_reg_paths(obj: dict[T, str]) -> dict[T, str]:
     """
     Remove all registry paths from the dict values
 
@@ -1219,3 +1234,40 @@ def float_or_none(value: str | None, *, accept_invalid=False) -> float | None:
             return None
         else:
             raise e from None
+
+
+def get_path_sep(path: str) -> str:
+    """
+    Determine path separator used in a string
+
+    A very simple approach is used.
+
+    Examples:
+
+    >>> get_path_sep('/')
+    '/'
+    >>> get_path_sep('foo/bar')
+    '/'
+    >>> get_path_sep('C\\Windows')
+    '\\\\'
+    """
+    return "\\" if ":\\" in path or path.count("\\") >= 1 else "/"
+
+
+def dict_member_list_first_or_remove(values: dict) -> dict:
+    """
+    If a key contains a list, replace value with the first item in list, or
+    remove the key
+
+    Examples:
+
+    >>> dict_member_list_first_or_remove({'a': 'b', 'c': ['d'], 'e': []})
+    {'a': 'b', 'c': 'd'}
+    """
+    return remove_empties(
+        {
+            key: item
+            for key, items in values.items()
+            for item in (first_or_none(items) if isinstance(items, list) else items,)
+        }
+    )

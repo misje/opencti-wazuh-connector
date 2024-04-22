@@ -11,6 +11,7 @@ Overview
 .. toctree::
    :maxdepth: 2
 
+   alert_search
    enrichment
    glossary
 
@@ -47,4 +48,3 @@ Indices and tables
 
 * :ref:`genindex`
 * :ref:`modindex`
-* :ref:`search`

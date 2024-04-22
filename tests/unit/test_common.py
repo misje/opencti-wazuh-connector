@@ -7,6 +7,8 @@ from wazuh.config import Config
 from wazuh.opensearch_config import OpenSearchConfig
 from wazuh.utils import merge_outof
 
+# TODO: there are more recommended ways to do this in pytest than importing a file
+
 
 def osConf(**kwargs):
     return OpenSearchConfig(

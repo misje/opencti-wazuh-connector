@@ -21,6 +21,7 @@ extensions = [
     # "sphinx.ext.viewcode",
     "sphinx_rtd_theme",
     "sphinxcontrib.autodoc_pydantic",
+    "sphinxcontrib.mermaid",
 ]
 # Sjekk ut autosummary
 

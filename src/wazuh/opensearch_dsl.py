@@ -13,6 +13,11 @@ from enum import Enum
 
 from wazuh.utils import del_key
 
+# TODO: remove boost (any param, actually) if default value
+# TODO: Perhaps an empty query is allowed, but when it is removed by
+# exclude_none/exclude_unset, it produces an invalid query. Validate here or in
+# opensearch?
+
 
 class Term(BaseModel):
     model_config = ConfigDict(validate_assignment=True)

@@ -199,6 +199,7 @@ def entity_values(entity: dict) -> list[Any]:
     """
     match entity["entity_type"]:
         case "StixFile" | "Artifact":
+            # FIXME: add hashes and size:
             return allof_nonempty("name", "x_opencti_additional_names", within=entity)
         case "Directory":
             return allof_nonempty("path", within=entity)
