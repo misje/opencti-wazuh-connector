@@ -696,9 +696,9 @@ class AlertSearcher(BaseModel):
             )
         elif self.config.lookup_url_without_host:
             return self.opensearch.search(
-                [
+                should=[
                     Regexp(
-                        query=f"[^/]+/?{url.rstrip('/')}"
+                        query=f"[^/]*/?{escape_lucene_regex(url.rstrip('/'))}"
                         + (
                             "/?" if self.config.lookup_url_ignore_trailing_slash else ""
                         ),
@@ -709,7 +709,7 @@ class AlertSearcher(BaseModel):
             )
         elif self.config.lookup_url_ignore_trailing_slash:
             return self.opensearch.search(
-                [
+                should=[
                     Regexp(
                         query=f"{url.rstrip('/')}/?",
                         field=field,
