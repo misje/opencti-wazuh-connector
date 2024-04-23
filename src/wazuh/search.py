@@ -252,6 +252,7 @@ class AlertSearcher(BaseModel):
             "data.ParentPath",  # panda paps
             "data.Path",  # panda paps
             "data.TargetPath",  # panda paps
+            "data.audit.exe",
             "data.audit.execve.a1",
             "data.audit.execve.a2",
             "data.audit.execve.a3",
@@ -284,6 +285,7 @@ class AlertSearcher(BaseModel):
         if FOpt.SearchNameAndHash in fopts or (
             not has_hash and FOpt.SearchFilenameOnly in fopts
         ):
+            # TODO: don't use regex if all paths are absolute and linux-style:
             if FOpt.AllowRegexp not in fopts:
                 log.debug("Not allowed to use regexp")
                 abs_paths = [path for path in paths if isabs(path)]
@@ -780,6 +782,29 @@ class AlertSearcher(BaseModel):
         )
 
     def query_reg_value(self, *, stix_entity: dict) -> dict | None:
+        """
+        Search Windows registry values
+
+        Wazuh's :term:`FIM` module only registers registry value's hashes, not
+        values. And it only supports *REG_SZ*, *REG_EXPAND_SZ* and *REG_BINARY*
+        (i.e. not numeric values, like *REG_DWORD*).
+
+        This function will only search for registry values of type REG_{SZ,
+        EXPAND_SZ, BINARY}, and it will only compare SHA-256 values (since that
+        is what Wazuh's FIM/syscheck module provides).
+
+        In order to perform a search, the observable must:
+
+        - Have *data_type*:
+
+          - REG_SZ
+          - REG_EXPAND_SZ
+          - REG_BINARY
+
+        If the data type is REG_SZ/REG_EXPAND_SZ, a SHA-256 hash is taken from
+        the value (*data*). If the data type is REG_BINARY, the contents is
+        expected to be a *hex string*, of which a SHA-256 hash is computed.
+        """
         hash = None
         match stix_entity["data_type"]:
             case "REG_SZ" | "REG_EXPAND_SZ":
@@ -792,6 +817,7 @@ class AlertSearcher(BaseModel):
                     log.warning(
                         f"Windows-Registry-Value-Type binary string could not be parsed as a hex string: {stix_entity['data']}"
                     )
+                    return None
             case _:
                 log.info(
                     f"Windos-Registry-Value-Type of type {stix_entity['data_type']} is not supported"
@@ -806,6 +832,9 @@ class AlertSearcher(BaseModel):
 
     # FIXME: doesn't find "secedit /export /cfg $env:temp/secexport.cfg" in data.win.eventdata.parentCommandLine (powershell \"$null = secedit /export /cfg $env:temp/secexport.cfg; $(gc $env:temp/secexport.cfg | Select-String \\\"LSAAnonymousNameLookup\\\").ToString().Split(\\\"=\\\")[1].Trim()\")
     def query_process(self, *, stix_entity: dict) -> dict | None:
+        """
+        TODO
+        """
         # TODO: use wazuh API to list proceses too:
         # TODO: Create a guard against too simple search strings (one word?)
         # TODO: Compare results against observable value and ignore if they differ too much, like fjas → /usr/bin/tee customers/orsted/usvportal-grafana-provisioning/alerting/fjas.yaml
@@ -893,6 +922,13 @@ class AlertSearcher(BaseModel):
             return None
 
     def query_vulnerability(self, *, stix_entity: dict) -> dict | None:
+        """
+        Search vulnerability events
+
+        Results will typically contain an event when the vulnerability was
+        first detected, then later when the vulnerability was "resolved" due to
+        an package upgrade.
+        """
         return self.opensearch.search_match(
             {
                 "data.vulnerability.cve": stix_entity["name"],
@@ -902,6 +938,9 @@ class AlertSearcher(BaseModel):
         )
 
     def query_account(self, *, stix_entity: dict) -> dict | None:
+        """
+        TODO
+        """
         # TODO: settings to determine where to search (aws, google, office, windows, linux)
         # TODO: what about DOMAIN\username?
         # TODO: display name? Otherwise remove from entity_value*(?)
@@ -923,6 +962,7 @@ class AlertSearcher(BaseModel):
             "*.user",
             "*.userName",
             "*.username",
+            "*.user.name",
             "data.gcp.protoPayload.authenticationInfo.principalEmail",
             "data.gcp.resource.labels.email_id",
             "data.office365.UserId",
@@ -937,6 +977,7 @@ class AlertSearcher(BaseModel):
             "data.win.eventdata.targetSid",
             "syscheck.uid_after",
             "syscheck.uid_before",
+            "*.user.id",
             # For audit and pam:
             "*.auid",
             "*.euid",
@@ -967,6 +1008,9 @@ class AlertSearcher(BaseModel):
             return None
 
     def query_user_agent(self, *, stix_entity: dict) -> dict | None:
+        """
+        Search user agents
+        """
         return self.opensearch.search_multi(
             value=stix_entity["value"], fields=["data.aws.userAgent"]
         )

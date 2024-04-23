@@ -32,6 +32,21 @@ How searching works. openseach. a little bit about wazuh.
 .. autoclass:: wazuh.search::AlertSearcher.query_reg_key
    :members:
    :noindex:
+.. autoclass:: wazuh.search::AlertSearcher.query_reg_value
+   :members:
+   :noindex:
+.. autoclass:: wazuh.search::AlertSearcher.query_process
+   :members:
+   :noindex:
+.. autoclass:: wazuh.search::AlertSearcher.query_vulnerability
+   :members:
+   :noindex:
+.. autoclass:: wazuh.search::AlertSearcher.query_account
+   :members:
+   :noindex:
+.. autoclass:: wazuh.search::AlertSearcher.query_user_agent
+   :members:
+   :noindex:
 
 .. toctree::
    :maxdepth: 2
