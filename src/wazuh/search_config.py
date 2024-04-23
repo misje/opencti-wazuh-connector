@@ -181,3 +181,36 @@ class SearchConfig(ConfigBase):
 
     If disabled, only lower-case, colon-separated MAC addresses will be looked up. 
     """
+    lookup_hostnames_in_cmd_line: bool = False
+    """
+    Search for domain names / hostname in command line arguments
+
+    .. note:: This query will use :dsl:`Wildcard <term/wildcard>` queries,
+              which may be expensive, or even disabled in your OpenSearch
+              installation (*search.allow_expensive_queries* is set to false)
+              (in which case the query will fail)
+    """
+    lookup_url_without_host: bool = False
+    """
+    Search for URLs also without host
+
+    Some alerts only have URL path without a host. This setting allows searches
+    only for this path. Beware that this can produce a lot of results.
+
+    This is probably not useful for looking up :term:`IoCs <ioc>` unless you're
+    looking for a malicious requests.
+
+    .. note:: This will use :dsl:`Wildcard <term/wildcard>` queries,
+              which may be expensive, or even disabled in your OpenSearch
+              installation (*search.allow_expensive_queries* is set to false)
+              (in which case the query will fail)
+    """
+    lookup_url_ignore_trailing_slash: bool = False
+    """
+    Ignore trailing slash when searching for URLs
+
+    .. note:: This will use :dsl:`Wildcard <term/wildcard>` queries,
+              which may be expensive, or even disabled in your OpenSearch
+              installation (*search.allow_expensive_queries* is set to false)
+              (in which case the query will fail)
+    """

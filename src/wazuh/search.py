@@ -423,20 +423,69 @@ class AlertSearcher(BaseModel):
         return self.opensearch.search(
             should=[
                 MultiMatch(query=value, fields=fields)
-                for value in mac_permutations(entity["observable_value"])
+                for value in self.mac_variants(entity["observable_value"])
             ]
         )
 
     def query_traffic(self, *, stix_entity: dict) -> dict | None:
+        """
+        Search for network traffic
+
+        The following properties in :stix:`Network-Traffic <#_rgnc3w40xy>` are
+        considered:
+
+        - src_ref (MAC/IPv4/IPv6 addresses only, not domain names)
+        - src_port
+        - dst_ref (MAC/IPv4/IPv6 addresses only, not domain names)
+        - dst_port
+        - protocol
+
+        Support for domain names in sources, as well as support for the other
+        properties are not implemented, because no decoders seem to provide
+        these kinds of fields.
+
+        If :attr:`~wazuh.search_config.SearchConfig.lookup_mac_variants` is
+        true, various MAC address formats will be looked up. Otherwise, only
+        lower-case, colon-separated MAC addresses will be looked up.
+
+        Note that it is possible to add multiple addresses as
+        sources/destinations in OpenCTI. However, only one is provided to the
+        connector. The precedence is unknown.
+        """
         query: Sequence[QueryType] = []
         if "src_ref" in stix_entity:
-            src_ip = self.helper.api.stix_cyber_observable.read(
+            source = self.helper.api.stix_cyber_observable.read(
                 id=stix_entity["src_ref"]
             )
-            if src_ip and "value" in src_ip:
+            log.info(f"Network-Traffix source: {source}")
+            if source and source["entity_type"] == "Mac-Addr" and "value" in source:
+                query.append(
+                    Bool(
+                        should=[
+                            MultiMatch(
+                                query=mac,
+                                fields=[
+                                    "*.mac",
+                                    "*.smac",
+                                    "*.src_mac",
+                                    "*.srcmac",
+                                ],
+                            )
+                            for mac in self.mac_variants(source["value"])
+                        ]
+                    )
+                )
+            elif (
+                source
+                and (
+                    source["entity_type"] == "IPv4-Addr"
+                    or source["entity_type"] == "IPv6-Addr"
+                )
+                and "value" in source
+            ):
                 query.append(
                     MultiMatch(
-                        query=src_ip["value"],
+                        query=source["value"],
                         fields=[
                             "*.LocalIp",
                             "*.local_address",
@@ -448,10 +497,16 @@ class AlertSearcher(BaseModel):
                         ],
                     )
                 )
+            elif source:
+                log.warning(
+                    f"Network-Traffic src_ref type {source['entity_type']} is not supported"
+                )
+                return None
+
         if "src_port" in stix_entity:
             query.append(
                 MultiMatch(
-                    query=stix_entity["src_port"],
+                    query=str(stix_entity["src_port"]),
                     fields=[
                         "*.local_port",
                         "*.nat_source_port",
@@ -463,14 +518,38 @@ class AlertSearcher(BaseModel):
                     ],
                 )
             )
+
         if "dst_ref" in stix_entity:
-            dest_ip = self.helper.api.stix_cyber_observable.read(
-                id=stix_entity["dst_ref"]
-            )
-            if dest_ip and "value" in dest_ip:
+            dest = self.helper.api.stix_cyber_observable.read(id=stix_entity["dst_ref"])
+            log.info(f"Network-Traffix dest: {dest}")
+            if dest and dest["entity_type"] == "Mac-Addr" and "value" in dest:
+                query.append(
+                    Bool(
+                        should=[
+                            MultiMatch(
+                                query=mac,
+                                fields=[
+                                    "*.dmac",
+                                    "*.dst_mac",
+                                    "*.dstmac",
+                                    "*.mac",
+                                ],
+                            )
+                            for mac in self.mac_variants(dest["value"])
+                        ]
+                    )
+                )
+            elif (
+                dest
+                and (
+                    dest["entity_type"] == "IPv4-Addr"
+                    or dest["entity_type"] == "IPv6-Addr"
+                )
+                and "value" in dest
+            ):
                 query.append(
                     MultiMatch(
-                        query=dest_ip["value"],
+                        query=dest["value"],
                         fields=[
                             "*.dest_ip",
                             "*.destinationIp",
@@ -481,10 +560,16 @@ class AlertSearcher(BaseModel):
                         ],
                     )
                 )
+            elif dest:
+                log.warning(
+                    f"Network-Traffic src_ref type {dest['entity_type']} is not supported"
+                )
+                return None
+
         if "dst_port" in stix_entity:
             query.append(
                 MultiMatch(
-                    query=stix_entity["dst_port"],
+                    query=str(stix_entity["dst_port"]),
                     fields=[
                         "*.dest_port",
                         "*.destinationPort",
@@ -496,12 +581,25 @@ class AlertSearcher(BaseModel):
                 )
             )
 
+        if "protocols" in stix_entity:
+            query.append(
+                Bool(
+                    should=[
+                        MultiMatch(query=proto, fields=["*.protocol"])
+                        for proto in stix_entity["protocols"]
+                    ]
+                )
+            )
+
         if query:
             return self.opensearch.search(query)
         else:
             return None
 
     def query_email(self, *, stix_entity: dict) -> dict | None:
+        """
+        Search e-mail addresses
+        """
         return self.opensearch.search_multi(
             fields=[
                 "*Email",
@@ -517,6 +615,13 @@ class AlertSearcher(BaseModel):
         *,
         entity: dict,
     ) -> dict | None:
+        """
+        Query domain names and hostnames
+
+        If
+        :attr:`~wazuh.search_config.SearchConfig.lookup_hostnames_in_cmd_line`
+        is enabled, command line alerts will also be searched.
+        """
         fields = [
             "*.HostName",
             "*.dns_hostname",
@@ -529,18 +634,30 @@ class AlertSearcher(BaseModel):
             # Don't search for data.office365.ParticipantInfo.ParticipatingDomains. Too many results. and not useful?
         ]
         hostname = entity["observable_value"]
-        if self.config.lookup_agent_name:
-            return self.opensearch.search_multi(
-                fields=fields,
-                value=hostname,
+        if self.config.lookup_hostnames_in_cmd_line:
+            return self.opensearch.search(
+                should=[MultiMatch(query=hostname, fields=fields)]
+                + [
+                    Wildcard(query=f"*{hostname}*", field=field)
+                    for field in (
+                        "data.win.eventdata.commandLine",
+                        "data.win.eventdata.parentCommandLine",
+                        "data.command",
+                        "data.audit.execve.a1",
+                        "data.audit.execve.a2",
+                        "data.audit.execve.a3",
+                        "data.audit.execve.a4",
+                        "data.audit.execve.a5",
+                        "data.audit.execve.a6",
+                        "data.audit.execve.a7",
+                    )
+                ],
+                must_not=[Match(query=hostname, field="predecoder.hostname")],
             )
         else:
             return self.opensearch.search(
-                must=[MultiMatch(query=hostname, fields=fields)]
-                # TODO: configurable?:
-                # data.audit.exe /usr/bin/ssh
-                # data.audit.execve.a* = hostname
-                # must_not={"match": {"predecoder.hostname": hostname}},
+                must=[MultiMatch(query=hostname, fields=fields)],
+                must_not=[Match(query=hostname, field="predecoder.hostname")],
             )
 
     def query_url(
@@ -548,11 +665,58 @@ class AlertSearcher(BaseModel):
         *,
         entity: dict,
     ) -> dict | None:
-        # TODO: Search for URL with and without trailing slash
-        return self.opensearch.search_multi(
-            fields=["*url", "*Url", "*.URL", "*.uri", "data.office365.MessageURLs"],
-            value=entity["observable_value"],
-        )
+        """
+        Search URLs
+
+        Some alerts, like logs from web server, only contains the path from
+        URLs (scheme, host etc. are not present). If
+        :attr:`~wazuh.search_config.SearchConfig.lookup_url_without_host` is
+        enabled, these fields can still be matched. This is probably not useful
+        for looking up :term:`IoCs <ioc>` unless you're looking for a malicious
+        requests.
+
+        If
+        :attr:`~wazuh.search_config.SearchConfig.lookup_url_ignore_trailing_slash`
+        is enabled, trailing slashes in the observable and in alert fields will
+        be ignored.
+
+        If none of these settings are enabled, more fields are possibly searched.
+
+        TODO: test
+        """
+        url = entity["observable_value"]
+        fields = ["data.url", "data.uri", "data.URL", "data.office365.MessageURLs"]
+        if (
+            not self.config.lookup_url_without_host
+            and not self.config.lookup_url_ignore_trailing_slash
+        ):
+            return self.opensearch.search_multi(
+                fields=["*url", "*Url", "*URL", "*.uri", "data.office365.MessageURLs"],
+                value=url,
+            )
+        elif self.config.lookup_url_without_host:
+            return self.opensearch.search(
+                [
+                    Regexp(
+                        query=f"[^/]+/?{url.rstrip('/')}"
+                        + (
+                            "/?" if self.config.lookup_url_ignore_trailing_slash else ""
+                        ),
+                        field=field,
+                    )
+                    for field in fields
+                ]
+            )
+        elif self.config.lookup_url_ignore_trailing_slash:
+            return self.opensearch.search(
+                [
+                    Regexp(
+                        query=f"{url.rstrip('/')}/?",
+                        field=field,
+                    )
+                    for field in fields
+                ]
+            )
 
     # FIXME: Why no hits for C:\Program Files (x86)\ossec-agent\? Works in dev tools
     def query_directory(self, *, stix_entity: dict) -> dict | None:
@@ -607,6 +771,9 @@ class AlertSearcher(BaseModel):
         )
 
     def query_reg_key(self, *, stix_entity: dict) -> dict | None:
+        """
+        Search Windows registry keys
+        """
         return self.opensearch.search_multi(
             fields=["data.win.eventdata.targetObject", "syscheck.path"],
             value=stix_entity["key"],
@@ -811,3 +978,6 @@ class AlertSearcher(BaseModel):
                 hashes, {"SHA-256": "*sha256*", "SHA-1": "*sha1*", "MD5": "*md5*"}
             ).items()
         ]
+
+    def mac_variants(self, mac: str) -> list[str]:
+        return mac_permutations(mac) if self.config.lookup_mac_variants else [mac]

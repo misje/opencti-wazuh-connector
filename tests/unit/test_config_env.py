@@ -121,6 +121,9 @@ def test_config_from_env():
             "lookup_agent_name": True,
             "ignore_private_addrs": False,
             "lookup_mac_variants": True,
+            "lookup_hostnames_in_cmd_line": False,
+            "lookup_url_without_host": False,
+            "lookup_url_ignore_trailing_slash": False,
             "filesearch_options": {
                 FileSearchOption.SearchSize,
                 FileSearchOption.SearchAdditionalFilenames,
