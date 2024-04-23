@@ -15,6 +15,7 @@ from .utils import (
     has_any,
     oneof_nonempty,
     list_or_empty,
+    mac_permutations,
     escape_lucene_regex,
     escape_path,
     regex_transform_keys,
@@ -81,6 +82,71 @@ class AlertSearcher(BaseModel):
     def query_file(self, *, entity: dict, stix_entity: dict) -> dict | None:
         """
         Search File/Artifact SCO for hashes, filename/paths and/or size
+
+        - If the file has a hash (SHA-256, MD5 or SHA-1), the hash will looked
+          up in any field with a matching name (*sha256*).
+        - If the file also has a name, and if
+          :attr:`~wazuh.search_config.SearchConfig.filesearch_options` contains
+          :attr:`~wazuh.search_config.FileSearchOption.SearchNameAndHash`, the
+          name is included in the search
+        - If the file has no hash, a filename search is performed if
+          :attr:`~wazuh.search_config.SearchConfig.filesearch_options` contains
+          :attr:`~wazuh.search_config.FileSearchOption.SearchFilenameOnly`
+        - If the file does not have hashes, but has a filename and a size, and
+          :attr:`~wazuh.search_config.SearchConfig.filesearch_options` contains
+          :attr:`~wazuh.search_config.FileSearchOption.SearchSize`, the search
+          looks for the exact size in syscheck.{size_before,size_after} along
+          with any of the filename
+        - If the file has additional names (x_opencti_additional_names) and
+          :attr:`~wazuh.search_config.SearchConfig.filesearch_options` contains
+          :attr:`~wazuh.search_config.FileSearchOption.SearchAdditionalFilenames`,
+          all filenames are included in the search
+
+        Filenames and paths
+        ~~~~~~~~~~~~~~~~~~~
+
+        When searching for filenames, a number of settings dictate how to deal
+        with paths. The filenames most likely do not contain path, but if they
+        do, the setting
+        :attr:`~wazuh.search_config.FileSearchOption.BasenameOnly` removes this
+        path before searching for the filename. Otherwise, the path, regardless
+        of whether is is absolute, is included in the search.
+
+        If the file has a reference to a parent directory
+        (parent_directory_ref), that directory's path is included in the search
+        if :attr:`~wazuh.search_config.SearchConfig.filesearch_options`
+        contains
+        :attr:`~wazuh.search_config.FileSearchOption.IncludeParentDirRef`. If
+        the filename already contains a path, it is removed and replaced with
+        that of the parent directory.
+
+        If :attr:`~wazuh.search_config.SearchConfig.filesearch_options`
+        contains :attr:`~wazuh.search_config.FileSearchOption.RequireAbsPath`,
+        the filename (including its parent directory's path) must be absolute
+        in order to run the search.
+
+        Matching
+        ~~~~~~~~
+
+        Regular expressions (:dsl:`regexp <term/Regexp>`) are used as long as
+        :attr:`~wazuh.search_config.SearchConfig.filesearch_options` contains
+        :attr:`~wazuh.search_config.FileSearchOption.AllowRegexp`. This allows
+        for flexible searching, like
+
+        - Searching for filenames regardless of the path in alerts
+        - Search for paths with any backslash escaping patterns (\\\\,
+          \\\\\\\\, \\\\\\\\\\\\\\\\ etc.). Wazuh's syscheck, for instance,
+          uses no extra ecaping, whereas sysmon and most other events uses
+          double escaping.
+        - Ignoring case
+          (:attr:`~wazuh.search_config.FileSearchOption.CaseInsensitive`)
+
+        However, regular expressions may be expensive or even disabled in your
+        OpenSearch instance, so when not using Regexp, :dsl:`Match
+        <full-text/match>` is used instead. This requires an exact match of
+        both the filename and the path.
+
+        TODO: Mention IncludeRegValues if not moved to Analyse
         """
 
         # - path must have OS separator
@@ -275,6 +341,19 @@ class AlertSearcher(BaseModel):
 
     # TODO: wazuh_api: syscollector/id/netaddr?proto={ipv4,ipv6}
     def query_addr(self, *, entity: dict) -> dict | None:
+        """
+        Search for IP addresses
+
+        If :attr:`~wazuh.search_config.SearchConfig.lookup_agent_ip` is true,
+        Wazuh agents' IP addresses will also be looked up. This is probably not
+        useful.
+
+        If :attr:`~wazuh.search_config.SearchConfig.ignore_private_addrs` is
+        true, no search is performed if the IP address is private (`IPv4
+        <https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xhtml>`_,
+        `IPv6
+        <https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml>`_).
+        """
         fields = [
             "*.ActorIpAddress",
             "*.ClientIP",
@@ -324,6 +403,13 @@ class AlertSearcher(BaseModel):
 
     # TODO: wazuh_api: syscollector/id/netiface
     def query_mac(self, *, entity: dict) -> dict | None:
+        """
+        Search for MAC addresses
+
+        If :attr:`~wazuh.search_config.SearchConfig.lookup_mac_variants` is
+        true, various MAC address formats will be looked up. Otherwise, only
+        lower-case, colon-separated MAC addresses will be looked up.
+        """
         fields = [
             "*.dmac",
             "*.dst_mac",
@@ -337,10 +423,7 @@ class AlertSearcher(BaseModel):
         return self.opensearch.search(
             should=[
                 MultiMatch(query=value, fields=fields)
-                for value in [
-                    entity["observable_value"].lower(),
-                    entity["observable_value"].upper(),
-                ]
+                for value in mac_permutations(entity["observable_value"])
             ]
         )
 

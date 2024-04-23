@@ -120,6 +120,7 @@ def test_config_from_env():
             "lookup_agent_ip": False,
             "lookup_agent_name": True,
             "ignore_private_addrs": False,
+            "lookup_mac_variants": True,
             "filesearch_options": {
                 FileSearchOption.SearchSize,
                 FileSearchOption.SearchAdditionalFilenames,

@@ -813,6 +813,30 @@ def normalise_mac(mac: str) -> str:
     return "%s:%s:%s:%s:%s:%s" % (m[0:2], m[2:4], m[4:6], m[6:8], m[8:10], m[10:12])
 
 
+def mac_permutations(mac: str) -> list[str]:
+    """
+    Return MAC in different cases and styles (with or without colon, and
+    Cisco-style)
+
+
+    Examples:
+
+    >>> mac_permutations('01:02:03:04:ab:CD')
+    ['01:02:03:04:ab:cd', '01:02:03:04:AB:CD', '01020304abcd', '01020304ABCD', '0102.0304.abcd', '0102.0304.ABCD']
+    """
+    mac = normalise_mac(mac)
+    no_sep = mac.replace(":", "")
+    cisco = "%s.%s.%s" % (no_sep[0:4], no_sep[4:8], no_sep[8:12])
+    return [
+        mac,
+        mac.upper(),
+        no_sep,
+        no_sep.upper(),
+        cisco,
+        cisco.upper(),
+    ]
+
+
 def parse_sha256(hashes_str: str) -> str | None:
     """
     Extract anything that looks like a SHA-256 hash from the string, or None

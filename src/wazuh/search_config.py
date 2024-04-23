@@ -166,3 +166,18 @@ class SearchConfig(ConfigBase):
     Whether to ignore IP addresses in private address spaces when searching for
     IP address observables
     """
+    lookup_mac_variants: bool = True
+    """
+    Look up all common MAC address formats
+
+    The following formats will be looked up if enabled:
+
+      - 01:02:03:04:ab:cd
+      - 01:02:03:04:AB:CD
+      - 01020304abcd
+      - 01020304ABCD
+      - 0102.0304.abcd
+      - 0102.0304.ABCD
+
+    If disabled, only lower-case, colon-separated MAC addresses will be looked up. 
+    """
