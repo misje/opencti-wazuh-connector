@@ -327,7 +327,7 @@ class AlertSearcher(BaseModel):
                                 for path in paths
                                 # Support any number of backslash escapes in
                                 # paths (many variants are seen in the wild):
-                                for p in (re.sub(r"\{2,}", r"{\{2,}", path),)
+                                for p in (re.sub(r"\\{2,}", r"\\\\+", path),)
                             ]
                         ),
                     )
@@ -797,7 +797,7 @@ class AlertSearcher(BaseModel):
                 ]
             )
 
-        path = re.sub(r"\{2,}", r"{\{2,}", escape_lucene_regex(path))
+        path = re.sub(r"\\{2,}", r"\\\\+", escape_lucene_regex(path))
         case_insensitive = DOpt.CaseInsensitive in dopts
         match_subdirs = DOpt.MatchSubdirs in dopts
         ignore_slash = DOpt.IgnoreTrailingSlash in dopts

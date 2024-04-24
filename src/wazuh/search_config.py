@@ -3,7 +3,7 @@ from pydantic import (
     field_validator,
 )
 from pydantic_settings import SettingsConfigDict
-from typing import TypeVar
+from typing import Any, TypeVar
 from .utils import comma_string_to_set
 from .config_base import ConfigBase
 from enum import Enum
@@ -121,7 +121,6 @@ class FileSearchOption(Enum):
     :attr:`SearchAdditionalFilenames` is enabled) that are not absolute.
     """
     # TODO: UseWazuhAPI
-    # FIXME: validate: CaseInsensitive requires AllowRegexp
 
 
 class DirSearchOption(Enum):
@@ -282,3 +281,28 @@ class SearchConfig(ConfigBase):
               installation (*search.allow_expensive_queries* is set to false)
               (in which case the query will fail)
     """
+
+    @field_validator("filesearch_options", mode="after")
+    @classmethod
+    def check_fileopt_regexp_dep(cls, opts: Any) -> Any:
+        if FileSearchOption.CaseInsensitive in opts:
+            assert FileSearchOption.AllowRegexp in opts
+
+        return opts
+
+    @field_validator("dirsearch_options", mode="after")
+    @classmethod
+    def check_diropt_regexp_dep(cls, opts: Any) -> Any:
+        D = DirSearchOption
+        match opts:
+            case (
+                D.MatchSubdirs
+                | D.SearchFilenames
+                | D.CaseInsensitive
+                | D.IgnoreTrailingSlash
+            ):
+                assert D.AllowRegexp in opts
+            case _:
+                pass
+
+        return opts
