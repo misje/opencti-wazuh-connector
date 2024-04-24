@@ -17,7 +17,8 @@ from enum import Enum
 
 class FileSearchOption(Enum):
     """
-    Options determining how to search for File SCOs
+    Options determining how to search for :stix:`File
+    <#_99bl2dibcztv>`/:stix:`Artifact <#_4jegwl6ojbes>` :term:`SCOs <SCO>`
     """
 
     SearchSize = "search-size"
@@ -123,11 +124,70 @@ class FileSearchOption(Enum):
     # FIXME: validate: CaseInsensitive requires AllowRegexp
 
 
-class DirSearchOptions(Enum):
-    NormaliseSeparators = "normalise-separators"
+class DirSearchOption(Enum):
+    """
+    Options determining how to search for :stix:`Directory <#_lyvpga5hlw52>`
+    :term:`SCOs <SCO>`
     """
 
+    MatchSubdirs = "match-subdirs"
     """
+    Match subdirectories where the observable is a parent
+
+    If enabled, the observable '/foo/bar' will match the path '/foo/bar/baz'.
+    However, it will not match '/foo/barbaz'.
+
+    .. note:: Requires :attr:`AllowRegexp` if enabled
+    """
+    SearchFilenames = "search-filenames"
+    """
+    Match directories in fields that contains filenames
+
+    If not set, only directory/path fields will be searched. This setting
+    implies :attr:`IgnoreTrailingSlash` and :attr:`MatchSubdirs`, because it is
+    not always possible to distinguish filenames from directories in paths.
+
+    .. note:: Requires :attr:`AllowRegexp` if enabled
+    """
+    CaseInsensitive = "case-insensitive"
+    """
+    Perform a case-insensitive search for filenames/paths on all platforms
+
+    .. note:: Requires :attr:`AllowRegexp` if enabled
+    """
+    RequireAbsPath = "require-abs-path"
+    """
+    Require an absolute path
+    """
+    AllowRegexp = "allow-regexp"
+    """
+    Allow :dsl:`regexp <term/regexp>` queries
+ 
+    This allows regexp queries when searching. Regexp is used to search for
+    paths that are not absolute, and also to search for any number of backslash
+    escapes in paths.
+
+    Note that this may limit the number of fields searched.
+ 
+    .. note:: Disable this setting if *search.allow_expensive_queries* is set to
+              false in your OpenSearch installation, or if regexp queries fail.
+    """
+    NormaliseBackslashes = "normalise-backslashes"
+    """
+    Normalise backslashes in observable path before searching
+
+    Replace all sequences of '\\' with '\\\\' and '\\\\\\\\' (searchng for both
+    variants).
+
+    If AllowRegexp is enabled, this setting is ignored.
+    """
+    IgnoreTrailingSlash = "ignore-trailing-slash"
+    """
+    Disregard trailing slashes in observables and field values
+
+    .. note:: Requires :attr:`AllowRegexp` if enabled
+    """
+    # TODO: validator for AllowRegexp dependence
 
 
 class SearchConfig(ConfigBase):
@@ -147,6 +207,14 @@ class SearchConfig(ConfigBase):
         FileSearchOption.SearchFilenameOnly,
         FileSearchOption.AllowRegexp,
         FileSearchOption.CaseInsensitive,
+    }
+
+    dirsearch_options: set[DirSearchOption] = {
+        DirSearchOption.MatchSubdirs,
+        DirSearchOption.SearchFilenames,
+        DirSearchOption.AllowRegexp,
+        DirSearchOption.IgnoreTrailingSlash,
+        DirSearchOption.CaseInsensitive,
     }
 
     #  TODO: add include_fields/exclude_fields

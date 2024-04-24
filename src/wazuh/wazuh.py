@@ -319,6 +319,8 @@ class WazuhConnector:
 
         if result["_shards"]["failed"] > 0:
             for failure in result["_shards"]["failures"]:
+                # TODO: raise query failure in opensearch class (make optional
+                # through setting, especially if hits are non-empty):
                 self.helper.connector_logger.error(f"Query failure: {failure}")
 
         hits = result["hits"]["hits"]

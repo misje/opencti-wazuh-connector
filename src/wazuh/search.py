@@ -5,7 +5,7 @@ from pydantic import AnyUrl, BaseModel, ConfigDict, ValidationError
 from typing import Sequence
 from pycti import OpenCTIConnectorHelper
 
-from .search_config import SearchConfig, FileSearchOption
+from .search_config import DirSearchOption, SearchConfig, FileSearchOption
 from .opensearch import OpenSearchClient
 from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Term, Wildcard
 from .utils import (
@@ -26,8 +26,6 @@ from hashlib import sha256
 from ntpath import basename, isabs
 
 log = logging.getLogger(__name__)
-
-FOpt = FileSearchOption
 
 
 class AlertSearcher(BaseModel):
@@ -82,7 +80,8 @@ class AlertSearcher(BaseModel):
     # TODO: wazuh_api: syscheck/id/{file,sha256}
     def query_file(self, *, entity: dict, stix_entity: dict) -> dict | None:
         """
-        Search File/Artifact SCO for hashes, filename/paths and/or size
+        Search :stix:`File <#_99bl2dibcztv>`/:stix:`Artifact <#_4jegwl6ojbes>`
+        :term:`SCOs <SCO>` for hashes, filename/paths and/or size
 
         - If the file has a hash (SHA-256, MD5 or SHA-1), the hash will looked
           up in any field with a matching name (*sha256*).
@@ -175,6 +174,7 @@ class AlertSearcher(BaseModel):
         #        I -- No --> J
         #        I -- Yes --> K[Remove path] --> J
         #        J{
+        FOpt = FileSearchOption
         fopts = self.config.filesearch_options
         # Ensure that one of the three hash fields are non-zero:
         has_hash = bool(
@@ -327,7 +327,7 @@ class AlertSearcher(BaseModel):
                                 for path in paths
                                 # Support any number of backslash escapes in
                                 # paths (many variants are seen in the wild):
-                                for p in (path.replace(r"\\", r"\\{2,}"),)
+                                for p in (re.sub(r"\{2,}", r"{\{2,}", path),)
                             ]
                         ),
                     )
@@ -723,57 +723,129 @@ class AlertSearcher(BaseModel):
                 ]
             )
 
-    # FIXME: Why no hits for C:\Program Files (x86)\ossec-agent\? Works in dev tools
     def query_directory(self, *, stix_entity: dict) -> dict | None:
-        # TODO: go through current field list and organise into fields
-        # that expects an escaped path and those that don't:
-        path = escape_path(stix_entity["path"])
-        # Support any number of backslash escapes in paths (many
-        # variants are seen in the wild):
-        regex_path = escape_lucene_regex(path).replace(r"\\", r"\\{2,}")
-        regex_path = f"{regex_path}[/\\\\]+.*"
-        # Search for the directory path also in filename/path fields
-        # that may be of intereset (not necessarily all the same fields
-        # as in File/StixFile:
-        filename_searches = [
-            Regexp(field=field, query=regex_path, case_insensitive=True)
-            # Do not add globs here; it will throw:
-            for field in [
-                "data.ChildPath",
-                "data.ParentPath",
-                "data.Path",
-                "data.TargetPath",
-                "data.audit.file.name",
-                "data.smbd.filename",
-                "data.smbd.new_filename",
-                "data.win.eventdata.image",
-                "data.win.eventdata.sourceImage",
-                "data.win.eventdata.targetImage",
-                "syscheck.path",
-            ]
+        """
+        Search :stix:`Directory <#_lyvpga5hlw52>` :term:`SCOs <SCO>` by paths/names
+
+        Directory :term:`IoCs <IoC>` are most likely very uncommon, but
+        extensive search support is still available. A number of :attr:`options
+        <wazuh.search_config.DirSearchOption>` in
+        :attr:`~wazuh.search_config.SearchConfig.dirsearch_options` dictate how
+        the search is performed:
+
+        - :attr:`~wazuh.search_config.DirSearchOption.MatchSubdirs` will match
+          parent directories in paths, like "/foo/bar" in "/foo/bar/baz".
+        - :attr:`~wazuh.search_config.DirSearchOption.SearchFilenames` will
+          look for directories in filename fields as well. If disabled, fields
+          that may contain either directories or absolute filename paths will
+          still be searched.
+        - :attr:`~wazuh.search_config.DirSearchOption.CaseInsensitive` ignores
+          case when searching
+        - :attr:`~wazuh.search_config.DirSearchOption.RequireAbsPath` requires
+          the path in the observable to be absolute in order to perform a
+          search
+        - :attr:`~wazuh.search_config.DirSearchOption.NormaliseBackslashes`
+          searches for several variations of backslash escaping if
+          :attr:`~wazuh.search_config.DirSearchOption.AllowRegexp` is disabled.
+          syscheck.path contains minimum exaping, whereas most other fields
+          have twice the amount of backslashes. When regexp is enabled, the
+          number of backslashes in the observable and fields are completely
+          ignored.
+        - :attr:`~wazuh.search_config.DirSearchOption.IgnoreTrailingSlash` will
+          ignore trailing slashes in both the observable and fields
+
+
+        :attr:`~wazuh.search_config.DirSearchOption.AllowRegexp` must be
+        enabled for most of the search flexibility to work, and most of the
+        other options requires this option to be set. See
+        :attr:`~wazuh.search_config.DirSearchOption` for details.
+        """
+        DOpt = DirSearchOption
+        dopts = self.config.dirsearch_options
+        path = re.sub(r"(?:/|\\)+$", "", escape_path(stix_entity["path"]))
+        if DOpt.RequireAbsPath in dopts and not isabs(path):
+            log.info("Path is not absolute and RequireAbsPath is enabled")
+            return None
+
+        dir_fields = [
+            "data.audit.directory.name",
+            "data.SourceFilePath",
+            "data.TargetPath",
+            "data.home",
+            "data.pwd",
+            "syscheck.path",
         ]
-        # TODO: data.win.eventdata.currentDirectory typically has trailing slash(?)
-        # Make into regex with optional slash at the end?
-        # Case insensitive would be best too
-        return self.opensearch.search(
-            should=[
-                MultiMatch(
-                    query=path,
-                    fields=[
-                        "*.currentDirectory",
-                        "*.directory",
-                        "*.path",
-                        "*.pwd",
-                        "data.SourceFilePath",
+
+        if DOpt.AllowRegexp not in dopts:
+            path_variants = [path]
+            if DOpt.NormaliseBackslashes in dopts:
+                path_variants = [escape_path(path, count=i) for i in (2, 4)]
+
+            return self.opensearch.search(
+                must=[
+                    MultiMatch(
+                        query=path_variant,
+                        fields=dir_fields
+                        + [
+                            "*.currentDirectory",
+                            "*.directory",
+                            "*.path",
+                            "*.pwd",
+                        ],
+                    )
+                    for path_variant in path_variants
+                ]
+            )
+
+        path = re.sub(r"\{2,}", r"{\{2,}", escape_lucene_regex(path))
+        case_insensitive = DOpt.CaseInsensitive in dopts
+        match_subdirs = DOpt.MatchSubdirs in dopts
+        ignore_slash = DOpt.IgnoreTrailingSlash in dopts
+
+        should: list[QueryType] = []
+        if DOpt.SearchFilenames in dopts:
+            # Search for the directory path also in filename/path fields
+            # that may be of intereset (not necessarily all the same fields
+            # as in File/StixFile:
+            should.extend(
+                [
+                    Regexp(
+                        field=field,
+                        query=f"{path}([/\\\\]+.*)?",
+                        case_insensitive=case_insensitive,
+                    )
+                    # Do not add globs here; it will throw:
+                    for field in [
+                        "data.ChildPath",
+                        "data.ParentPath",
+                        "data.Path",
                         "data.TargetPath",
-                        "data.audit.directory.name",
-                        "data.home",
-                        "data.pwd",
-                    ],
+                        "data.audit.file.name",
+                        "data.smbd.filename",
+                        "data.smbd.new_filename",
+                        "data.win.eventdata.image",
+                        "data.win.eventdata.sourceImage",
+                        "data.win.eventdata.targetImage",
+                    ]
+                ]
+            )
+
+        if match_subdirs:
+            path = f"{path}([/\\\\]+.*)?"
+        elif ignore_slash:
+            path = f"{path}(/|\\\\)*"
+
+        should.extend(
+            [
+                Regexp(
+                    field=field,
+                    query=path,
+                    case_insensitive=case_insensitive,
                 )
+                for field in dir_fields
             ]
-            + filename_searches
         )
+        return self.opensearch.search(should=should)
 
     def query_reg_key(self, *, stix_entity: dict) -> dict | None:
         """
@@ -935,8 +1007,6 @@ class AlertSearcher(BaseModel):
         return self.opensearch.search_match(
             {
                 "data.vulnerability.cve": stix_entity["name"],
-                # TODO: Include solved too, and ensure Sighting from:to represents duration of CVE present in the system. Doesn't work with the current architecture that groups alerts by id.
-                # "data.vulnerability.status": "Active",
             }
         )
 

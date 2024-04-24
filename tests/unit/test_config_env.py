@@ -9,7 +9,7 @@ from wazuh.opensearch_config import OpenSearchConfig
 from wazuh.enrich_config import EnrichmentConfig, FilenameBehaviour
 from wazuh.opensearch_dsl import SortOrder
 from wazuh.config import Config
-from wazuh.search_config import FileSearchOption
+from wazuh.search_config import DirSearchOption, FileSearchOption
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -132,6 +132,13 @@ def test_config_from_env():
                 FileSearchOption.SearchFilenameOnly,
                 FileSearchOption.AllowRegexp,
                 FileSearchOption.CaseInsensitive,
+            },
+            "dirsearch_options": {
+                DirSearchOption.MatchSubdirs,
+                DirSearchOption.SearchFilenames,
+                DirSearchOption.AllowRegexp,
+                DirSearchOption.IgnoreTrailingSlash,
+                DirSearchOption.CaseInsensitive,
             },
         },
         "hits_abort_limit": 1000,
