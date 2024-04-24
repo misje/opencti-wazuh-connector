@@ -23,6 +23,7 @@ fields = [
     "data.ParentPath",  # panda paps
     "data.Path",  # panda paps
     "data.TargetPath",  # panda paps
+    "data.audit.exe",
     "data.audit.execve.a1",
     "data.audit.execve.a2",
     "data.audit.execve.a3",
@@ -147,7 +148,7 @@ def test_artifact_with_hashes(monkeypatch, mock_search):
     }
 
 
-def test_file_hasehs(monkeypatch, mock_search):
+def test_file_hashes(monkeypatch, mock_search):
     s = searcher(
         monkeypatch,
     )
@@ -157,16 +158,13 @@ def test_file_hasehs(monkeypatch, mock_search):
     assert result == {
         "must": [
             Bool(
-                must=[],
-                must_not=[],
                 should=[
                     MultiMatch(query="sha256foo", fields=["*sha256*"]),
                     MultiMatch(query="md5bar", fields=["*md5*"]),
                 ],
-                filter=[],
-                minimum_should_match=1,
             )
-        ]
+        ],
+        "should": [],
     }
 
 
@@ -215,13 +213,11 @@ def test_no_hash_filename_size(caplog, monkeypatch, mock_search):
     assert result == {
         "must": [
             MultiMatch(query="42", fields=["syscheck.size*"]),
-            Bool(
-                should=[
-                    Regexp(field=field, query=".*[/\\\\]*foo", case_insensitive=True)
-                    for field in fields
-                ]
-            ),
-        ]
+        ],
+        "should": [
+            Regexp(field=field, query=".*[/\\\\]*foo", case_insensitive=True)
+            for field in fields
+        ],
     }
 
     messages = [record.msg for record in caplog.records]
@@ -240,13 +236,11 @@ def test_no_hash_filename_size_no_case(caplog, monkeypatch, mock_search):
     assert result == {
         "must": [
             MultiMatch(query="42", fields=["syscheck.size*"]),
-            Bool(
-                should=[
-                    Regexp(field=field, query=".*[/\\\\]*foo", case_insensitive=False)
-                    for field in fields
-                ]
-            ),
-        ]
+        ],
+        "should": [
+            Regexp(field=field, query=".*[/\\\\]*foo", case_insensitive=False)
+            for field in fields
+        ],
     }
 
     messages = [record.msg for record in caplog.records]
@@ -342,8 +336,10 @@ def test_no_hash_filename_size_no_regexp_abs(caplog, monkeypatch, mock_search):
     assert result == {
         "must": [
             MultiMatch(query="42", fields=["syscheck.size*"]),
+        ],
+        "should": [
             MultiMatch(query="/foo/bar", fields=fields),
-        ]
+        ],
     }
 
     messages = [record.msg for record in caplog.records]
@@ -378,9 +374,10 @@ def test_hash_filename_size_no_regexp_abs(caplog, monkeypatch, mock_search):
                     MultiMatch(query="foosha", fields=["*sha256*"]),
                     MultiMatch(query="foomd5", fields=["*md5*"]),
                     MultiMatch(query="foosha1", fields=["*sha1*"]),
-                ],
-            )
-        ]
+                ]
+            ),
+        ],
+        "should": [],
     }
 
     messages = [record.msg for record in caplog.records]
@@ -418,8 +415,10 @@ def test_hash_filename_size_no_regexp_abs_name_and_hash(
                     MultiMatch(query="foosha1", fields=["*sha1*"]),
                 ],
             ),
+        ],
+        "should": [
             MultiMatch(query="/foo/bar", fields=fields),
-        ]
+        ],
     }
 
     messages = [record.msg for record in caplog.records]
@@ -455,14 +454,12 @@ def test_hash_filename_size_regexp_abs_name_and_hash(caplog, monkeypatch, mock_s
                     MultiMatch(query="foomd5", fields=["*md5*"]),
                     MultiMatch(query="foosha1", fields=["*sha1*"]),
                 ],
-            ),
-            Bool(
-                should=[
-                    Regexp(query="/foo/bar", field=field, case_insensitive=True)
-                    for field in fields
-                ]
-            ),
-        ]
+            )
+        ],
+        "should": [
+            Regexp(query="/foo/bar", field=field, case_insensitive=True)
+            for field in fields
+        ],
     }
 
     messages = [record.msg for record in caplog.records]
@@ -491,17 +488,15 @@ def test_hash_filename_size_regexp_abs_name__winstyle(caplog, monkeypatch, mock_
     assert result == {
         "must": [
             MultiMatch(query="42", fields=["syscheck.size*"]),
-            Bool(
-                should=[
-                    Regexp(
-                        query="C:\\\\{2,}bar\\\\{2,}baz",
-                        field=field,
-                        case_insensitive=True,
-                    )
-                    for field in fields
-                ]
-            ),
-        ]
+        ],
+        "should": [
+            Regexp(
+                query="C:\\\\{2,}bar\\\\{2,}baz",
+                field=field,
+                case_insensitive=True,
+            )
+            for field in fields
+        ],
     }
 
     messages = [record.msg for record in caplog.records]
