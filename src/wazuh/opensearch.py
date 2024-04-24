@@ -109,7 +109,7 @@ class OpenSearchClient:
                 raise self.SearchError("Query timed out")
 
             log.debug(
-                "OpenSearh: Searched {}/{} shards, {} skipped, {} failed".format(
+                "OpenSearch: Searched {}/{} shards, {} skipped, {} failed".format(
                     r["_shards"]["successful"],
                     r["_shards"]["total"],
                     r["_shards"]["skipped"],

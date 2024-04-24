@@ -1295,3 +1295,17 @@ def dict_member_list_first_or_remove(values: dict) -> dict:
             for item in (first_or_none(items) if isinstance(items, list) else items,)
         }
     )
+
+
+def remove_host_from_uri(uri: str) -> str:
+    """
+    Remove scheme and host from URI
+
+    Examples:
+
+    >>> remove_host_from_uri('http://foo.bar/baz?qux')
+    '/baz?qux'
+    >>> remove_host_from_uri('foo.bar/baz')
+    '/baz'
+    """
+    return re.sub(r"^(?:.+://)?[^/]+(?=/)", "", uri)

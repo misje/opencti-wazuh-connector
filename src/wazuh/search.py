@@ -1,7 +1,7 @@
 import re
 import ipaddress
 import logging
-from pydantic import BaseModel, ConfigDict
+from pydantic import AnyUrl, BaseModel, ConfigDict, ValidationError
 from typing import Sequence
 from pycti import OpenCTIConnectorHelper
 
@@ -19,6 +19,7 @@ from .utils import (
     escape_lucene_regex,
     escape_path,
     regex_transform_keys,
+    remove_host_from_uri,
     search_fields,
 )
 from hashlib import sha256
@@ -113,7 +114,7 @@ class AlertSearcher(BaseModel):
         of whether is is absolute, is included in the search.
 
         If the file has a reference to a parent directory
-        (parent_directory_ref), that directory's path is included in the search
+        (*parent_directory_ref*), that directory's path is included in the search
         if :attr:`~wazuh.search_config.SearchConfig.filesearch_options`
         contains
         :attr:`~wazuh.search_config.FileSearchOption.IncludeParentDirRef`. If
@@ -128,7 +129,7 @@ class AlertSearcher(BaseModel):
         Matching
         ~~~~~~~~
 
-        Regular expressions (:dsl:`regexp <term/Regexp>`) are used as long as
+        Regular expressions (:dsl:`Regexp <term/regexp>`) are used as long as
         :attr:`~wazuh.search_config.SearchConfig.filesearch_options` contains
         :attr:`~wazuh.search_config.FileSearchOption.AllowRegexp`. This allows
         for flexible searching, like
@@ -277,6 +278,7 @@ class AlertSearcher(BaseModel):
         ]
 
         must: list[QueryType] = []
+        should: list[QueryType] = []
         if has_hash:
             must += [Bool(should=self.hash_query_list(stix_entity["hashes"]))]
         elif size is not None:
@@ -301,7 +303,7 @@ class AlertSearcher(BaseModel):
                     if not has_hash:
                         return None
 
-                must += [MultiMatch(query=path, fields=fields) for path in paths]
+                should += [MultiMatch(query=path, fields=fields) for path in paths]
             elif FOpt.RequireAbsPath not in fopts or all(isabs(path) for path in paths):
                 paths = list(
                     map(
@@ -311,35 +313,31 @@ class AlertSearcher(BaseModel):
                         paths,
                     )
                 )
-                must += [
-                    Bool(
-                        should=[
-                            Regexp(
-                                field=field,
-                                case_insensitive=(FOpt.CaseInsensitive in fopts),
-                                query="|".join(
-                                    [
-                                        # Unless the path is considered absolute,
-                                        # prepend a regex that ignores everything up to
-                                        # and including a path separator before the
-                                        # filename:
-                                        p if isabs(path) else f".*[/\\\\]*{p}"
-                                        for path in paths
-                                        # Support any number of backslash escapes in
-                                        # paths (many variants are seen in the wild):
-                                        for p in (path.replace(r"\\", r"\\{2,}"),)
-                                    ]
-                                ),
-                            )
-                            for field in fields
-                        ]
+                should = [
+                    Regexp(
+                        field=field,
+                        case_insensitive=(FOpt.CaseInsensitive in fopts),
+                        query="|".join(
+                            [
+                                # Unless the path is considered absolute,
+                                # prepend a regex that ignores everything up to
+                                # and including a path separator before the
+                                # filename:
+                                p if isabs(path) else f".*[/\\\\]*{p}"
+                                for path in paths
+                                # Support any number of backslash escapes in
+                                # paths (many variants are seen in the wild):
+                                for p in (path.replace(r"\\", r"\\{2,}"),)
+                            ]
+                        ),
                     )
+                    for field in fields
                 ]
             elif FOpt.RequireAbsPath in fopts:
                 log.warning("RequireAbsPath is set and no paths are absolute")
                 return None
 
-        return self.opensearch.search(must)
+        return self.opensearch.search(must=must, should=should)
 
     # TODO: wazuh_api: syscollector/id/netaddr?proto={ipv4,ipv6}
     def query_addr(self, *, entity: dict) -> dict | None:
@@ -683,11 +681,16 @@ class AlertSearcher(BaseModel):
         be ignored.
 
         If none of these settings are enabled, more fields are possibly searched.
-
-        TODO: test
         """
         url = entity["observable_value"]
-        fields = ["data.url", "data.uri", "data.URL", "data.office365.MessageURLs"]
+        fields = [
+            "data.url",
+            "data.uri",
+            "data.URL",
+            "data.office365.MessageURLs",
+            "data.github.config.url",
+            "data.office365.SiteUrl",
+        ]
         if (
             not self.config.lookup_url_without_host
             and not self.config.lookup_url_ignore_trailing_slash
@@ -700,7 +703,7 @@ class AlertSearcher(BaseModel):
             return self.opensearch.search(
                 should=[
                     Regexp(
-                        query=f"[^/]*/?{escape_lucene_regex(url.rstrip('/'))}"
+                        query=f"(.+://)?[^/]*/?{escape_lucene_regex(remove_host_from_uri(url.rstrip('/')))}"
                         + (
                             "/?" if self.config.lookup_url_ignore_trailing_slash else ""
                         ),
