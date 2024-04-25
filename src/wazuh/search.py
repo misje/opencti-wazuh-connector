@@ -345,6 +345,7 @@ class AlertSearcher(BaseModel):
         return self.opensearch.search(must=must, should=should)
 
     # TODO: wazuh_api: syscollector/id/netaddr?proto={ipv4,ipv6}
+    # TODO: data.win.eventdata.queryResults (semicolon-separated list, (with IPv4-mapped IPv6 (::ffff:<ipv4>)))
     def query_addr(self, *, entity: dict) -> dict | None:
         """
         Search for :stix:`IPv4 <#_ki1ufj1ku8s0>`/:stix:`IPv6 <#_oeggeryskriq>`
@@ -457,6 +458,7 @@ class AlertSearcher(BaseModel):
         sources/destinations in OpenCTI. However, only one is provided to the
         connector. The precedence is unknown.
         """
+        # TODO: query data.authorization.{local,remove}Address: "ipv4":ip:port
         query: Sequence[QueryType] = []
         if "src_ref" in stix_entity:
             source = self.helper.api.stix_cyber_observable.read(
@@ -1071,8 +1073,9 @@ class AlertSearcher(BaseModel):
         TODO
         """
         # TODO: settings to determine where to search (aws, google, office, windows, linux)
-        # TODO: what about DOMAIN\username?
         # TODO: display name? Otherwise remove from entity_value*(?)
+        # TODO: limit fields depending on type of ID (SID?)
+        # TODO: ignore 0, 1000, admin SID and other common IDs. Customiseable ignore list?
         uid = oneof_nonempty("user_id", within=stix_entity)
         username = oneof_nonempty("account_login", within=stix_entity)
         # Some logs provide a username that also consists of a UID in parenthesis:
@@ -1101,6 +1104,7 @@ class AlertSearcher(BaseModel):
         ]
         # TODO: add more. Missing more from windows?
         uid_fields = [
+            "data.Authorization.sid"  # samba-ad-dc
             "data.userID",  # macOS
             "data.win.eventdata.subjectUserSid",
             "data.win.eventdata.targetSid",
