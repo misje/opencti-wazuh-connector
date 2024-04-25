@@ -472,7 +472,7 @@ def test_hash_filename_size_regexp_abs_name_and_hash(caplog, monkeypatch, mock_s
     ]
 
 
-def test_hash_filename_size_regexp_abs_name__winstyle(caplog, monkeypatch, mock_search):
+def test_hash_filename_size_regexp_abs_name_winstyle(caplog, monkeypatch, mock_search):
     caplog.set_level(logging.DEBUG, logger="wazuh.search")
     s = searcher(
         monkeypatch,
@@ -491,7 +491,7 @@ def test_hash_filename_size_regexp_abs_name__winstyle(caplog, monkeypatch, mock_
         ],
         "should": [
             Regexp(
-                query="C:\\\\{2,}bar\\\\{2,}baz",
+                query="C:\\\\+bar\\\\+baz",
                 field=field,
                 case_insensitive=True,
             )
