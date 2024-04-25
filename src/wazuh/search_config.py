@@ -9,12 +9,6 @@ from .config_base import ConfigBase
 from enum import Enum
 
 
-# class HashType(Enum):
-#    SHA256 = ("SHA-256",)
-#    SHA1 = ("SHA-1",)
-#    MD5 = "MD5"
-
-
 class FileSearchOption(Enum):
     """
     Options determining how to search for :stix:`File
@@ -186,7 +180,10 @@ class DirSearchOption(Enum):
 
     .. note:: Requires :attr:`AllowRegexp` if enabled
     """
-    # TODO: validator for AllowRegexp dependence
+
+
+class ProcessSearchOption(Enum):
+    CaseInsensitive = "case-insensitive"
 
 
 class SearchConfig(ConfigBase):
@@ -198,6 +195,7 @@ class SearchConfig(ConfigBase):
         env_prefix="WAZUH_SEARCH_", validate_assignment=True
     )
 
+    # TODO: rename these three options with underscore:
     filesearch_options: set[FileSearchOption] = {
         FileSearchOption.SearchSize,
         FileSearchOption.SearchAdditionalFilenames,
@@ -215,6 +213,8 @@ class SearchConfig(ConfigBase):
         DirSearchOption.IgnoreTrailingSlash,
         DirSearchOption.CaseInsensitive,
     }
+
+    procsearch_options: set[ProcessSearchOption] = {ProcessSearchOption.CaseInsensitive}
 
     #  TODO: add include_fields/exclude_fields
 

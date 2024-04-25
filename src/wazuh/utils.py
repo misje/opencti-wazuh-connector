@@ -619,7 +619,26 @@ def escape_lucene_regex(string: str):
     >>> escape_lucene_regex('Benign string? Possibly. (*Perhaps not*)')
     'Benign string\\\\? Possibly\\\\. \\\\(\\\\*Perhaps not\\\\*\\\\)'
     """
-    reg_chars = [".", "?", "+", "*", "|", "{", "}", "[", "]", "(", ")", '"', "\\"]
+    reg_chars = [
+        ".",
+        "?",
+        "+",
+        "*",
+        "|",
+        "{",
+        "}",
+        "[",
+        "]",
+        "(",
+        ")",
+        '"',
+        "\\",
+        "~",
+        "<",
+        ">",
+        "&",
+        "@",
+    ]
     return "".join("\\" + ch if ch in reg_chars else ch for ch in string)
 
 

@@ -9,7 +9,7 @@ from wazuh.opensearch_config import OpenSearchConfig
 from wazuh.enrich_config import EnrichmentConfig, FilenameBehaviour
 from wazuh.opensearch_dsl import SortOrder
 from wazuh.config import Config
-from wazuh.search_config import DirSearchOption, FileSearchOption
+from wazuh.search_config import DirSearchOption, FileSearchOption, ProcessSearchOption
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -140,6 +140,7 @@ def test_config_from_env():
                 DirSearchOption.IgnoreTrailingSlash,
                 DirSearchOption.CaseInsensitive,
             },
+            "procsearch_options": {ProcessSearchOption.CaseInsensitive},
         },
         "hits_abort_limit": 1000,
         "ignore_own_entities": False,

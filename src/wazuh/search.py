@@ -5,7 +5,12 @@ from pydantic import AnyUrl, BaseModel, ConfigDict, ValidationError
 from typing import Sequence
 from pycti import OpenCTIConnectorHelper
 
-from .search_config import DirSearchOption, SearchConfig, FileSearchOption
+from .search_config import (
+    DirSearchOption,
+    ProcessSearchOption,
+    SearchConfig,
+    FileSearchOption,
+)
 from .opensearch import OpenSearchClient
 from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Term, Wildcard
 from .utils import (
@@ -80,8 +85,8 @@ class AlertSearcher(BaseModel):
     # TODO: wazuh_api: syscheck/id/{file,sha256}
     def query_file(self, *, entity: dict, stix_entity: dict) -> dict | None:
         """
-        Search :stix:`File <#_99bl2dibcztv>`/:stix:`Artifact <#_4jegwl6ojbes>`
-        :term:`SCOs <SCO>` for hashes, filename/paths and/or size
+        Search for :stix:`File <#_99bl2dibcztv>`/:stix:`Artifact
+        <#_4jegwl6ojbes>` hashes, filename/paths and/or size
 
         - If the file has a hash (SHA-256, MD5 or SHA-1), the hash will looked
           up in any field with a matching name (*sha256*).
@@ -342,7 +347,8 @@ class AlertSearcher(BaseModel):
     # TODO: wazuh_api: syscollector/id/netaddr?proto={ipv4,ipv6}
     def query_addr(self, *, entity: dict) -> dict | None:
         """
-        Search for IP addresses
+        Search for :stix:`IPv4 <#_ki1ufj1ku8s0>`/:stix:`IPv6 <#_oeggeryskriq>`
+        addresses
 
         If :attr:`~wazuh.search_config.SearchConfig.lookup_agent_ip` is true,
         Wazuh agents' IP addresses will also be looked up. This is probably not
@@ -404,7 +410,7 @@ class AlertSearcher(BaseModel):
     # TODO: wazuh_api: syscollector/id/netiface
     def query_mac(self, *, entity: dict) -> dict | None:
         """
-        Search for MAC addresses
+        Search for :stix:`MAC addresses <#_f92nr9plf58y>`
 
         If :attr:`~wazuh.search_config.SearchConfig.lookup_mac_variants` is
         true, various MAC address formats will be looked up. Otherwise, only
@@ -429,10 +435,9 @@ class AlertSearcher(BaseModel):
 
     def query_traffic(self, *, stix_entity: dict) -> dict | None:
         """
-        Search for network traffic
+        Search for :stix:`network traffic <#_rgnc3w40xy>` :term:`SCOs <SCO>`
 
-        The following properties in :stix:`Network-Traffic <#_rgnc3w40xy>` are
-        considered:
+        The following properties in Network-Traffic are considered:
 
         - src_ref (MAC/IPv4/IPv6 addresses only, not domain names)
         - src_port
@@ -598,7 +603,7 @@ class AlertSearcher(BaseModel):
 
     def query_email(self, *, stix_entity: dict) -> dict | None:
         """
-        Search e-mail addresses
+        Search for :stix:`e-mail addresses <#_wmenahkvqmgj>`
         """
         return self.opensearch.search_multi(
             fields=[
@@ -616,7 +621,7 @@ class AlertSearcher(BaseModel):
         entity: dict,
     ) -> dict | None:
         """
-        Query domain names and hostnames
+        Search for :stix:`domain names <#_prhhksbxbg87>` and hostnames
 
         If
         :attr:`~wazuh.search_config.SearchConfig.lookup_hostnames_in_cmd_line`
@@ -666,7 +671,7 @@ class AlertSearcher(BaseModel):
         entity: dict,
     ) -> dict | None:
         """
-        Search URLs
+        Search for :stix:`URLs <#_ah3hict2dez0>`
 
         Some alerts, like logs from web server, only contains the path from
         URLs (scheme, host etc. are not present). If
@@ -725,7 +730,7 @@ class AlertSearcher(BaseModel):
 
     def query_directory(self, *, stix_entity: dict) -> dict | None:
         """
-        Search :stix:`Directory <#_lyvpga5hlw52>` :term:`SCOs <SCO>` by paths/names
+        Search for :stix:`Directory <#_lyvpga5hlw52>` paths
 
         Directory :term:`IoCs <IoC>` are most likely very uncommon, but
         extensive search support is still available. A number of :attr:`options
@@ -849,7 +854,7 @@ class AlertSearcher(BaseModel):
 
     def query_reg_key(self, *, stix_entity: dict) -> dict | None:
         """
-        Search Windows registry keys
+        Search for :stix:`Windows registry keys <#_luvw8wjlfo3y>`
         """
         return self.opensearch.search_multi(
             fields=["data.win.eventdata.targetObject", "syscheck.path"],
@@ -858,7 +863,7 @@ class AlertSearcher(BaseModel):
 
     def query_reg_value(self, *, stix_entity: dict) -> dict | None:
         """
-        Search Windows registry values
+        Search for :stix:`Windows registry values <#_u7n4ndghs3qq>`
 
         Wazuh's :term:`FIM` module only registers registry value's hashes, not
         values. And it only supports *REG_SZ*, *REG_EXPAND_SZ* and *REG_BINARY*
@@ -905,104 +910,155 @@ class AlertSearcher(BaseModel):
             else None
         )
 
-    # FIXME: doesn't find "secedit /export /cfg $env:temp/secexport.cfg" in data.win.eventdata.parentCommandLine (powershell \"$null = secedit /export /cfg $env:temp/secexport.cfg; $(gc $env:temp/secexport.cfg | Select-String \\\"LSAAnonymousNameLookup\\\").ToString().Split(\\\"=\\\")[1].Trim()\")
     def query_process(self, *, stix_entity: dict) -> dict | None:
         """
-        TODO
+        Search for :stix:`process <#_hpppnm86a1jm>` command lines
+
+        Command lines are hard to search because a arguments and options can
+        typically be in any order. This function tries to match all of the
+        words in the :term:`SCO`'s command_line without being too inaccurate.
+        Only the property *command_line* is supported.
+
+        Matching
+        ~~~~~~~~
+
+        First, string is tokenised into a list of words separated by
+        whitespace. Any sequence of words enclosed in non-escaped quotes are
+        considered as a single token, .e.g.:
+
+        - *foo bar baz* becomes ['foo', 'bar', 'baz']
+        - *foo 'bar baz'* becomes ['foo', 'bar baz']
+
+        The first token is considered to be the command, and is treated
+        differently: Any path is stripped (basename) in order to match commands
+        both with and without a full path, and this token is searched for in
+        *command* fields and not *argument* fields (where applicable).
+
+        The remaining tokens are considered arguments. First, any non-escaped
+        quotes are removed from the beginning and end of argument. In case of
+        command line alerts without individual argument fields, a search is
+        performed for each individual argument in command line fields on a
+        non-whitespace boundary, e.g.:
+
+        - "C:\\foo\\bar baz 'qux quux'" will search for "baz" and match " baz", "
+          baz" and " baz ", but not "bazaar"
+
+        For alerts with argument fields, like data.audit.execve, the argument
+        are matched as they are.
+
+        .. note:: :dsl:`Regexp <term/regexp>` queries are needed to search for
+           process command lines, which may be expensive, and may also be
+           disabled in your OpenSearch installation if
+           *search.allow_expensive_queries* is set to false. In order to
+           disable regexp searches, disable process searching altogether by not
+           specifying "Process" in the connector scope.
         """
         # TODO: use wazuh API to list proceses too:
         # TODO: Create a guard against too simple search strings (one word?)
-        # TODO: Compare results against observable value and ignore if they differ too much, like fjas → /usr/bin/tee customers/orsted/usvportal-grafana-provisioning/alerting/fjas.yaml
-        if "command_line" in stix_entity:
-            # Split the string into tokens wrapped in quotes or
-            # separated by whitespace:
-            tokens = re.findall(
-                r"""("[^"]*"|'[^']*'|\S+)""", stix_entity["command_line"]
-            )
-            if len(tokens) < 1:
-                return None
-
-            log.debug(tokens)
-            command = basename(tokens[0])
-            esc_command = escape_lucene_regex(command)
-            args = [
-                # Remove any non-escaped quotes in the beginning and
-                # end of each argument, and escape any paths:
-                escape_path(
-                    re.sub(
-                        r"""^(?:(?<!\\)"|')|(?:(?<!\\)"|')$""",
-                        "",
-                        arg,
-                    ),
-                    count=8,
-                )
-                for arg in tokens[1:]
-            ]
-            return self.opensearch.search(
-                should=[
-                    Bool(
-                        must=[
-                            Regexp(
-                                field=field,
-                                query=f"(.+[\\\\/])?{esc_command}.*",
-                                case_insensitive=True,
-                            )
-                        ]
-                        + [
-                            Wildcard(
-                                field=field, query=f"*{arg}*", case_insensitive=True
-                            )
-                            for arg in args
-                        ]
-                    )
-                    for field in [
-                        "data.win.eventdata.commandLine",
-                        "data.win.eventdata.details",
-                        "data.win.eventdata.image",
-                        "data.win.eventdata.parentCommandLine",
-                        "data.win.eventdata.sourceImage",
-                        "data.win.eventdata.targetImage",
-                    ]
-                ]
-                + [
-                    Bool(
-                        must=[
-                            Regexp(
-                                field="data.command",
-                                query=f"(.+/)?{esc_command}.*",
-                                case_insensitive=True,
-                            )
-                        ]
-                        + [
-                            Wildcard(
-                                field="data.command",
-                                query=f"*{arg}*",
-                                case_insensitive=True,
-                            )
-                            for arg in args
-                        ]
-                    )
-                ]
-                + [
-                    Bool(
-                        must=[Match(field="data.audit.command", query=command)],
-                        should=[
-                            MultiMatch(fields=["data.audit.execve.a*"], query=arg)
-                            for arg in args
-                        ],
-                    )
-                ]
-            )
-        else:
+        if "command_line" not in stix_entity:
+            log.info("Observable does not contain command_line")
             return None
+
+        case_insensitive = (
+            ProcessSearchOption.CaseInsensitive in self.config.procsearch_options
+        )
+        # Split the string into tokens wrapped in quotes or
+        # separated by whitespace:
+        tokens = re.findall(r"""("[^"]*"|'[^']*'|\S+)""", stix_entity["command_line"])
+        if len(tokens) < 1:
+            log.info("command_line is empty")
+            return None
+
+        log.debug(f"command_line tokens: {tokens}")
+        esc_command = escape_lucene_regex(basename(tokens[0]))
+        args = [
+            # Remove any non-escaped quotes in the beginning and
+            # end of each argument:
+            re.sub(
+                r"""^(?:(?<!\\)"|')|(?:(?<!\\)"|')$""",
+                "",
+                arg,
+            )
+            for arg in tokens[1:]
+        ]
+        esc_args = [escape_lucene_regex(arg) for arg in args]
+        # Replace any Windows path escapes with a pattern that searches for any
+        # number of backslash escapes:
+        esc_args = [re.sub(r"\\{2,}", r"\\\\+", arg) for arg in args]
+        # Wrap each argument in a word boundary:
+        esc_args = [rf"(.*[ \\t\\n\\r]*)?{arg}([ \\t\\n\\r]*.*)?" for arg in args]
+
+        # owner_sid  => data.audit.auid, data.audit.euid
+        return self.opensearch.search(
+            should=[
+                Bool(
+                    must=[
+                        Regexp(
+                            field=field,
+                            query=f"(.+[\\\\/])?{esc_command}.*",
+                            case_insensitive=case_insensitive,
+                        )
+                    ]
+                    + [
+                        Regexp(
+                            query=arg, field=field, case_insensitive=case_insensitive
+                        )
+                        for arg in esc_args
+                    ]
+                )
+                for field in [
+                    "data.win.eventdata.commandLine",
+                    "data.win.eventdata.details",
+                    "data.win.eventdata.image",
+                    "data.win.eventdata.parentCommandLine",
+                    "data.win.eventdata.sourceImage",
+                    "data.win.eventdata.targetImage",
+                ]
+            ]
+            + [
+                Bool(
+                    must=[
+                        Regexp(
+                            field="data.command",
+                            query=rf"(.+[\\\\/])?{esc_command}[ \\t\\n\\r]+.*",
+                            case_insensitive=case_insensitive,
+                        )
+                    ]
+                    + [
+                        Regexp(
+                            field="data.command",
+                            query=arg,
+                            case_insensitive=case_insensitive,
+                        )
+                        for arg in esc_args
+                    ]
+                )
+            ]
+            + [
+                Bool(
+                    should=[
+                        Regexp(
+                            query=f"(.+[\\\\/])?{esc_command}.*",
+                            field=field,
+                            case_insensitive=case_insensitive,
+                        )
+                        for field in ("data.audit.command", "data.audit.exe")
+                    ],
+                    must=[
+                        MultiMatch(fields=["data.audit.execve.a*"], query=arg)
+                        for arg in args
+                    ],
+                )
+            ]
+        )
 
     def query_vulnerability(self, *, stix_entity: dict) -> dict | None:
         """
-        Search vulnerability events
+        Search for :stix:`vulnerabilities <#_q5ytzmajn6re>`
 
         Results will typically contain an event when the vulnerability was
         first detected, then later when the vulnerability was "resolved" due to
-        an package upgrade.
+        a package upgrade.
         """
         return self.opensearch.search_match(
             {
@@ -1082,7 +1138,7 @@ class AlertSearcher(BaseModel):
 
     def query_user_agent(self, *, stix_entity: dict) -> dict | None:
         """
-        Search user agents
+        Search for user agents strings
         """
         return self.opensearch.search_multi(
             value=stix_entity["value"], fields=["data.aws.userAgent"]
