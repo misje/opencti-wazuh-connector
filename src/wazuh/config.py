@@ -243,7 +243,7 @@ class Config(ConfigBase):
     Only create incidents if the observable has indicators tied to it
 
     Otherwise, only sightings (depending on :py:attr:`create_obs_sightings`)
-    will be created.",
+    will be created.
     """
     create_incident: IncidentCreateMode = IncidentCreateMode.PerSighting
     """
@@ -278,7 +278,12 @@ class Config(ConfigBase):
 
     If the alert from OpenSearch has a rule level below this value, no incident
     will be created. However, a sighting may still be created.
-    :py:const:`AlertRuleSeverity` may also be used",
+
+
+    .. note:: Note that an alert rule level is not necessarily a good filter. A
+       :term:`FIM`/syscheck alert informing that a file has been added to a
+       system is not a high-severity alert, but it could be the alert that
+       results in an :term:`IoC` match against a file hash.
     """
     create_agent_ip_observable: bool = True
     """

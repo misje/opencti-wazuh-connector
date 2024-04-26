@@ -8,6 +8,9 @@ Glossary
    CTI
       Cyber threat intelligence
 
+   DSL
+      :term:`OpenSearch` :dsl:`query domain-specific language <>`
+
    FIM
       Wazuh's :wazuh:`File integrity monitoring (FIM) module
       <capabilities/file-integrity/index.html>`, also referred to as *syscheck*,
@@ -15,6 +18,10 @@ Glossary
 
    IoC
       Indicator of compromise
+
+   OpenSearch
+      OpenSearch is the default alert database, search engine and collection of
+      dashboards used by :term:`Wazuh`, unless Elastic/Kibana is used.
 
    SCO
       :term:`STIX` cyber observable
