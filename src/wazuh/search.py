@@ -1145,7 +1145,8 @@ class AlertSearcher(BaseModel):
         Search for user agents strings
         """
         return self.opensearch.search_multi(
-            value=stix_entity["value"], fields=["data.aws.userAgent"]
+            value=stix_entity["value"],
+            fields=["data.aws.userAgent", "data.office365.UserAgent"],
         )
 
     def hash_query_list(self, hashes: dict) -> list[MultiMatch]:

@@ -576,9 +576,7 @@ class Enricher(BaseModel):
             incident=incident,
             alerts=alerts,
             type="User-Agent",
-            fields=[
-                "data.aws.userAgent",
-            ],
+            fields=["data.aws.userAgent", "data.office365.UserAgent"],
         )
 
     def enrich_processes(
