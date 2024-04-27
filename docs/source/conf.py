@@ -39,7 +39,7 @@ html_static_path = ["_static"]
 html_context = {
     "display_github": True,
     "github_user": "misje",
-    "github_repo": "opencti-wazuh",
+    "github_repo": "opencti-wazuh-connector",
     "github_version": "master",
     "conf_py_path": "/docs/source/",
 }
@@ -60,10 +60,18 @@ autodoc_member_order = "bysource"
 
 # -- extlinks options --------------------------------------------------------
 extlinks = {
-    "octiu": ("https://docs.opencti.io/latest/usage/%s", "OpenCTI usage documentation"),
+    "octiu": ("https://docs.opencti.io/6.0.X/usage/%s", "OpenCTI usage documentation"),
     "octia": (
-        "https://docs.opencti.io/latest/administration/%s",
+        "https://docs.opencti.io/6.0.X/administration/%s",
         "OpenCTI administration documentation",
+    ),
+    "octid": (
+        "https://docs.opencti.io/6.0.X/deployment/%s",
+        "OpenCTI deployment documentation",
+    ),
+    "octigh": (
+        "https://github.com/OpenCTI-Platform/%s",
+        "OpenCTI's GitHub pages",
     ),
     "wazuh": (
         "https://documentation.wazuh.com/current/user-manual/%s",
@@ -82,6 +90,10 @@ extlinks = {
         "OpenSearch DSL query reference",
     ),
     "pydantic": ("https://docs.pydantic.dev/2.7/%s", "Pydantic documentation"),
+    "github": (
+        "https://github.com/misje/opencti-wazuh-connector/%s",
+        "Project's GitHub page",
+    ),
 }
 
 # TODO: gloassary and :term:

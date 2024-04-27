@@ -34,7 +34,10 @@ class OpenSearchConfig(ConfigBase):
     """
     username: str
     """
-    A user that has FIXME permissions
+    A user that has necessary read-only permissions to alert indices
+
+    See :ref:`create OpenSearch user <create-opensearch-user>` for a guide to
+    create a user.
     """
     password: str
     """

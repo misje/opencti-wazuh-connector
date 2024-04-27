@@ -150,8 +150,8 @@ Enrichment configuration
 
 Look at :ref:`the enrichment topic <enrichment>` for details.
 
-.. automodule:: wazuh.enrich_config
-   :members:
+.. autopydantic_settings:: wazuh.enrich_config.EnrichmentConfig
+   :settings-show-json-error-strategy: coerce
 
 Wazuh API configuration
 -----------------------
