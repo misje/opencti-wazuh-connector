@@ -156,7 +156,7 @@ class WazuhConnector:
         # in order to load from yaml (feed opencti dict to helper below):
         self.helper = OpenCTIConnectorHelper({}, True)
         # FIXME: remove:
-        self.helper.log_info(self.conf.model_dump_json())
+        log.info(self.conf.model_dump_json())
 
         self.confidence = (
             int(self.helper.connect_confidence_level)
@@ -238,7 +238,7 @@ class WazuhConnector:
             if not ind_obs:
                 raise ValueError("Indicator is not based on any observables")
             elif (count := len(ind_obs)) > 1:
-                self.helper.connector_logger.warning(
+                log.warning(
                     f"Indicator is based on several observables; using the first out of {count}"
                 )
             entity = self.helper.api.stix_cyber_observable.read(id=ind_obs[0]["id"])
@@ -249,10 +249,10 @@ class WazuhConnector:
             raise ValueError("Entity/observable not found")
 
         # Remove:
-        self.helper.log_debug(f"ENTITY: {entity}")
+        log.debug(f"ENTITY: {entity}")
 
         if not tlp_allowed(entity, self.conf.max_tlp):  # type: ignore
-            self.helper.connector_logger.info(f"max tlp: {self.conf.max_tlp}")
+            log.info(f"max tlp: {self.conf.max_tlp}")
             raise ValueError("Entity ignored because TLP not allowed")
 
         if (
@@ -269,13 +269,13 @@ class WazuhConnector:
         )
         stix_entity = enrichment["stix_entity"]
         # Remove:
-        self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
+        log.debug(f"STIX_ENTITY: {stix_entity}")
 
         obs_indicators = [
             ind for ind in self.entity_indicators(entity) if self.valid_indicator(ind)
         ]
         # Remove:
-        self.helper.log_debug(f"Indicators: {obs_indicators}")
+        log.debug(f"Indicators: {obs_indicators}")
 
         if self.conf.label_ignore_list:
             matching_labels = [
@@ -291,14 +291,14 @@ class WazuhConnector:
             and not obs_indicators
             and not self.conf.create_obs_sightings
         ):
-            self.helper.connector_logger.info(
+            log.info(
                 "Observable has no indicators and WAZUH_CREATE_OBSERVABLE_SIGHTINGS is false"
             )
             return "Observable has no indicators"
 
         if api_searchable_entity_type(entity["entity_type"]):
             if not self.wazuh:
-                self.helper.log_info(
+                log.info(
                     f'Cannot search for {entity["entity_type"]} because WAZUH_API_USE is false'
                 )
             else:
@@ -317,7 +317,7 @@ class WazuhConnector:
             for failure in result["_shards"]["failures"]:
                 # TODO: raise query failure in opensearch class (make optional
                 # through setting, especially if hits are non-empty):
-                self.helper.connector_logger.error(f"Query failure: {failure}")
+                log.error(f"Query failure: {failure}")
 
         hits = result["hits"]["hits"]
         if not hits:
@@ -412,14 +412,14 @@ class WazuhConnector:
 
         alerts_by_rule_id = sightings_collector.alerts_by_rule_id()
         counts = {rule_id: len(alerts) for rule_id, alerts in alerts_by_rule_id.items()}
-        self.helper.log_debug(f"COUNTS: {counts}")
+        log.debug(f"COUNTS: {counts}")
 
         if (
             self.conf.require_indicator_for_incidents
             and entity_type == "observable"
             and not obs_indicators
         ):
-            self.helper.connector_logger.info(
+            log.info(
                 "Not creating incident because entity is an observable, an indicator is required and no indicators are found"
             )
         elif entity_type == "vulnerability" and not (
@@ -428,7 +428,7 @@ class WazuhConnector:
             and field_or_default(stix_entity, "x_openti_cvss_base_score", 11)
             > score_threshold
         ):
-            self.helper.connector_logger.info(
+            log.info(
                 "Not creating incident because entity is an indicator, and CVSS3 score is not present, threshold is not set, or threshold is no met"
             )
         else:
@@ -520,7 +520,7 @@ class WazuhConnector:
                 results = self.wazuh.find_package(
                     stix_entity["name"], stix_entity.get("version")
                 )
-                self.helper.log_debug(results)
+                log.debug(results)
                 # for (agent, package) in results:
 
             case _:
@@ -762,7 +762,7 @@ class WazuhConnector:
         sightings_meta: SightingsCollector,
     ):
         def log_skipped_incident_creation(level: int):
-            self.helper.connector_logger.info(
+            log.info(
                 f"Not creating incident because rule level below threshold: {level} < {self.conf.create_incident_threshold}"
             )
             return True

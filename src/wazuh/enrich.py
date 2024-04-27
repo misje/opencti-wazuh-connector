@@ -165,7 +165,7 @@ class Enricher(BaseModel):
 
     def fetch_tools(self):
         if EType.Tool in self.config.types:
-            self.helper.connector_logger.info("Building list of tools")
+            log.info("Building list of tools")
             self.tools = self.helper.api.tool.list()
 
     def enrich_incident_mitre(self, *, incident: stix2.Incident, alerts: list[dict]):
