@@ -1,6 +1,8 @@
 OpenCTI–Wazuh connector
 ===================================================
 
+FIXME: introduction
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
@@ -18,6 +20,8 @@ Overview
 
 Installation
 ---------------------------------------------------
+
+quick start with docker compose (with or without wazuh/opencti)
 
 Configuration
 ---------------------------------------------------

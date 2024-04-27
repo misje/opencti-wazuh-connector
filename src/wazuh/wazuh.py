@@ -320,6 +320,7 @@ class WazuhConnector:
                 log.error(f"Query failure: {failure}")
 
         hits = result["hits"]["hits"]
+        # TODO: optionally include enrichment summary even if no hits:
         if not hits:
             return "No hits found"
 
@@ -1038,6 +1039,7 @@ class WazuhConnector:
             CustomObjectCaseIncident(
                 id=CaseIncident.generate_id(name, timestamp),
                 name=name,
+                # TODO: include info from Notes (not included in bundle?):
                 description="FIXME",
                 severity=severity,
                 priority=priority_from_severity(severity),
