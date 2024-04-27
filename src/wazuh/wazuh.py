@@ -271,15 +271,11 @@ class WazuhConnector:
         # Remove:
         self.helper.log_debug(f"STIX_ENTITY: {stix_entity}")
 
+        obs_indicators = [
+            ind for ind in self.entity_indicators(entity) if self.valid_indicator(ind)
+        ]
         # Remove:
-        if entity["entity_type"] != stix_entity["x_opencti_type"]:
-            self.helper.log_debug(
-                f'DIFFERENT: entity_type: {entity["entity_type"]}, x_opencti_type: {stix_entity["x_opencti_type"]}'
-            )
-
-        obs_indicators = self.entity_indicators(entity)
-        # Remove:
-        self.helper.log_debug(f"INDS: {obs_indicators}")
+        self.helper.log_debug(f"Indicators: {obs_indicators}")
 
         if self.conf.label_ignore_list:
             matching_labels = [
@@ -491,6 +487,27 @@ class WazuhConnector:
             if (ind := self.helper.api.indicator.read(id=obj["id"])) is not None
             if ind is not None
         ]
+
+    def valid_indicator(self, entity: dict) -> bool:
+        if self.conf.require_indicator_detection and not field_or_default(
+            entity, "detection", False
+        ):
+            log.info(f"Ignoring indicator {entity['name']} because detection is false")
+            return False
+        elif self.conf.ignore_revoked_indicators and field_or_default(
+            entity, "revoked", False
+        ):
+            log.info(f"Ignoring indicator {entity['name']} because it is revoked")
+            return False
+        elif (threshold := self.conf.indicator_score_threshold) is not None and (
+            score := field_or_default(entity, "x_opencti_score", 50)
+        ) < threshold:
+            log.info(
+                f"Ignoring indicator {entity['name']} because its score is below the threshold: {score} < {threshold}"
+            )
+            return False
+
+        return True
 
     def _query_api(self, entity: dict, stix_entity: dict):
         # TODO: handle results. Refactor this file first

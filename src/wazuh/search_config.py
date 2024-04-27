@@ -205,6 +205,15 @@ class SearchConfig(ConfigBase):
         FileSearchOption.AllowRegexp,
         FileSearchOption.CaseInsensitive,
     }
+    """
+    File/Artifact searching options
+
+    See :attr:`FileSearchOption` for details.
+
+    The set may be specified as a comma-separated string, like
+
+    - "search-size,allow-regexp, case-insensitive"
+    """
 
     dirsearch_options: set[DirSearchOption] = {
         DirSearchOption.MatchSubdirs,
@@ -213,6 +222,15 @@ class SearchConfig(ConfigBase):
         DirSearchOption.IgnoreTrailingSlash,
         DirSearchOption.CaseInsensitive,
     }
+    """
+    Directory searching options
+
+    See :attr:`DirSearchOption` for details.
+
+    The set may be specified as a comma-separated string, like
+
+    - "match-subdirs,require-abs-path, allow-regexp"
+    """
 
     procsearch_options: set[ProcessSearchOption] = {ProcessSearchOption.CaseInsensitive}
 

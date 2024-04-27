@@ -3,6 +3,7 @@
 Enrichment
 ===================================================
 
+in indicators
 
 ..
    Test to include only enum:

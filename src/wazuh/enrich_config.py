@@ -184,9 +184,17 @@ class EnrichmentConfig(ConfigBase):
         FIXME
         """
 
-    types: set[EntityType] = Field(title="Enrichment types", default=set())
+    types: set[EntityType] = Field(title="Enrichment types", default=set(EntityType))
     """
     Which entity types to enrich
+
+    The set may be specified as a comma-separated string, like
+
+    - "software,process"
+    - "Tool, URL, user-agent"
+    - "all"
+
+    The special string "all" includes all supported entity types.
     """
 
     filename_behaviour: set[FilenameBehaviour] = {

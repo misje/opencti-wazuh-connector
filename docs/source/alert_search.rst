@@ -39,7 +39,35 @@ Supported entities
 ~~~~~~~~~~~~~~~~~~
 
 The function documentation below describes how the various supported entities
-are looked up.
+are looked up. Most observables, along with vulnerabilities and indicators are
+supported.
+
+Indicators are special: **There is no direct support for searching
+indicators**, but they can be useful to include in the connector scope in the
+following situation:
+
+1. An observable is created in the OpenCTI platform. It is automatically
+   enriched by the connector, but because the configuration requires
+   observables to have indicators based on them (see
+   :attr:`~wazuh.config.Config.require_indicator_for_incidents`
+   , :attr:`~wazuh.config.Config.require_indicator_detection`
+   , :attr:`~wazuh.config.Config.ignore_revoked_indicators` and
+   :attr:`~wazuh.config.Config.indicator_score_threshold`), sightings/incidents
+   are not created.
+2. An indicator is later created with a relationship indicating that it is
+   "based on" an observable. The enrichment of the indicator will run on the
+   observable that it is based on, just as if the observable was enriched
+   directly. The search will now produce events, because of the new indicator
+   relationship.
+
+Even if the indicator and the relationship are created or imported into OpenCTI
+at the same time as the observable, this information is not available at the
+time the connector is told to enrich the observable automatically. The separate
+enrichment of the indicator is therefore necessary.
+
+.. note:: The indicator pattern is not used at all.
+.. note:: If the indicator is based on more than one observable, only the first
+          relationship is taked into    consideration.
 
 .. autoclass:: wazuh.search::AlertSearcher.query_file
    :members:

@@ -61,6 +61,10 @@ autodoc_member_order = "bysource"
 # -- extlinks options --------------------------------------------------------
 extlinks = {
     "octiu": ("https://docs.opencti.io/latest/usage/%s", "OpenCTI usage documentation"),
+    "octia": (
+        "https://docs.opencti.io/latest/administration/%s",
+        "OpenCTI administration documentation",
+    ),
     "wazuh": (
         "https://documentation.wazuh.com/current/user-manual/%s",
         "Wazuh user documentation",

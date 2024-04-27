@@ -69,8 +69,8 @@ class OpenSearchConfig(ConfigBase):
     limit: int = Field(gt=0, default=50)
     """
     Maximum number of results to return from the OpenSearch alert query (after
-    ordering by timestamp (and rule.level if :py:attr:`order_by_rule_level` is
-    True)).
+    ordering by timestamp (or your custom order, if :attr:`order_by` is
+    overridden).
     """
     order_by: list[OrderBy] = [OrderBy(field="timestamp", order="desc")]
     """
@@ -80,7 +80,7 @@ class OpenSearchConfig(ConfigBase):
     :wazuh:`alert rule level <ruleset/rules-classification.html>`, descending,
     then by timestamp, descending, in order to not miss any important alerts.
 
-    Format:
+    Alternative simple string format:
 
         * timestamp:desc
         * rule.level:desc,timestamp:desc

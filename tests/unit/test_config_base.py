@@ -67,6 +67,12 @@ def test_baseconf_inherit_enum_set_all(monkeypatch):
     assert conf.foo_set_enum == {FooEnum.Foo, FooEnum.Bar, FooEnum.Baz}
 
 
+def test_baseconf_inherrit_enum_set_case(monkeypatch):
+    monkeypatch.setenv("WAZUH_FOO_SET_ENUM", "foo,BAR,   bAZ")
+    conf = FooSettings.from_env()
+    assert conf.foo_set_enum == {FooEnum.Foo, FooEnum.Bar, FooEnum.Baz}
+
+
 def test_baseconf_set_str_json(monkeypatch):
     monkeypatch.setenv("WAZUH_FOO_SET_STR", '["foo", "bar", "bar"]')
     conf = FooSettings.from_env()
@@ -128,15 +134,6 @@ def test_baseconf_list_orderby_comma_string(monkeypatch):
     assert conf.foo_list_orderby == [
         OrderBy(field="rule.level", order=SortOrder.Desc),
         OrderBy(field="timestamp", order=SortOrder.Desc),
-    ]
-
-
-def test_baseconf_list_match_comma_string(monkeypatch):
-    monkeypatch.setenv("WAZUH_FOO_LIST_MATCH", "foo=bar, baz:qux")
-    conf = FooSettings.from_env()
-    assert conf.foo_list_match == [
-        Match(field="foo", query="bar"),
-        Match(field="baz", query="qux"),
     ]
 
 

@@ -46,12 +46,14 @@ class EnvSource(EnvSettingsSource):
             # comma-saparated string of values:
             except JSONDecodeError:
                 if typing.get_origin(field.annotation) is list:
-                    return value.split(",")
+                    return re.split(r",\s*", value)
                 else:
                     # If the type is an enum, pass it as an argument so that the
                     # special value 'all' can be treated especially (see
                     # comma_string_to_set()):
-                    return comma_string_to_set(value, args[0] if is_enum else None)
+                    return comma_string_to_set(
+                        value.lower(), args[0] if is_enum else None
+                    )
         elif (
             isinstance(value, str)
             and typing.get_origin(field.annotation) is list

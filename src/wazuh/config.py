@@ -121,10 +121,10 @@ class Config(ConfigBase):
     )
     api: WazuhAPIConfig = Field(default_factory=lambda: WazuhAPIConfig())
 
-    max_tlp: TLPLiteral = Field(
-        title="Max TLP",
-        description="Max TLP to allow for lookups",
-    )
+    max_tlp: TLPLiteral
+    """
+    Max :term:`TLP` to allow for lookups
+    """
     # TODO: Allow marking definitions IDs as well:
     tlps: set[str] | None = Field(
         default="TLP:AMBER+STRICT",
@@ -266,7 +266,6 @@ class Config(ConfigBase):
     Sightings will always be created, regardless of whether the CVSS3 score is
     present and above the threshold.
     """
-    # TODO: low,medium,high etc too:
     create_incident_threshold: int = Field(
         ge=1,
         le=15,
@@ -331,13 +330,12 @@ class Config(ConfigBase):
         default={"hygiene", "wazuh_ignore"},
     )
     """
-    List of lables which, if present in the entity, will make the connector to
+    List of labels which, if present in the entity, will make the connector to
     stop processing
 
     This is usful for ignoring low-quality or noisy data, and to prevent the
     connector from running on its own enriched data. See FIXREF recursion.
     """
-    # TODO: Fix wazuh.py to support set:
     enrich_labels: set[str] = Field(
         default=["wazuh_ignore"],
     )
@@ -362,6 +360,51 @@ class Config(ConfigBase):
     entities
     """
     app_url: AnyHttpUrl
+    """
+    URL used to create links to the Wazuh dashboard
+    """
+    # TODO: include in doc everywhere that refers to create_obs_sightings and require_indicator_for_incidents
+    require_indicator_detection: bool = False
+    """
+    Only look up indicators whose *detection* field is true
+
+    If :attr:`create_obs_sightings` is false or if
+    :attr:`require_indicator_for_incidents` is true, indicators play a role in
+    how events are created. This setting ignores indicators that do not have
+    the *detection* property set to true. Not all sources set this field, so it
+    is disabled by default.
+
+    In recent OpenCTI versions, :octiu:`indicator lifecycle management
+    <indicators-lifecycle>` will automatically set *detection* to false
+    according to :octia:`decay rules <decay-rules>`.
+    """
+    # TODO: include in doc everywhere that refers to create_obs_sightings and require_indicator_for_incidents
+    ignore_revoked_indicators: bool = True
+    """
+    Only look up indicators that are not revoked
+
+    If :attr:`create_obs_sightings` is false or if
+    :attr:`require_indicator_for_incidents` is true, indicators play a role in
+    how events are created. This setting ignores indicators that have the
+    *revoked* property set to true.
+
+    In recent OpenCTI versions, :octiu:`indicator lifecycle management
+    <indicators-lifecycle>` will automatically set *revoked* to true
+    according to :octia:`decay rules <decay-rules>`.
+    """
+    indicator_score_threshold: int | None = Field(ge=0, le=100, default=None)
+    """
+    Only look up indicators whose score is above or equals this threshold
+
+    If :attr:`create_obs_sightings` is false or if
+    :attr:`require_indicator_for_incidents` is true, indicators play a role in
+    how events are created. This setting ignores indicators that have the
+    *revoked* property set to true.
+
+    In recent OpenCTI versions, :octiu:`indicator lifecycle management
+    <indicators-lifecycle>` will automatically adjut the score according to
+    :octia:`decay rules <decay-rules>`.
+    """
 
     @field_validator("max_tlp", mode="before")
     @classmethod
