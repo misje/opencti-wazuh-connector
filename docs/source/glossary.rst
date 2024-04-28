@@ -5,6 +5,9 @@ Glossary
 
 .. glossary::
 
+   AWS
+      Amazon Web Services
+
    CTI
       Cyber threat intelligence
 
@@ -71,8 +74,14 @@ Glossary
    SCO
       :term:`STIX` cyber observable
 
+   SDO
+      :term:`STIX` domain object
+
    SIEM
       Security information and event management
+
+   SRO
+      :term:`STIX` relationship object
 
    STIX
       Structured Threat Information Expression, a language and serialisation

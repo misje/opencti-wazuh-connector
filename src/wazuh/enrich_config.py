@@ -232,23 +232,66 @@ class EnrichmentConfig(ConfigBase):
         """
         Enrich :stix:`software <#_7rkyhtkdthok>`
 
-        FIXME
+        Currently, software :term:`SCOs <SCO>` are only enriched from
+        vulnerability alerts.
+
+        The following properties may be set:
+
+        - name (always)
+        - version
         """
         Tool = "tool"
         """
-        FIXME
+        Enrich :stix:`tool <#_z4voa9ndw8v>` :term:`SDOs <SDO>`
+
+        Tools are enriched by looking up names of all tools found in OpenCTI
+        (fetched using the API when the connector starts) in fields containing
+        command lines or names of executables. This may produce some false positives.
+
+        .. note:: This requires tools to exist in OpenCTI. The :octigh:`MITRE
+                  connector <connectors/tree/master/external-import/mitre>`
+                  provides a number of tools, along with a number of other
+                  very useful entities.
         """
         URL = "url"
         """
-        FIXME
+        Enrich :stix:`URLs <#_ah3hict2dez0>`
+
+        The following properties are set:
+
+        - value
         """
         UserAgent = "user-agent"
         """
-        FIXME
+        Enrich user agents strings
+
+        This is a custom :term:`SCO` provided by OpenCTI. Very few fields contain user agent strings. The only one so far are provided by the :term:`AWS` and Office 365 integrations.
+
+        The following properties are set:
+
+        - value
         """
         Vulnerability = "vulnerability"
         """
-        FIXME
+        Enrich :stix:`vulnerabilities <#_q5ytzmajn6re>`
+
+        Vulnerabilities are enriched from Wazuh's vulnerability checker, from
+        both events created when the vulnerabilities are detected, and when
+        they are resolved.
+
+        The following properties may be set (most are typically available):
+
+        - name (always)
+        - "CVSS - Score" (x_opencti_cvss_base_score)
+        - "CVSS3 - Severity" (x_opencti_cvss_base_severity)
+        - "CVSS3 - Attack vector (x_opencti_cvss_attack_vector)
+        - "CVSS3 - Integrity impact (x_opencti_cvss_integrity_impact)
+        - "CVSS3 - Availability impact (x_opencti_cvss_availability_impact)
+        - "CVSS3 - Confidentiality impact (x_opencti_cvss_confidentiality_impact)
+
+        Although alerts contain more metadata, there are no place sto put them
+        in the vulnerability :term:`SDO`, and the connector will not override
+        the description, since it typically contains useful information imported from another source.
         """
 
     types: set[EntityType] = Field(title="Enrichment types", default=set(EntityType))

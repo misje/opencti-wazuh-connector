@@ -17,3 +17,9 @@ There are a few exceptions, like when creating Network Address :term:`SCOs
 <SCO>` during :ref:`enrichment <enrichment>`. Without a description, which
 contains a textual representation of the source, destination and protocols,
 the information in these objects would be hard to grasp.
+
+Why can I not search for Software SCOs?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+There are no alerts that contain enough information about software installation
+(or removal), so this must be done with the Wazuh API. This is on the roadmap.
