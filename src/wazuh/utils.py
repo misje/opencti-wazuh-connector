@@ -512,6 +512,7 @@ def cvss3_to_severity(score: float):
             return "low"
 
 
+# TODO: This will break if case_priority_ov is customised by user. Make configurable in setting
 def priority_from_severity(severity: str):
     """
     Map incident severity to a fitting incident priority

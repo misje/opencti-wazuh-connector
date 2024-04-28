@@ -18,12 +18,12 @@ Sightings propagation from observable
 -------------------------------------
 
 This connector does not create sightings of indicators, and
-laves this job to this rule. Using the rule for this job
+leaves this job to this rule. Using the rule for this job
 instead of creating the sighting within the connector allows
 you to easily revert and remove indicator sightings simply by
 turning the rule off.
 
-Raise incident basd on sightings
+Raise incident based on sightings
 --------------------------------
 
 This rule creates incidents if an indicator is sighted in an

@@ -126,6 +126,7 @@ class Config(ConfigBase):
     Max :term:`TLP` to allow for lookups
     """
     # TODO: Allow marking definitions IDs as well:
+    # TODO: use TLPLiteral here as well
     tlps: set[str] | None = Field(
         default="TLP:AMBER+STRICT",
     )
@@ -155,6 +156,12 @@ class Config(ConfigBase):
     the connector produces a large number of STIX entities during enrichment,
     this setting may be used as a safe guard to prevent littering OpenCTI with
     a lot of noise.
+
+    .. seealso::
+
+        Consider adjusting :attr:`which entities to enrich
+        <wazuh.enrich_config.EnrichmentConfig.types>` to lower the number of
+        bundles produced through :ref:`enrichment <enrichment>`.
     """
     system_name: str = Field(
         min_length=1,
@@ -244,6 +251,11 @@ class Config(ConfigBase):
 
     Otherwise, only sightings (depending on :py:attr:`create_obs_sightings`)
     will be created.
+
+    .. seealso::
+
+        :ref:`Require indicator <require-indicator>` explains how several
+        settings determine when to ceate incidents.
     """
     create_incident: IncidentCreateMode = IncidentCreateMode.PerSighting
     """
@@ -334,7 +346,13 @@ class Config(ConfigBase):
     stop processing
 
     This is usful for ignoring low-quality or noisy data, and to prevent the
-    connector from running on its own enriched data. See FIXREF recursion.
+    connector from running on its own enriched data (which could lead to
+    "endless" recursion).
+
+    .. seealso::
+
+        Configure :attr:`enrich_labels` to set which labels that the connector
+        should include on entities created through :ref:`enrichment <enrichment>`.
     """
     enrich_labels: set[str] = Field(
         default=["wazuh_ignore"],
@@ -343,7 +361,13 @@ class Config(ConfigBase):
     List of labels to attach to all enriched observables
 
     The main use case for these labels is to prevent the connector from
-    automatically running on its own entities. See FIXREF recursion.
+    automatically running on its own entities (which could lead to "endless"
+    recursion).
+
+    .. note::
+        
+        When modifying this setting, be sure to include relevant labels in
+        :attr:`label_ignore_list`.
     """
     create_incident_response: bool = True
     """

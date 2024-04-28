@@ -28,8 +28,6 @@ class FilenameBehaviour(Enum):
     """
     # FIXME: implement:
     # CreateContains = "create-contains"
-    # FIXME: implement: (each parent dir as individual object)
-    # IndividualParentDirs
 
 
 class EnrichmentConfig(ConfigBase):
@@ -53,118 +51,187 @@ class EnrichmentConfig(ConfigBase):
         """
         Enrich :stix:`user accounts <#_azo70vgj1vm2>`
 
-        User accounts are enriched from FIXME.
+        User accounts will be created from all fields that contain usernames
+        and/or user IDs / SIDs. The user ID may be an e-mail, for instance in
+        alerts from Office 365 and :term:`GCP`.
+
+        The following properties may be set:
+
+        - account_login
+        - user_id
         """
         AttackPattern = "attack-pattern"
         """
-        Enrich :stix:`attack patterns <#_axjijf603msy>` (MITRE)
+        Enrich `MITRE <https://attack.mitre.org/>`_ :stix:`attack patterns <#_axjijf603msy>`
 
         Create and reference MITRE TTPs from rule.mitre.id. Only the MITRE ID is
         used, so unless another connector like :ghconnector:`mitre
         <external-import/mitre>` is used, the attack patterns created by
         opencti-wazuh will be empty, containing only the MITRE ID.
+
+        The following properties are set:
+
+        - Name
+        - External ID
         """
         Directory = "directory"
         """
-        Enrich :stix:`directories <#_lyvpga5hlw52>` from
+        Enrich :stix:`directories <#_lyvpga5hlw52>` from paths
 
-            * data.audit.directory.name
-            * data.home
-            * data.osquery.columns.directory
-            * data.pwd
+        The fields used are fields known to contain only paths, without any
+        filenames. Directory objects are still created as parent directory
+        references whenever File objects are created. See :attr:`File`.
 
         The following properties are set:
 
-            * path
+        - path
         """
         Domain = "domain-name"
         """
-        Enrich :stix:`domain names <#_prhhksbxbg87>` from
+        Enrich :stix:`domain names <#_prhhksbxbg87>`
 
-            * data.dns.question.name
-            * data.office365.ParticipantInfo.ParticipatingDomains
-            * data.osquery.columns.hostname
-            * data.win.eventdata.queryName
-            * data.win.system.computer
+        Since it is often hard to distinguish hostnames from domain names, no
+        hostname :term:`SCOs <sco>` (OpenCTI's custom SCO) are created.
+        Hostnames may be created as domain names.
 
         The following properties are set:
 
-            * value
+        - value
         """
         EMailAddr = "email-addr"
         """
-        Enrich :stix:`e-mail addresses <#_wmenahkvqmgj>` from
-
-            * data.gcp.protoPayload.authenticationInfo.principalEmail
-            * data.office365.UserId
+        Enrich :stix:`e-mail addresses <#_wmenahkvqmgj>`
 
         The following properties are set:
 
-            * value
+        - value
         """
         File = "file"
         """
-        Enrich :stix:`files <#_99bl2dibcztv>`. File names (name and
-        x_opencti_additional_names) are fetched from
+        Enrich :stix:`files <#_99bl2dibcztv>`
 
-            * data.ChildPath
-            * data.ParentPath
-            * data.Path
-            * data.TargetFilename
-            * data.TargetPath
-            * data.audit.file.name
-            * data.audit.file.name
-            * data.file
-            * data.sca.check.file
-            * data.smbd.filename
-            * data.smbd.new_filename
-            * data.virustotal.source.file
-            * data.win.eventdata.file
-            * data.win.eventdata.filePath
+        The following properties may be set:
 
-        Hashes (MD5, SHA-1, and SHA-256) are fetched from
-
-            * data.osquery.columns.md5
-            * data.osquery.columns.sha1
-            * data.osquery.columns.sha256
-            * syscheck.md5_after
-            * syscheck.sha1_after
-            * syscheck.sha256_after
-
-        If FIXME:filename_behaviour is FIXME, a nested Directory observable
-        will also be created and set as *parent directory*. If FIXME is FIXME,
-        the filename will contain only the filename, otherwise the full path
-        will be used as filename. This also applies to all filenames in
-        x_opencti_additional_names.
-
-        FIXME: size and othes
+        - name (always)
+        - MD5
+        - SHA1
+        - SHA256
+        - atime
+        - ctime
+        - mtime
+        - size
         """
         IPv4Address = "ipv4-addr"
         """
-        FIXME
+        Enrich :stix:`IPv4 <#_ki1ufj1ku8s0>` addresses
+
+        The following properties are set:
+
+        - value
         """
         IPv6Address = "ipv6-addr"
         """
-        FIXME
+        Enrich :stix:`IPv6 <#_oeggeryskriq>` addresses
+
+        The following properties are set:
+
+        - value
         """
         MAC = "mac-addr"
         """
-        FIXME
+        Enrich :stix:`MAC addresses <#_f92nr9plf58y>`
+
+        The format used is lower-case colon-delimited hexadecimal characters
+        (EUI-48, as per the :term:`STIX` standard).
+
+        The following properties are set:
+
+        - value
         """
         NetworkTraffic = "network-traffic"
         """
-        FIXME
+        Enrich :stix:`network traffic <#_rgnc3w40xy>`
+
+        As opposed to when searching for network traffic :term:`SCOs <SCO>`,
+        enrichment will only extract network traffic from fields known to
+        contain network traffic logs. Searching is perfomed much more broadly.
+        Therefore, there is (currently) no support for domain names and MAC
+        addreses as source/destination.
+
+        The following properties may be set:
+
+        - src_ref (IPv4-Addr/IPv6-Addr)
+        - dst_ref (IPv4-Addr/IPv6-Addr)
+        - src_port
+        - dst_port
+        - protocols
+        - description
+
+        At least two of src_ref, dst_ref, src_port and dst_port must be
+        present for the SCO to be created. protocols may be inferred from the
+        event.
+
+        .. note:: Unfortunately, OpenCTI has decided to focus on dst_port when
+                  displaying the network traffic SCO in graphs, or "Unknown"
+                  if the dst_port is not set. In many alerts, the destination
+                  port is not known. In order to provide a more helpful way to
+                  understand the SCO, the connector writes a connetion string
+                  in the description, like "ipv4:ssh 10.20.30.40 →
+                  10.20.30.42:?".
         """
         Process = "process"
         """
-        FIXME
+        Enrich :stix:`processes <#_hpppnm86a1jm>`
+
+        Due to a limitation set by OpenCTI (not the :term:`STIX` standard),
+        process :term:`SCOs <SCO>` cannot be created unless *command_line* can
+        be populated (even if there is a lot of other useful information). The
+        log will inform about this (log level *info*) when this happens.
+
+        sysmon
+        ------
+
+        The following properties may be set (most are typically available):
+
+        - pid
+        - cwd
+        - command_line
+        - creator (User-Account with account_login and/or user_id)
+        - image (File with filename (and SHA256))
+        - parent_ref (Process with similar information about the parent
+          process)
+
+        auditd
+        ------
+
+        The following properties may be set (most are typically available):
+    
+        - pid
+        - command_line
+        - creator (User-Account with user_id (auid))
+        - image (File with filename)
+
+        ppid (parent PID) is available, but cannot be referenced because it
+        would required using parent_ref and another Process object, and there
+        is no command_line information for the parent.
         """
         RegistryKey = "windows-registry-key"
         """
-        FIXME
+        Enrich :stix:`Windows registry keys <#_luvw8wjlfo3y>`
+
+        The following properties may be set:
+
+        - key (always)
+        - values
+
+        .. note:: Due to the OpenCTI bug :octigh:`#2574
+                  <opencti/issues/2574>`, the values are currently not
+                  imported.
         """
         Software = "software"
         """
+        Enrich :stix:`software <#_7rkyhtkdthok>`
+
         FIXME
         """
         Tool = "tool"

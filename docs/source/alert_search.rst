@@ -35,6 +35,8 @@ are not looked up by default (determined by
 :attr:`~wazuh.config.Config.enrich_labels`). In order to look up these
 entities, simply remove the *WAZUH_IGNORE* label and run the enrichment again.
 
+.. _supported-entities:
+
 Supported entities
 ~~~~~~~~~~~~~~~~~~
 

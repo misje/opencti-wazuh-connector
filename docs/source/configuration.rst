@@ -87,6 +87,8 @@ Event creation
 
    Create sightings for observables that do not have indicators based on them
 
+.. _require-indicator:
+
 :attr:`~wazuh.config.Config.require_indicator_for_incidents`
 
    By default, incidents (and incident response cases) will only be created if
@@ -102,6 +104,24 @@ Event creation
    Which entites to create as alert context for incidents. By default, all
    supported entities are enabled, which may be noisy (depending on the alert
    matched).
+
+When to run
+-----------
+
+The CONNECTOR_AUTO setting can be either *auto* or *manual*. Auto is most
+likely the most preferred choice. However, it is possible to use
+:octiu:`playbooks <automation>` to run :octiu:`enrichments
+<automation/?h=enrich#enrich-through-connector>` if you have an OpenCTI
+enterprice licence. In the example below, the opencti-wazuh-connector is
+configured as *manual*, and called through a playbook. The first block is set
+to filter on author, so that the connector will only look entities from
+high-quality data sources:
+
+.. image:: images/playbook_1.png
+
+See `this Filigran blog post
+<https://blog.filigran.io/introducing-threat-intelligence-automation-and-playbooks-in-opencti-b9e2f9483aba>`_
+for an introduction on playbooks.
 
 
 cti conf. opensearch, api, tlp conf. etc.

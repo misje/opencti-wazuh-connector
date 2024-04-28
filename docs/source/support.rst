@@ -38,7 +38,10 @@ many of the following steps as possible (this assumes a docker setup):
 #. Copy all the connector logs up to and including the failure, and be sure to
    include the worker log if the fault is a MISSING REFERENCE error.
 #. Include your connector configuration, but **remember to remove all screts
-   and sensible information, like URLs, usernames and passwords**
+   and sensible information, like URLs, usernames and passwords**. Use a line
+   like this to strip sensible information: ``sed -r
+   '/TOKEN|USERNAME|PASSWORD|URL/c\(REDACTED)' docker-compose.yml >
+   /tmp/docker-compose.yml``.
 #. If possible, include relevant Wazuh alerts
 
 Ideally, try to reproduce the issue in a fresh OpenCTI installation. You can

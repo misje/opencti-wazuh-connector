@@ -15,6 +15,7 @@ class FileSearchOption(Enum):
     <#_99bl2dibcztv>`/:stix:`Artifact <#_4jegwl6ojbes>` :term:`SCOs <SCO>`
     """
 
+    # TODO: SizeAsMin
     SearchSize = "search-size"
     """
     If *size* is defined in the File SCO, search for size along with filename

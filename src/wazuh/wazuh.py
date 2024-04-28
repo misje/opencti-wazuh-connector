@@ -235,6 +235,7 @@ class WazuhConnector:
             # TODO: In some distant feature, with a STIX shifter implementation
             # for Wazuh, look up the STIX pattern in the indicator and use that
             # in a search.
+            # TODO: alternatively, add OpenSearch DSL as a custom pattern_type_ov and use something like mitre/stix2patterns_translator to convert int o elastic_query
             if not ind_obs:
                 raise ValueError("Indicator is not based on any observables")
             elif (count := len(ind_obs)) > 1:
@@ -1041,6 +1042,7 @@ class WazuhConnector:
                 name=name,
                 # TODO: include info from Notes (not included in bundle?):
                 description="FIXME",
+                # TODO: this may break if user changes case_severity_ov. Make customisable from setting
                 severity=severity,
                 priority=priority_from_severity(severity),
                 **self.stix_common_attrs,

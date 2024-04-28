@@ -5,9 +5,9 @@ opencti-wazuh-connector is an `OpenCTI
 <https://filigran.io/solutions/open-cti/>`_ :octid:`connector <connectors>`
 that lets you look up entities from your cyber threat intelligence database in
 your `Wazuh SIEM <https://wazuh.com>`_. It's implemented as an
-:octid:`enrichment connector <connectors/#enrichment>`, which triggers
-automatically (or manually if you want) whenever a new entity is added to the
-OpenCTI database.
+:octiu:`enrichment connector <enrichment>`, which triggers
+automatically (or manually if you want) whenever a new entity
+is added to the OpenCTI database.
 
    .. image:: images/ir_case_example1.png
 

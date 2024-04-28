@@ -71,6 +71,7 @@ class AlertSearcher(BaseModel):
                 return self.query_reg_value(stix_entity=stix_entity)
             case "Process":
                 return self.query_process(stix_entity=stix_entity)
+            # TODO: software
             case "Vulnerability":
                 return self.query_vulnerability(stix_entity=stix_entity)
             case "User-Account":

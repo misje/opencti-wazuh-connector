@@ -3,6 +3,8 @@ Installation
 
 TODO
 
+how to set up opencti (list of connectors paid/unpaid)
+
 
 .. toctree::
    :maxdepth: 2

@@ -15,15 +15,54 @@ Glossary
       In the contect of this connector, *enrichment* can mean both of the
       following:
 
-      1. The OpenCTI concept
+      #. The OpenCTI concept of running an :octiu:`enrichment connector
+         <enrichment>` to enrich an entity, typically an :term:`SCO`, with
+         more information. This connector does not really do that, but chooses
+         the :octid:`enrichment connector type <connectors/#enrichment>`,
+         because it fits the most. The *enrichment* performed by running this
+         connector, is searching for the entity in Wazuh and create sightings
+         and incidents. Incidents, however, are packed with objects extracted
+         as context from alerts. This is what this connector refers to as
+         enrichment in its architecture:
+
+      #. When an incident (and an incident response case) is created by this
+         connector, as many entities as possible are created from the
+         available information in the alerts returned by the search. This is
+         the *enrichment* stage in the connector.
 
    FIM
       Wazuh's :wazuh:`File integrity monitoring (FIM) module
       <capabilities/file-integrity/index.html>`, also referred to as *syscheck*,
       creates events when files are created, modified and deleted.
 
+   GCP
+      Google Cloud Platform
+
    IoC
       Indicator of compromise
+
+   Marking definition
+      Marking definition is a :stix:`STIX meta object <#_95gfoglikdzh>` used
+      to segregate data in OpenCTI. The most common use case is to categorise
+      and protect data based on its sensitivity and classification level. See
+      the OpenCTI documentation on :octia:`data segregation <segregation>` for
+      more information.
+
+
+      In this connector, the following settings relating to marking
+      definitions/TLP:
+
+      :attr:`~wazuh.config.Config.max_tlp`
+         
+         The highest TLP this connector is allowed to look up. For instance,
+         if max_tlp is set to TLP:AMBER, entities marked with TLP:RED will be
+         ignored.
+
+      :attr:`~wazuh.config.Config.tlps`
+
+         This list of marking definitions will be set on every single entity
+         produced by the connector (mainly through :ref:`enrichment
+         <enrichment>`.
 
    OpenSearch
       OpenSearch is the default alert database, search engine and collection of
@@ -46,7 +85,13 @@ Glossary
       :stix:`STIX reference <>` for details.
 
    TLP
-      Traffic light protocol
+      Traffic light protocol, the default :term:`marking definition` used in
+      OpenCTI. See the OpenCTI documentation on :octia:`TLP in data
+      seggregation <segregation/?h=traff#traffic-light-protocol>` for more
+      information.
+
+      See :term:`marking definition` for more information on how TLP is used
+      in the connector.
 
    Wazuh
       An open-source :term:`SIEM`

@@ -255,6 +255,11 @@ class Enricher(BaseModel):
         return bundle
 
     def enrich_accounts(self, *, incident: stix2.Incident, alerts: list[dict]):
+        """
+        Enrich User-Account
+
+        See :attr:`~wazuh.enrich_config.EnrichmentConfig.EntityType.Account`
+        """
         # TODO: Optionally guess (setting) user_id–account_name by looking for alerts where both are present (for the same agent)
         return self.create_enrichment_obs_from_search_context(
             incident=incident,
@@ -267,21 +272,22 @@ class Enricher(BaseModel):
                 "account_login": {
                     r"^[^(]+": ["data.srcuser", "data.dstuser"],
                     ".+": [
+                        "data.aws.userIdentitiy.userName",
+                        "data.gcp.protoPayload.authenticationInfo.principalEmail",
+                        "data.office365.UserId",
+                        "data.win.eventdata.samAccountname",
+                        "data.wineventdata.user",
                         "syscheck.uname_after",
                         "syscheck.uname_before",
-                        "data.wineventdata.user",
-                        "data.win.eventdata.samAccountname",
-                        "data.office365.UserId",
-                        "data.aws.userIdentitiy.userName",
                     ],
                 },
                 "user_id": {
                     r"(?<=\(uid=)\d+(?=\)$)": ["data.srcuser", "data.dstuser"],
                     ".+": [
                         "data.audit.uid",
-                        "data.userId",
-                        "data.uid",
                         "data.aws.userIdentitiy.accountId",
+                        "data.uid",
+                        "data.userId",
                     ],
                 },
             },
@@ -334,7 +340,6 @@ class Enricher(BaseModel):
             ],
         )
 
-    # TODO: add syscheck.size_after
     def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
         # First search for fields that may contain filenames/paths, but without hashes:
         results = {
@@ -779,7 +784,7 @@ class Enricher(BaseModel):
         ]
 
     def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):
-        # TODO: Add domainnames too if relevant in any fields
+        # TODO: Add mac addrs. and domainnames too if relevant in any fields
         from_addr_fields = [
             "data.srcip",
             "data.src_ip",

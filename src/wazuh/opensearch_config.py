@@ -17,6 +17,12 @@ from .config_base import ConfigBase
 class OpenSearchConfig(ConfigBase):
     """
     Configuration used for the opensearch module to connect to OpenSearch
+
+    .. _search-filters:
+
+    TODO: explain filters (include, exclude, filter). link to this section from settings
+
+    add more information about opensearch?
     """
 
     model_config = SettingsConfigDict(
