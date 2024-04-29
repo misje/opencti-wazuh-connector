@@ -158,6 +158,7 @@ class WazuhConnector:
         # FIXME: remove:
         log.info(self.conf.model_dump_json())
 
+        # FIXME: deprecated: remove and don't set confidence:
         self.confidence = (
             int(self.helper.connect_confidence_level)
             if isinstance(self.helper.connect_confidence_level, int)

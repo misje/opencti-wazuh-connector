@@ -10,3 +10,4 @@ how to set up opencti (list of connectors paid/unpaid)
    :maxdepth: 2
    
    create_opensearch_user
+   create_opencti_user

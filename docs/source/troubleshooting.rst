@@ -146,9 +146,8 @@ If you're using docker-compose, you can get a continuous log by running
 ``docker-compose logs -f --tail=0 connector-wazuh``, and adjust the *tail*
 argument to retrieve more historical log data.
 
-Known issues
+Known bugs
 ~~~~~~~~~~~~
-
 
 Registry values are not enriched
 --------------------------------

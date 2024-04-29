@@ -29,8 +29,8 @@ Use CONNECTOR_SCOPE to select which entities to search for. Use the various
 settings in :attr:`~wazuh.search_config.SearchConfig` to determine how searches
 are performed.
 
-Observables that have been created by the connector through :ref:`Enrichment`
-are not looked up by default (determined by
+Observables that have been created by the connector through :ref:`enrichment
+<enrichment>` are not looked up by default (determined by
 :attr:`~wazuh.config.Config.label_ignore_list` and
 :attr:`~wazuh.config.Config.enrich_labels`). In order to look up these
 entities, simply remove the *WAZUH_IGNORE* label and run the enrichment again.

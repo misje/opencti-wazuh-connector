@@ -289,9 +289,10 @@ class EnrichmentConfig(ConfigBase):
         - "CVSS3 - Availability impact (x_opencti_cvss_availability_impact)
         - "CVSS3 - Confidentiality impact (x_opencti_cvss_confidentiality_impact)
 
-        Although alerts contain more metadata, there are no place sto put them
+        Although alerts contain more metadata, there are no places to put them
         in the vulnerability :term:`SDO`, and the connector will not override
-        the description, since it typically contains useful information imported from another source.
+        the description, since it typically contains useful information
+        imported from another source.
         """
 
     types: set[EntityType] = Field(title="Enrichment types", default=set(EntityType))

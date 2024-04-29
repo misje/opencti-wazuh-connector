@@ -54,6 +54,9 @@ EType = EnrichmentConfig.EntityType
 # TODO: Move a lot into stix_helper
 # TODO: set last_seen in related-to relationships
 
+# TODO: DO set/update descriptions (optionally?). As long as connector has
+# suitable confidence level, it will not overwrite existing descriptions.
+
 TransformCallback = Callable[
     [Annotated[Any, "Field from search"]],
     Annotated[
