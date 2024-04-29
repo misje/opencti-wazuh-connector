@@ -27,6 +27,8 @@ class EnvSource(EnvSettingsSource):
     :pydantic:`<>`
     """
 
+    # TODO: possible to stringigy enum names (not values) and match? If not, accept without hyphen?
+
     def prepare_field_value(
         self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
     ) -> Any:

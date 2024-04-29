@@ -1,3 +1,5 @@
+.. _installation:
+
 Installation
 ============
 
@@ -11,3 +13,4 @@ how to set up opencti (list of connectors paid/unpaid)
    
    create_opensearch_user
    create_opencti_user
+   connector-compose

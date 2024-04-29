@@ -6,10 +6,9 @@ Support and community
 opencti-wazuh-connector is provided to the security community as open source,
 completely free of charge. There is no support provided, but the maintainers
 are very interested in feedback that improves the project. This requires
-effort on the reporters side, providing sufficient issue descriptions,
-necessary files to reproduce the issue, and logs. Please follow the guidelines
-and spend time writing good support requests, and you're more likely to be
-heard.
+effort from the reporter: Provide sufficient issue descriptions, necessary
+files to reproduce the issue, and logs. Please follow the guidelines and spend
+time writing good support requests, and you're more likely to be heard.
 
 The project is currently in no need of a dedicated communication forum. If you
 are in need of a help, :ref:`file an issue <issue>`.

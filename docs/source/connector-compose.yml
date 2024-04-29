@@ -1,0 +1,76 @@
+version: "3.7"
+services:
+  connector-wazuh:
+    restart: always
+    build:
+      context: .
+    environment:
+      # A timezone is needed for datetime tools to work as expected:
+      - TZ=UTC
+      - USE_TZ=true
+      - OPENCTI_URL=https://mycti.example.org
+      - OPENCTI_TOKEN=84387577-27ac-4751-b268-6893045aa73c
+      - CONNECTOR_ID=81f9d582-2b4e-45f1-98b6-f33492d66b6e
+      - CONNECTOR_NAME=Wazuh
+      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator
+      - CONNECTOR_AUTO=true
+      - CONNECTOR_LOG_LEVEL=warning
+      - CONNECTOR_EXPOSE_METRICS=true
+      - AGENTS_AS_SYSTEMS=true
+      - WAZUH_API_ENABLED=false # This API is still in development
+      - WAZUH_APP_URL=https://mywazuh.example.org
+      - WAZUH_AUTHOR_NAME=Wazuh
+      - WAZUH_BUNDLE_ABORT_LIMIT=500
+      - WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE=true
+      - WAZUH_CREATE_AGENT_IP_OBSERVABLE=true
+      - WAZUH_CREATE_INCIDENT=per-sighting # per-query, per-sighting, per-alert-rule, per-alert, never
+      - WAZUH_CREATE_INCIDENT_RESPONSE=true
+      - WAZUH_CREATE_INCIDENT_SUMMARY=true
+      - WAZUH_CREATE_INCIDENT_SUMMARY=true
+      - CREATE_INCIDENT_THRESHOLD=1
+      - CREATE_OBS_SIGHTINGS=true
+      - CREATE_SIGHTING_SUMMARY=true
+      - ENRICH_FILENAME_BEHAVIOUR=create-dir,remove-path
+      - ENRICH_TYPES=all
+      - ENRICH_AGENT=true
+      - ENRICH_LABELS=wazuh_ignore
+      - HITS_ABORT_LIMIT=1000
+      - IGNORE_OWN_ENTITIES=false
+      - IGNORE_REVOKED_INDICATORS=true
+      - INDICATOR_SCORE_THRESHOLD=
+      - LABEL_IGNORE_LIST=hygiene,wazuh_ignore
+      - MAX_EXTREFS=10
+      - MAX_EXTREFS_PER_ALERT_RULE=2
+      - MAX_NOTES=10
+      - MAX_NOTES_PER_ALERT_RULE=2
+      - MAX_TLP=TLP:RED
+      - WAZUH_OPENSEARCH_EXCLUDE_MATCH=data.integration:opencti
+      - WAZUH_OPENSEARCH_FILTER=
+      - WAZUH_OPENSEARCH_INCLUDE_MATCH=
+      - WAZUH_OPENSEARCH_INDEX=wazuh-alerts-*
+      - WAZUH_OPENSEARCH_LIMIT=50
+      - WAZUH_OPENSEARCH_ORDER_BY=timestamp:desc
+      - "WAZUH_OPENSEARCH_PASSWORD=SecretPassword" # Remember double-$ if password contains $:
+      - "WAZUH_OPENSEARCH_SEARCH_AFTER=7 months ago" # No limit can cause search errors, especially with regexp queries (possibly mitigated by increasing indices.query.bool.max_clause_count)
+      - WAZUH_OPENSEARCH_URL=https://mywazuh.example.org:9200
+      - WAZUH_OPENSEARCH_USERNAME=cti_connector
+      - WAZUH_OPENSEARCH_VERIFY_TLS=true
+      - REQUIRE_INDICATOR_DETECTION=false
+      - REQUIRE_INDICATOR_FOR_INCIDENTS=true
+      - SEARCH_DIRSEARCH_OPTIONS=allow-regexp,case-insensitive,ignore-trailing-slash,match-subdirs,search-filenames
+      - SEARCH_FILESEARCH_OPTIONS=allow-regexp,case-insensitive,include-parent-dir-ref,include-reg-values,search-additional-filenames,search-filename-only,search-size
+      - SEARCH_IGNORE_PRIVATE_ADDRS=true
+      - SEARCH_LOOKUP_AGENT_IP=false
+      - SEARCH_LOOKUP_AGENT_NAME=false
+      - SEARCH_LOOKUP_HOSTNAMES_IN_CMD_LINE=false
+      - SEARCH_LOOKUP_MAC_VARIANTS=true
+      - SEARCH_LOOKUP_URL_INGORE_TRAILING_SLASH=false
+      - SEARCH_LOOKUP_URL_WITHOUT_HOST=false
+      - SEARCH_PROCSEARCH_OPTIONS=case-insensitive
+      - SYSTEM_NAME="Wazuh SIEM"
+      - TLPS=TLP:AMBER+STRICT
+      - VULNERABILITY_INCIDENT_CVSS3_SCORE_THRESHOLD=
+    volumes:
+      - /var/cache/wazuh
+    links:
+      - opencti:opencti

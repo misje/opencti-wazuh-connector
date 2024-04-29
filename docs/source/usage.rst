@@ -1,3 +1,5 @@
+.. _usage:
+
 Usage
 ===================================================
 
@@ -32,6 +34,8 @@ Incidents and alerting
 Case management
 ~~~~~~~~~~~~~~~
 
+Investigations
+--------------
 
 Examples
 ~~~~~~~~

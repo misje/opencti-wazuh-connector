@@ -1,5 +1,7 @@
+.. _config:
+
 Configuration
-===================================================
+=============
 
 The connector has a plethora of configuration options, allowing for detailed
 customisation in searching and enrichment. There are some settings you
@@ -8,13 +10,58 @@ usernames and passwords), and there are some settings you :ref:`should
 <important_settings>` read about, since they greatly affect the behaviour of
 the connector.
 
+Configuration file location
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The only currently supported way of specifying configuration is through
+environment variables. These are typically set in .env files or in the
+docker-compose.yml `environment secion
+<https://docs.docker.com/compose/compose-file/compose-file-v3/#environment>`_.
+See FIXME for a complete connector docker-compose example.
+
+All the configuration variables are references by capitalising their name,
+prefixed by either "WAZUH\_", "WAZUH_SEARCH\_", "WAZUH_ENRICH\_" etc. See
+*env_prefix* in the various class references. OpenCTI settings are FIXME.
+
+Example:
+
+.. code-block::
+
+   - "WAZUH_AUTHOR_NAME=Wazuh SIEM"
+   - WAZUH_BUNDLE_ABORT_LIMIT=200
+   - WAZUH_OPENSEARCH_USERNAME=cti_connector
+   - "WAZUH_OPENSEARCH_PASSWORD=MyPa$$$$word"
+   - WAZUH_SEARCH_LOOKUP_AGENT_IP=false
+   - WAZUH_ENRICH_TYPES=file,attack-pattern
+
+See :ref:`the connector docker-compose example <connector-compose>` for a more
+complete example.
+
+.. note::
+
+   Escape the whole expression in quotes when the string contains spaces
+
+.. note::
+
+   '$' must be escaped by another '$'. "MyPa$$word" therefore becomes
+   "MyPa$$$$word". This is necessary to prevent docker from interpreting the
+   dollar sign as `environment variable substitution
+   <https://docs.docker.com/compose/compose-file/compose-file-v3/#variable-substitution>`_.
+
+.. note::
+
+   Complicated types, like set of enums or other nested types must either be
+   written as JSON, or in most cases, as a simplified comma-separated
+   expression. Look at the individual setting documentation for alternative
+   formats.
+
 .. _required_settings:
 
 Required settings
 ~~~~~~~~~~~~~~~~~
 
-All required settings are marked *[Required]* in the complete configuration
-documentation.
+All required settings are marked *[Required]* in the :ref:`configuration
+reference <config-reference>`.
 
 - OPENCTI_URL
 - OPENCTI_TOKEN
@@ -102,7 +149,7 @@ Event creation
 :attr:`enrich.types <wazuh.enrich_config.EnrichmentConfig.types>`
 
    Which entites to create as alert context for incidents. By default, all
-   supported entities are enabled, which may be noisy (depending on the alert
+   supported entities are enabled, which may be noisy (depending on the alerts
    matched).
 
 When to run
@@ -114,7 +161,7 @@ likely the most preferred choice. However, it is possible to use
 <automation/?h=enrich#enrich-through-connector>` if you have an OpenCTI
 enterprice licence. In the example below, the opencti-wazuh-connector is
 configured as *manual*, and called through a playbook. The first block is set
-to filter on author, so that the connector will only look entities from
+to filter on author, so that the connector will only look up entities from
 high-quality data sources:
 
 .. image:: images/playbook_1.png
@@ -141,6 +188,8 @@ Other considerations
 
 Look at how your OpenCTI :ref:`rules engine <rules-engine>`
 is configured in order to avoid any surprises.
+
+.. _config-reference:
 
 Configuration reference
 ~~~~~~~~~~~~~~~~~~~~~~~

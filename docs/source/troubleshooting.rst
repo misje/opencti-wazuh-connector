@@ -44,7 +44,7 @@ This happens when an indicator is required in order to create sightings
 "[…] has no queryable data"
 ---------------------------
 
-This happens when the entity to enrich does not have any compatible metadata,
+This happens when the searched entity does not have any compatible metadata,
 e.g.
 
 - The entity is an Artifact and does not contain any hashes (there is no other
@@ -56,8 +56,9 @@ e.g.
 - The IPv4/IPv6 :term:`SCO` contains a private IP address, and the settings
   says to ignore these
 
-Set the :ref:`log level <enable-debug-logs>` to at least *info* and inspect
-the logs if you want to understand why an entity has no queryable data.
+Set the :ref:`log level <enable-debug-logs>` to at least *info* and
+:ref:`inspect the logs <search-logs>` if you want to understand why an entity
+has no queryable data.
 
 "No hits found"
 ---------------
@@ -83,7 +84,7 @@ something, check the following:
 
 The OpenSearch query resulted in too many hits and the
 :attr:`~wazuh.config.Config.hits_abort_limit` safeguard aborted further
-processing. This indicates a poor search or that the setting is set too low.
+processing. This indicates a poor search or that this setting is set too low.
 
 "Bundle is too large […]"
 -------------------------
@@ -97,7 +98,7 @@ enrich <wazuh.enrich_config.EnrichmentConfig.types>`.
 No sightings are created
 ------------------------
 
-See :ref:`"Observable ahs no indicators" <no-sightings>`.
+See :ref:`"Observable has no indicators" <no-sightings>`.
 
 No incidents are created
 ------------------------
@@ -124,7 +125,7 @@ Network Traffic SCOs are always displayed as "Unknown"
 ------------------------------------------------------
 
 This happens when the destination port (dst_port) is not set, which is very
-often the case, bacause many alerts do not cotain this information. Sadly,
+often the case, bacause many alerts do not contain this information. Sadly,
 without the dst_port, OpenCTI has decided to just use "Unknown" instead of
 using other available information, like protocols.
 
@@ -138,6 +139,8 @@ ensure that the following environment variable is present and configured as
 shown in your *docker-compose.yml* file under the section *environment:*
 
 - **CONNECTOR_LOG_LEVEL=debug**
+
+.. _search-logs:
 
 Search the logs
 ~~~~~~~~~~~~~~~

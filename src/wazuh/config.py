@@ -40,11 +40,9 @@ class Config(ConfigBase):
         """
         How and when incidents should be created
 
-        If :octiu:`incidents <exploring-events/#incidents>` should be created,
-        (:py:attr:`~Config.require_indicator_for_incidents` is False or the
-        observable has indicators based on it, and the alert rule level equals
-        or is greater than :attr:`~Config.create_incident_threshold`), this
-        enumerator determines how incidents are created.
+        If :octiu:`incidents <exploring-events/#incidents>` should be created
+        (see :ref:`require indicator <require-indicator>`), this enumerator
+        determines how incidents are created.
 
         The amount of incidents created for every option is roughly in the
         following order, from the least to the most: :attr:`Never`,
@@ -78,9 +76,6 @@ class Config(ConfigBase):
         Never = "never"
         """
         Never create incidents.
-
-        .. note:: :octiu:`incident response cases <exploring-cases>` are still
-                  created if :attr:`~Config.create_incident_response` is True.
         """
 
     class AlertRuleSeverity(int, Enum):
@@ -243,7 +238,7 @@ class Config(ConfigBase):
     about each enrichment, along with OpenSearch query and results information,
     and attach it to all incidents.
 
-    See also :py:attr:`create_sighting_summary`. See :ref:`enrichment_note`.",
+    See also :py:attr:`create_sighting_summary`. See :ref:`enrichment_note`.
     """
     require_indicator_for_incidents: bool = True
     """

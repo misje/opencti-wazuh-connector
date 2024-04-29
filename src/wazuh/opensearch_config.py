@@ -105,7 +105,32 @@ class OpenSearchConfig(ConfigBase):
     :attr:`search_after`, :attr:`search_include` and :attr:`search_exclude` are
     ignored.
 
-    The implicit default filter is FIXME
+    When set as an environment variable, this setting must be specified as JSON.
+
+    The implicit default filter (based on the settings mentioned) is
+
+    .. code-block:: json
+
+        [
+            {
+                "range": {
+                    "@timestamp": {
+                        "gte": "<timestamp>",
+                    }
+                }
+            },
+            {
+                "bool": {
+                    "must_not": [
+                        {
+                            "match": {
+                                "data.integration": "opencti"
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
     """
 
     @field_validator("url", mode="before")

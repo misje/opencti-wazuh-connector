@@ -170,10 +170,11 @@ class DirSearchOption(Enum):
     """
     Normalise backslashes in observable path before searching
 
-    Replace all sequences of '\\' with '\\\\' and '\\\\\\\\' (searchng for both
-    variants).
+    Replace all sequences of '\\\\' with '\\\\\\\\' and '\\\\\\\\\\\\\\\\'
+    (searchng for both variants).
 
-    If AllowRegexp is enabled, this setting is ignored.
+    If AllowRegexp is enabled, this setting is ignored, and any number of
+    backslashes are searched for.
     """
     IgnoreTrailingSlash = "ignore-trailing-slash"
     """

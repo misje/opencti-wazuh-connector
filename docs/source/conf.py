@@ -46,17 +46,10 @@ html_context = {
 
 # -- autodoc options ---------------------------------------------------------
 autodoc_member_order = "bysource"
-# autodoc_pydantic_model_show_field_summary = False
-# autodoc_pydantic_field_signature_prefix = ' '
-# autodoc_pydantic_model_signature_prefix = 'class'
-# autodoc_pydantic_model_show_json = False
-# autodoc_pydantic_model_show_config_summary = False
-# autodoc_pydantic_model_show_config_member = False
-# autodoc_pydantic_model_show_validator_summary = False
-# autodoc_pydantic_model_show_validator_members = False
-# autodoc_pydantic_model_summary_list_order = 'bysource'
-# autodoc_pydantic_model_member_order = 'bysource'
-# autodoc_pydantic_field_list_validators = False
+# Enable these in developer doc. with directives if needed:
+autodoc_pydantic_settings_show_validator_members = False
+autodoc_pydantic_settings_show_validator_summary = False
+autodoc_pydantic_settings_show_json = False
 
 # -- extlinks options --------------------------------------------------------
 extlinks = {

@@ -24,7 +24,7 @@ you to easily revert and remove indicator sightings simply by
 turning the rule off.
 
 Raise incident based on sightings
---------------------------------
+---------------------------------
 
 This rule creates incidents if an indicator is sighted in an
 entity, and then creates a "targets" relationship between the

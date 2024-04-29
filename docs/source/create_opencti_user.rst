@@ -107,7 +107,7 @@ information about creating users for connectors.
 
 .. note::
 
-      You do not have to use groups for assigning roles and max confidence
+      You do not *have* to use groups for assigning roles and max confidence
       levels, but it makes administration easier.
 
 .. note::

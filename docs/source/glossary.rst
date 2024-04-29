@@ -5,6 +5,9 @@ Glossary
 
 .. glossary::
 
+   API
+      Application programming interface
+
    AWS
       Amazon Web Services
 
@@ -72,13 +75,17 @@ Glossary
       dashboards used by :term:`Wazuh`, unless Elastic/Kibana is used.
 
    SCO
-      :term:`STIX` cyber observable
+      :term:`STIX` cyber observable. See :ref:`observable <observable>` for
+      details.
 
    SDO
       :term:`STIX` domain object
 
    SIEM
       Security information and event management
+
+   SOC
+      Security operations centre
 
    SRO
       :term:`STIX` relationship object
@@ -101,6 +108,10 @@ Glossary
 
       See :term:`marking definition` for more information on how TLP is used
       in the connector.
+
+   TTP
+      Tactis, techniques and procedures, usually referring to `MITRE ATT&CK
+      <https://attack.mitre.org/>`_
 
    Wazuh
       An open-source :term:`SIEM`
