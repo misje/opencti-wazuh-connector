@@ -585,6 +585,8 @@ class Enricher(BaseModel):
             alerts=alerts,
             type="User-Agent",
             fields=["data.aws.userAgent", "data.office365.UserAgent"],
+            # Ignore empty strings:
+            validator=lambda x: x,
         )
 
     def enrich_processes(
