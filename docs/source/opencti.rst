@@ -46,7 +46,7 @@ STIX
 :term:`STIX` is a language and serialisation format used extensively in CTI to
 describe and share threat information. This documentation will provide a lot of
 links to the :stix:`STIX standard <>`, but you need not know anything about it.
-If you're curious about STIX, start with the `official STIX introduction
+If you are curious about STIX, start with the `official STIX introduction
 <https://oasis-open.github.io/cti-documentation/stix/intro>`_ instead of the
 standard reference.
 
@@ -116,12 +116,12 @@ OpenCTI categorieses the following :term:`SDOs <SDO>` and :term:`SROs <SRO>`
 - :ref:`Sightings <sighting>`
 - Observed data
 
-The former will be described shortly. Observed data corrspond to an extract
+The former will be described shortly. Observed data correspond to an extract
 from a log that contains observables. This sounds like a perfect fit for a
 connector like opencti-wazuh-connector, but this object is not used at all.
 Observed data is implemented in OpenCTI just for STIX compliance reasons, and
-is seemingly not used. In STIX, a sighting is supposed to of an indicator, with
-another reference to observed data (see the figure below). In OpenCTI,
+is seemingly not used. In STIX, a sighting is supposed to be of an indicator,
+with another reference to observed data (see the figure below). In OpenCTI,
 sightings are instead created directly against observables or indicators.
 
 .. figure:: images/stix_sighting.png
@@ -154,7 +154,7 @@ first/last seen range and increment count.
 Incident
 --------
 
-:octiu:`Incidents <exploring-events/?h=incide#incidents>` usually represents
+:octiu:`Incidents <exploring-events/?h=incide#incidents>` usually represent
 negative events, and are used by this connector when an :term:`IoC`, rather
 than just an observable, is detected. That is, when an observable is sighted,
 and that observable is part of an indicator.
@@ -167,9 +167,9 @@ entities as context, and link them to the incident.
 
    An incident created based on a sighting of an IPv4 address in a Wazuh agent
 
-:octiu:`Notifications <notifications>` may also create notifications, so that a
-:term:`SOC` can act on the incident immediately (possibly by using OpenCTI's
-own :ref:`case management system <ir-case>`).
+:octiu:`Notifications <notifications>` may also be created using triggers, so
+that a :term:`SOC` can act on the incident immediately (possibly by using
+OpenCTI's own :ref:`case management system <ir-case>`).
 
 
 Containers
@@ -229,3 +229,37 @@ on a new object. See :ref:`case management <case-management>` in the
 
 Connector
 ~~~~~~~~~
+
+.. figure:: images/connectors.png
+
+   List of selected connectors and how they are categorised (from the
+   :octid:`OpenCTI documentation <connectors>`)
+
+:octid:`Connectors <connectors>` are ways for OpenCTI to ingest, enrich and
+export data. The fie types of connectors are
+
+- External import
+- Internal enrichment (this is what opencti-wazuh-connector is)
+- Internal export
+- Internal import
+- Stream
+
+Typical use cases for connectors are to ingest data from sources like
+CrowdStrike, AlienVault and MITRE, and enrich data through services like
+Shodan, IpInfo, VirusTotal and Hybrid Analysis.
+
+Other :term:`SIEMs <SIEM>` are typically implemented as *stream* connectors,
+whereas this connector is an *enrichment* connector. This is because Wazuh does
+not stream data to OpenCTI. OpenCTI is the one looking up new data in Wazuh,
+not the other way around. For this, the enrichment interface is more suitable.
+
+There is clearly a missing piece in this integration, and that is looking up
+new alerts in Wazuh in OpenCTI. This is on the :ref:`roadmap`.
+
+If you are new to OpenCTI and want some help on finding useful connectors (free
+of charge), look at :ref:`this overview <connector-list>`.
+
+.. toctree::
+   :hidden:
+
+   connector-list

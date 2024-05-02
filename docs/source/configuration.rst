@@ -10,6 +10,11 @@ usernames and passwords), and there are some settings you :ref:`should
 <important_settings>` read about, since they greatly affect the behaviour of
 the connector.
 
+.. seealso::
+
+      See :ref:`OpenCTI configuration <opencti-configuration>` for
+      configuration/customisation of OpenCTI.
+
 Configuration file location
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -152,11 +157,13 @@ Event creation
    supported entities are enabled, which may be noisy (depending on the alerts
    matched).
 
+.. _when-to-run:
+
 When to run
 -----------
 
-The CONNECTOR_AUTO setting can be either *auto* or *manual*. Auto is most
-likely the most preferred choice. However, it is possible to use
+The CONNECTOR_AUTO setting can be either true (*auto*) or false (*manual*).
+Auto is most likely the most preferred choice. However, it is possible to use
 :octiu:`playbooks <automation>` to run :octiu:`enrichments
 <automation/?h=enrich#enrich-through-connector>` if you have an OpenCTI
 enterprice licence. In the example below, the opencti-wazuh-connector is

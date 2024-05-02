@@ -1,4 +1,4 @@
-.. _enrichment_note:
+.. _enrichment-note:
 
 Enrichment summary note
 ===================================================

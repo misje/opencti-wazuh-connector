@@ -15,7 +15,8 @@ Glossary
       Cyber threat intelligence
 
    DSL
-      :term:`OpenSearch` :dsl:`query domain-specific language <>`
+      Domain-specific language, or more specifically :term:`OpenSearch`'s
+      :dsl:`query DSL <>` in the context of this connector.
 
    Enrichment
       In the contect of this connector, *enrichment* can mean both of the
@@ -43,6 +44,10 @@ Glossary
 
    GCP
       Google Cloud Platform
+
+   GDPR
+      General Data Protection Regulation, an European Union regulation on
+      information privacy in the EU and EEA (European Economic Area)
 
    IoC
       Indicator of compromise

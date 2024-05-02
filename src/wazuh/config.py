@@ -230,7 +230,7 @@ class Config(ConfigBase):
     """
     Whether to create a summary :octiu:`STIX note <exploring-analysis/#notes>`
     about each enrichment, along with OpenSearch query and results information,
-    and attach it to all sightings. See :ref:`enrichment_note`.
+    and attach it to all sightings. See :ref:`enrichment and notes <notes>`.
     """
     create_incident_summary: bool = True
     """
@@ -238,7 +238,7 @@ class Config(ConfigBase):
     about each enrichment, along with OpenSearch query and results information,
     and attach it to all incidents.
 
-    See also :py:attr:`create_sighting_summary`. See :ref:`enrichment_note`.
+    See :py:attr:`create_sighting_summary` (this is the same summary).
     """
     require_indicator_for_incidents: bool = True
     """

@@ -4,13 +4,13 @@ Wazuh
 =====
 
 Wazuh is an open-source :term:`SIEM`. Read more about the tool on `its website
-<https://wazuh.com/>`_. You're expected to be familiar with Wazuh and have it
+<https://wazuh.com/>`_. You are expected to be familiar with Wazuh and have it
 deployed, otherwise this connector will not be very useful to you. However, if
-you're coming from the :term:`CTI` world and want to test the connector on a
+you are coming from the :term:`CTI` world and want to test the connector on a
 demo instance of Wazuh with test data, have a look at the :ref:`full demo
 <full-demo>`.
 
-In order to fully understand how the connector works, it's worth knowing at
+In order to fully understand how the connector works, it is worth knowing at
 least a little bit about how Wazuh works.
 
 .. _agent:
@@ -131,7 +131,7 @@ The following is an example alert:
    }
 
 Alerts do not follow a strict schema/model, but the same fields are reused in
-many decoders. It's also possible to write custom decoders for Wazuh, where
+many decoders. It is also possible to write custom decoders for Wazuh, where
 fields can be customised by the author.
 
 This connector makes an effort trying to search all possible related fields,

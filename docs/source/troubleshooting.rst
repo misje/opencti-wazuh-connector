@@ -156,3 +156,14 @@ Registry values are not enriched
 --------------------------------
 
 This is due to :octigh:`an OpenCTI issue <opencti/issues/2574>`.
+
+The *Matches* table in the alert note is broken
+-----------------------------------------------
+
+This happens when data from the alert contains text interpreted as valid
+Markdown. Markdown will be escaped in the future.
+
+External references only appear after a second enrichment
+---------------------------------------------------------
+
+This may be an OpenCTI bug, but it has not been confirmed yet.
