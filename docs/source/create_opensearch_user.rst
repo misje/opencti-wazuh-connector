@@ -9,8 +9,8 @@ and does not provide a way to query alerts.
 
 The Wazuh web interface is an OpenSearch dashboard, with a Wazuh app. You'll
 therefore see two places to configure users and roles. You'll need to create an
-OpenSearch user, and not a Wazuh user. Navigate to the OpenSearch **Security**
-section:
+*OpenSearch user*, and not a Wazuh user. Navigate to the OpenSearch
+**Security** section:
 
 .. image:: images/os_user_1.png
 

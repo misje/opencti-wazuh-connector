@@ -8,7 +8,7 @@ Wazuh is an open-source :term:`SIEM`. Read more about the tool on `its website
 deployed, otherwise this connector will not be very useful to you. However, if
 you are coming from the :term:`CTI` world and want to test the connector on a
 demo instance of Wazuh with test data, have a look at the :ref:`full demo
-<full-demo>`.
+<full-demo-compose>`.
 
 In order to fully understand how the connector works, it is worth knowing at
 least a little bit about how Wazuh works.
@@ -134,7 +134,7 @@ Alerts do not follow a strict schema/model, but the same fields are reused in
 many decoders. It is also possible to write custom decoders for Wazuh, where
 fields can be customised by the author.
 
-This connector makes an effort trying to search all possible related fields,
+This connector makes an effort trying to search all possible relevant fields,
 but given the lack of a schema/model, **false positives are possible**, as well
 as **false negatives** (alerts missed in searches). Please :ref:`report
 <issue>` false positives and false negatives.

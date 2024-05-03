@@ -5,10 +5,20 @@ Configuration
 
 The connector has a plethora of configuration options, allowing for detailed
 customisation in searching and enrichment. There are some settings you
-:ref:`have to <required_settings>` set (there are no defaults, like
+:ref:`have to <required-settings>` set (there are no defaults, like
 usernames and passwords), and there are some settings you :ref:`should
-<important_settings>` read about, since they greatly affect the behaviour of
-the connector.
+<important-settings>` read about and possibly adjust, since they greatly affect
+the behaviour of the connector.
+
+.. seealso::
+
+   See :ref:`common connector settings <common-connector-settings>` for OpenCTI
+   settings not covered in this reference.
+
+.. toctree::
+   :hidden:
+
+   common_connector_settings
 
 .. seealso::
 
@@ -20,7 +30,7 @@ Configuration file location
 
 The only currently supported way of specifying configuration is through
 environment variables. These are typically set in .env files or in the
-docker-compose.yml `environment secion
+docker-compose.yml `environment section
 <https://docs.docker.com/compose/compose-file/compose-file-v3/#environment>`_.
 See FIXME for a complete connector docker-compose example.
 
@@ -60,7 +70,7 @@ complete example.
    expression. Look at the individual setting documentation for alternative
    formats.
 
-.. _required_settings:
+.. _required-settings:
 
 Required settings
 ~~~~~~~~~~~~~~~~~
@@ -80,30 +90,16 @@ reference <config-reference>`.
 - :attr:`Wazuh URL <wazuh.config.Config.app_url>`
 - :attr:`Max TLP <wazuh.config.Config.max_tlp>`
 
-The following scopes are supported by the connector (read more in the :ref:`alert search <alert_search>` section):
+See :ref:`common connector settings <common-connector-settings>` for a
+reference for OpenCTI-specific and common connector settings (those prefixed by
+*OPENCTI_* and *CONNECTOR_*).
 
-- Artifact
-- Directory
-- Domain-Name
-- Email-Addr
-- Hostname
-- IPv4-Addr
-- IPv6-Addr
-- Mac-Addr
-- Network-Traffic
-- Process
-- Software
-- StixFile
-- Url
-- User-Account
-- User-Agent
-- Windows-Registry-Key
-- Windows-Registry-Value-Type
-- Vulnerability
-- Indicator
+The following scopes are supported by the connector (read more in the
+:ref:`alert search <alert_search>` section):
 
+.. include:: supported_entities.rst
 
-.. _important_settings:
+.. _important-settings:
 
 Important settings
 ~~~~~~~~~~~~~~~~~~

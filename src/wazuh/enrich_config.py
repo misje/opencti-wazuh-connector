@@ -212,8 +212,8 @@ class EnrichmentConfig(ConfigBase):
         - image (File with filename)
 
         ppid (parent PID) is available, but cannot be referenced because it
-        would required using parent_ref and another Process object, and there
-        is no command_line information for the parent.
+        would imply using parent_ref and another Process object, and there is
+        no command_line information for the parent.
         """
         RegistryKey = "windows-registry-key"
         """
@@ -282,17 +282,17 @@ class EnrichmentConfig(ConfigBase):
         The following properties may be set (most are typically available):
 
         - name (always)
-        - "CVSS - Score" (x_opencti_cvss_base_score)
-        - "CVSS3 - Severity" (x_opencti_cvss_base_severity)
-        - "CVSS3 - Attack vector (x_opencti_cvss_attack_vector)
-        - "CVSS3 - Integrity impact (x_opencti_cvss_integrity_impact)
-        - "CVSS3 - Availability impact (x_opencti_cvss_availability_impact)
-        - "CVSS3 - Confidentiality impact (x_opencti_cvss_confidentiality_impact)
+        - CVSS - Score (x_opencti_cvss_base_score)
+        - CVSS3 - Severity (x_opencti_cvss_base_severity)
+        - CVSS3 - Attack vector (x_opencti_cvss_attack_vector)
+        - CVSS3 - Integrity impact (x_opencti_cvss_integrity_impact)
+        - CVSS3 - Availability impact (x_opencti_cvss_availability_impact)
+        - CVSS3 - Confidentiality impact (x_opencti_cvss_confidentiality_impact)
 
-        Although alerts contain more metadata, there are no places to put them
-        in the vulnerability :term:`SDO`, and the connector will not override
-        the description, since it typically contains useful information
-        imported from another source.
+        Although alerts contain more metadata, there is no place to put them in
+        the vulnerability :term:`SDO`, and the connector will not override the
+        description, since it typically contains useful information imported
+        from another source, like MITRE.
         """
 
     types: set[EntityType] = Field(title="Enrichment types", default=set(EntityType))

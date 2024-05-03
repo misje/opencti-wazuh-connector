@@ -1,0 +1,288 @@
+version: "3.7"
+services:
+  redis:
+    image: redis:7.2.4
+    restart: always
+    volumes:
+      - redisdata:/data
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.1
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    environment:
+      # Comment-out the line below for a cluster of multiple nodes
+      - discovery.type=single-node
+      # Uncomment the line below below for a cluster of multiple nodes
+      # - cluster.name=docker-cluster
+      - xpack.ml.enabled=false
+      - xpack.security.enabled=false
+      - thread_pool.search.queue_size=5000
+      - logger.org.elasticsearch.discovery="ERROR"
+      - "ES_JAVA_OPTS=-Xms${ELASTIC_MEMORY_SIZE} -Xmx${ELASTIC_MEMORY_SIZE}"
+    restart: always
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  minio:
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    volumes:
+      - s3data:/data
+    ports:
+      - "127.0.0.1:9000:9000"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data
+    restart: always
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS}
+      - RABBITMQ_NODENAME=rabbit01@localhost
+    volumes:
+      - amqpdata:/var/lib/rabbitmq
+    restart: always
+
+  opencti:
+    image: opencti/platform:6.0.9
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=8096
+      - APP__PORT=8080
+      - APP__BASE_URL=${OPENCTI_BASE_URL}
+      - APP__ADMIN__EMAIL=${OPENCTI_ADMIN_EMAIL}
+      - APP__ADMIN__PASSWORD=${OPENCTI_ADMIN_PASSWORD}
+      - APP__ADMIN__TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - APP__APP_LOGS__LOGS_LEVEL=error
+      - REDIS__HOSTNAME=redis
+      - REDIS__PORT=6379
+      - ELASTICSEARCH__URL=http://elasticsearch:9200
+      - MINIO__ENDPOINT=minio
+      - MINIO__PORT=9000
+      - MINIO__USE_SSL=false
+      - MINIO__ACCESS_KEY=${MINIO_ROOT_USER}
+      - MINIO__SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - RABBITMQ__HOSTNAME=rabbitmq
+      - RABBITMQ__PORT=5672
+      - RABBITMQ__PORT_MANAGEMENT=15672
+      - RABBITMQ__MANAGEMENT_SSL=false
+      - RABBITMQ__USERNAME=${RABBITMQ_DEFAULT_USER}
+      - RABBITMQ__PASSWORD=${RABBITMQ_DEFAULT_PASS}
+      - SMTP__HOSTNAME=${SMTP_HOSTNAME}
+      - SMTP__PORT=25
+      - PROVIDERS__LOCAL__STRATEGY=LocalStrategy
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - redis
+      - elasticsearch
+      - minio
+      - rabbitmq
+    restart: always
+
+  worker:
+    image: opencti/worker:6.0.9
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - WORKER_LOG_LEVEL=info
+    depends_on:
+      - opencti
+    deploy:
+      mode: replicated
+      replicas: 3
+    restart: always
+
+  connector-export-file-stix:
+    image: opencti/connector-export-file-stix:6.0.9
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=02cdecbb-3842-4d55-ab6c-1e486c5f9268
+      - CONNECTOR_TYPE=INTERNAL_EXPORT_FILE
+      - CONNECTOR_NAME=ExportFileStix2
+      - CONNECTOR_SCOPE=application/json
+      - CONNECTOR_CONFIDENCE_LEVEL=15 # From 0 (Unknown) to 100 (Fully trusted)
+      - CONNECTOR_LOG_LEVEL=info
+    restart: always
+    depends_on:
+      - opencti
+
+  connector-import-file-stix:
+    image: opencti/connector-import-file-stix:6.0.9
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_IMPORT_FILE_STIX_ID} # Valid UUIDv4
+      - CONNECTOR_TYPE=INTERNAL_IMPORT_FILE
+      - CONNECTOR_NAME=ImportFileStix
+      - CONNECTOR_VALIDATE_BEFORE_IMPORT=true # Validate any bundle before import
+      - CONNECTOR_SCOPE=application/json,text/xml
+      - CONNECTOR_AUTO=true # Enable/disable auto-import of file
+      - CONNECTOR_CONFIDENCE_LEVEL=15 # From 0 (Unknown) to 100 (Fully trusted)
+      - CONNECTOR_LOG_LEVEL=info
+    restart: always
+    depends_on:
+      - opencti
+
+  connector-wazuh:
+    image: ghcr.io/misje/opencti-connector-wazuh:0.1.0
+    restart: always
+    environment:
+      # A timezone is needed for datetime tools to work as expected:
+      - TZ=UTC
+      - USE_TZ=true
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=81f9d582-2b4e-45f1-98b6-f33492d66b6e # Replace this witha unique ID
+      - CONNECTOR_NAME=Wazuh
+      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator
+      - CONNECTOR_AUTO=true
+      - CONNECTOR_LOG_LEVEL=warning
+      - CONNECTOR_EXPOSE_METRICS=true
+      - WAZUH_APP_URL=https://mywazuh.example.org
+      - "WAZUH_OPENSEARCH_PASSWORD=SecretPassword" # Remember double-$ if password contains $:
+      - WAZUH_OPENSEARCH_URL=https://mywazuh.example.org:9200
+      - WAZUH_OPENSEARCH_USERNAME=cti_connector
+      - WAZUH_OPENSEARCH_VERIFY_TLS=true
+      - TLPS=TLP:AMBER+STRICT
+    volumes:
+      - /var/cache/wazuh
+    links:
+      - opencti:opencti
+
+  wazuh.manager:
+    image: wazuh/wazuh-manager:4.7.3
+    hostname: wazuh.manager
+    restart: always
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 655360
+        hard: 655360
+    ports:
+      - "127.0.0.1:1514:1514"
+      - "127.0.0.1:1515:1515"
+      - "127.0.0.1:514:514/udp"
+      - "127.0.0.1:55000:55000"
+    environment:
+      - INDEXER_URL=https://wazuh.indexer:9200
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=SecretPassword
+      - FILEBEAT_SSL_VERIFICATION_MODE=full
+      - SSL_CERTIFICATE_AUTHORITIES=/etc/ssl/root-ca.pem
+      - SSL_CERTIFICATE=/etc/ssl/filebeat.pem
+      - SSL_KEY=/etc/ssl/filebeat.key
+      - API_USERNAME=wazuh-wui
+      - API_PASSWORD=MyS3cr37P450r.*-
+    volumes:
+      - wazuh_api_configuration:/var/ossec/api/configuration
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_queue:/var/ossec/queue
+      - wazuh_var_multigroups:/var/ossec/var/multigroups
+      - wazuh_integrations:/var/ossec/integrations
+      - wazuh_active_response:/var/ossec/active-response/bin
+      - wazuh_agentless:/var/ossec/agentless
+      - wazuh_wodles:/var/ossec/wodles
+      - filebeat_etc:/etc/filebeat
+      - filebeat_var:/var/lib/filebeat
+      - ./wazuh-config/wazuh_indexer_ssl_certs/root-ca-manager.pem:/etc/ssl/root-ca.pem
+      - ./wazuh-config/wazuh_indexer_ssl_certs/wazuh.manager.pem:/etc/ssl/filebeat.pem
+      - ./wazuh-config/wazuh_indexer_ssl_certs/wazuh.manager-key.pem:/etc/ssl/filebeat.key
+      - ./wazuh-config/wazuh_cluster/wazuh_manager.conf:/wazuh-config-mount/etc/ossec.conf
+
+  wazuh.indexer:
+    image: wazuh/wazuh-indexer:4.7.3
+    hostname: wazuh.indexer
+    restart: always
+    ports:
+      - "127.0.0.1:9200:9200"
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - wazuh-indexer-data:/var/lib/wazuh-indexer
+      - ./wazuh-config/wazuh_indexer_ssl_certs/root-ca.pem:/usr/share/wazuh-indexer/certs/root-ca.pem
+      - ./wazuh-config/wazuh_indexer_ssl_certs/wazuh.indexer-key.pem:/usr/share/wazuh-indexer/certs/wazuh.indexer.key
+      - ./wazuh-config/wazuh_indexer_ssl_certs/wazuh.indexer.pem:/usr/share/wazuh-indexer/certs/wazuh.indexer.pem
+      - ./wazuh-config/wazuh_indexer_ssl_certs/admin.pem:/usr/share/wazuh-indexer/certs/admin.pem
+      - ./wazuh-config/wazuh_indexer_ssl_certs/admin-key.pem:/usr/share/wazuh-indexer/certs/admin-key.pem
+      - ./wazuh-config/wazuh_indexer/wazuh.indexer.yml:/usr/share/wazuh-indexer/opensearch.yml
+      - ./wazuh-config/wazuh_indexer/internal_users.yml:/usr/share/wazuh-indexer/opensearch-security/internal_users.yml
+
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:4.7.3
+    hostname: wazuh.dashboard
+    restart: always
+    ports:
+      - "127.0.0.1:443:5601"
+    environment:
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=SecretPassword
+      - WAZUH_API_URL=https://wazuh.manager
+      - DASHBOARD_USERNAME=kibanaserver
+      - DASHBOARD_PASSWORD=kibanaserver
+      - API_USERNAME=wazuh-wui
+      - API_PASSWORD=MyS3cr37P450r.*-
+      - EXTENSIONS_PCI=true # Enable PCI Extension
+      - EXTENSIONS_GDPR=true # Enable GDPR Extension
+      - EXTENSIONS_HIPAA=true # Enable HIPAA Extension
+      - EXTENSIONS_NIST=true # Enable NIST Extension
+      - EXTENSIONS_TSC=true # Enable TSC Extension
+      - EXTENSIONS_AUDIT=true # Enable Audit Extension
+      - EXTENSIONS_OSCAP=true # Enable OpenSCAP Extension
+      - EXTENSIONS_CISCAT=true # Enable CISCAT Extension
+      - EXTENSIONS_AWS=true # Enable AWS Extension
+      - EXTENSIONS_GCP=true # Enable GCP Extension
+      - EXTENSIONS_VIRUSTOTAL=true # Enable Virustotal Extension
+      - EXTENSIONS_OSQUERY=true # Enable OSQuery Extension
+      - EXTENSIONS_DOCKER=true
+    volumes:
+      - ./wazuh-config/wazuh_indexer_ssl_certs/wazuh.dashboard.pem:/usr/share/wazuh-dashboard/certs/wazuh-dashboard.pem
+      - ./wazuh-config/wazuh_indexer_ssl_certs/wazuh.dashboard-key.pem:/usr/share/wazuh-dashboard/certs/wazuh-dashboard-key.pem
+      - ./wazuh-config/wazuh_indexer_ssl_certs/root-ca.pem:/usr/share/wazuh-dashboard/certs/root-ca.pem
+      - ./wazuh-config/wazuh_dashboard/opensearch_dashboards.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml
+      - ./wazuh-config/wazuh_dashboard/wazuh.yml:/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+      - wazuh-dashboard-config:/usr/share/wazuh-dashboard/data/wazuh/config
+      - wazuh-dashboard-custom:/usr/share/wazuh-dashboard/plugins/wazuh/public/assets/custom
+    depends_on:
+      - wazuh.indexer
+    links:
+      - wazuh.indexer:wazuh.indexer
+      - wazuh.manager:wazuh.manager
+
+volumes:
+  esdata:
+  s3data:
+  redisdata:
+  amqpdata:
+  wazuh_api_configuration:
+  wazuh_etc:
+  wazuh_logs:
+  wazuh_queue:
+  wazuh_var_multigroups:
+  wazuh_integrations:
+  wazuh_active_response:
+  wazuh_agentless:
+  wazuh_wodles:
+  filebeat_etc:
+  filebeat_var:
+  wazuh-indexer-data:
+  wazuh-dashboard-config:
+  wazuh-dashboard-custom:

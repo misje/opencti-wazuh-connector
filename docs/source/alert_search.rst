@@ -42,7 +42,9 @@ Supported entities
 
 The function documentation below describes how the various supported entities
 are looked up. Most observables, along with vulnerabilities and indicators are
-supported.
+supported:
+
+.. include:: supported_entities.rst
 
 Indicators are special: **There is no direct support for searching
 indicators**, but they can be useful to include in the connector scope in the
@@ -57,10 +59,10 @@ following situation:
    :attr:`~wazuh.config.Config.indicator_score_threshold`), sightings/incidents
    are not created.
 2. An indicator is later created with a relationship indicating that it is
-   "based on" an observable. The enrichment of the indicator will run on the
-   observable that it is based on, just as if the observable was enriched
-   directly. The search will now produce events, because of the new indicator
-   relationship.
+   "based on" an observable. The enrichment of the indicator will in turn run
+   on the observable that it is based on, just as if the observable was
+   enriched directly. The search will now produce events, because of the new
+   indicator relationship.
 
 Even if the indicator and the relationship are created or imported into OpenCTI
 at the same time as the observable, this information is not available at the

@@ -4,7 +4,7 @@ Creating an OpenCTI user
 ========================
 
 Although you may have found plenty of docker-compose examples where connectors
-are run as the OpenCTI admin user, this is not at all encouraged. Not just
+are run as the OpenCTI admin user, this is not at all encouraged. – Not just
 because the connector should not be run with administrator privileges on the
 platform, but because starting with OpenCTI version 6, maximum confidence level
 is no longer specified in the connector config, but per user/group. This
@@ -36,7 +36,7 @@ First, go to the *Security section*:
    *Security* is found by navigating to the bottom of the navigation tab and
    selecting *Security*.
 
-Before creating a user, we'll be either creating a group or selecting a
+Before creating a user, we will be either creating a group or selecting a
 suitable group that already exists, after inspecting it.
 
 .. figure:: images/cti_user_2.png
@@ -66,7 +66,7 @@ Let's inspect the *Connector* role by clicking on it:
 
    Role permissions overview for the *Connector* role
 
-We're not going to spend too much time understanding all the different
+We are not going to spend too much time understanding all the different
 permissions assigned to this role, as we trust OpenCTI to have given us all
 that is needed for a typical connector. If you need to assign permissions
 yourself, use this as a reference.
@@ -83,8 +83,8 @@ Create a new user:
 - Add a real e-mail address (an OpenCTI requirement)
 - Enter a passphrase (which may be set-and-forget, as we will only use a token
   with this account, and never log in). Choose a complex passphrase.
-- Select the *Connectors* group, or in case you've made your own group, select
-  that one.
+- Select the *Connectors* group, or in case you have made your own group,
+  select that one.
 - Consider setting a lower max confidence level than the maximum. This prevents
   the connector from overwriting properties in entities that are set by
   analysts and sources whom you trust more.

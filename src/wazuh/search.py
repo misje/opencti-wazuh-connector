@@ -90,7 +90,7 @@ class AlertSearcher(BaseModel):
         <#_4jegwl6ojbes>` hashes, filename/paths and/or size
 
         - If the file has a hash (SHA-256, MD5 or SHA-1), the hash will looked
-          up in any field with a matching name (*sha256*).
+          up in any field with a matching name (*\\*sha256\\**).
         - If the file also has a name, and if
           :attr:`~wazuh.search_config.SearchConfig.filesearch_options` contains
           :attr:`~wazuh.search_config.FileSearchOption.SearchNameAndHash`, the
@@ -102,7 +102,7 @@ class AlertSearcher(BaseModel):
           :attr:`~wazuh.search_config.SearchConfig.filesearch_options` contains
           :attr:`~wazuh.search_config.FileSearchOption.SearchSize`, the search
           looks for the exact size in syscheck.{size_before,size_after} along
-          with any of the filename
+          with the filenames
         - If the file has additional names (x_opencti_additional_names) and
           :attr:`~wazuh.search_config.SearchConfig.filesearch_options` contains
           :attr:`~wazuh.search_config.FileSearchOption.SearchAdditionalFilenames`,
@@ -112,8 +112,8 @@ class AlertSearcher(BaseModel):
         ~~~~~~~~~~~~~~~~~~~
 
         When searching for filenames, a number of settings dictate how to deal
-        with paths. The filenames most likely do not contain path, but if they
-        do, the setting
+        with paths. The filenames most likely do not contain a path, but if
+        they do, the setting
         :attr:`~wazuh.search_config.FileSearchOption.BasenameOnly` removes this
         path before searching for the filename. Otherwise, the path, regardless
         of whether is is absolute, is included in the search.
@@ -456,7 +456,8 @@ class AlertSearcher(BaseModel):
         lower-case, colon-separated MAC addresses will be looked up.
 
         Note that it is possible to add multiple addresses as
-        sources/destinations in OpenCTI. However, only one is provided to the
+        sources/destinations in OpenCTI (despite the standard specifying that
+        only one can be specified). However, only one is provided to the
         connector. The precedence is unknown.
         """
         # TODO: query data.authorization.{local,remove}Address: "ipv4":ip:port
@@ -676,7 +677,7 @@ class AlertSearcher(BaseModel):
         """
         Search for :stix:`URLs <#_ah3hict2dez0>`
 
-        Some alerts, like logs from web server, only contains the path from
+        Some alerts, like logs from web servers, only contains the path from
         URLs (scheme, host etc. are not present). If
         :attr:`~wazuh.search_config.SearchConfig.lookup_url_without_host` is
         enabled, these fields can still be matched. This is probably not useful
@@ -745,7 +746,7 @@ class AlertSearcher(BaseModel):
           parent directories in paths, like "/foo/bar" in "/foo/bar/baz".
         - :attr:`~wazuh.search_config.DirSearchOption.SearchFilenames` will
           look for directories in filename fields as well. If disabled, fields
-          that may contain either directories or absolute filename paths will
+          that may contain *either* directories or absolute filename paths will
           still be searched.
         - :attr:`~wazuh.search_config.DirSearchOption.CaseInsensitive` ignores
           case when searching
@@ -868,21 +869,13 @@ class AlertSearcher(BaseModel):
         """
         Search for :stix:`Windows registry values <#_u7n4ndghs3qq>`
 
-        Wazuh's :term:`FIM` module only registers registry value's hashes, not
-        values. And it only supports *REG_SZ*, *REG_EXPAND_SZ* and *REG_BINARY*
+        Wazuh's :term:`FIM` module only registers registry values' hashes, not
+        values. Also, it only supports *REG_SZ*, *REG_EXPAND_SZ* and *REG_BINARY*
         (i.e. not numeric values, like *REG_DWORD*).
 
         This function will only search for registry values of type REG_{SZ,
         EXPAND_SZ, BINARY}, and it will only compare SHA-256 values (since that
         is what Wazuh's FIM/syscheck module provides).
-
-        In order to perform a search, the observable must:
-
-        - Have *data_type*:
-
-          - REG_SZ
-          - REG_EXPAND_SZ
-          - REG_BINARY
 
         If the data type is REG_SZ/REG_EXPAND_SZ, a SHA-256 hash is taken from
         the value (*data*). If the data type is REG_BINARY, the contents is
@@ -917,15 +910,15 @@ class AlertSearcher(BaseModel):
         """
         Search for :stix:`process <#_hpppnm86a1jm>` command lines
 
-        Command lines are hard to search because a arguments and options can
-        typically be in any order. This function tries to match all of the
-        words in the :term:`SCO`'s command_line without being too inaccurate.
-        Only the property *command_line* is supported.
+        Command lines are hard to search, because arguments and options may be
+        in any order. This function tries to match all of the words in the
+        :term:`SCO`'s command_line without being too inaccurate. Only the
+        property *command_line* is supported.
 
         Matching
         ~~~~~~~~
 
-        First, string is tokenised into a list of words separated by
+        First, the string is tokenised into a list of words separated by
         whitespace. Any sequence of words enclosed in non-escaped quotes are
         considered as a single token, .e.g.:
 
@@ -1071,7 +1064,7 @@ class AlertSearcher(BaseModel):
 
     def query_account(self, *, stix_entity: dict) -> dict | None:
         """
-        TODO
+        TODO: document
         """
         # TODO: settings to determine where to search (aws, google, office, windows, linux)
         # TODO: display name? Otherwise remove from entity_value*(?)

@@ -3,99 +3,76 @@
 Installation
 ============
 
-TODO
+This installation documentation assumes that you already have Wazuh installed.
+If you do not aleady have OpenCTI installed, please follow the project's
+:octid:`installation instructions (docker) <installation/#using-docker>`. If
+you are running or planning to install OpenCTI manually, i.e. not in docker,
+note that all of the installation documentation for this connector is written
+for docker-compose.
 
-how to set up opencti (list of connectors paid/unpaid)
+Using the following as an example, add a *connector-wazuh* service to your
+OpenCTI docker-compose file:
 
+.. literalinclude:: connector-compose-simple.yml
+
+.. warning::
+
+   This is a bare-minimum example with several placeholder values. Look at the
+   :ref:`Configuration <config>` chapter for how to configure the connector.
+
+After starting OpenCTI, look for any errors (get a continuous log wit ha
+little bit of history by running ``docker-compose logs -f --tail=100
+connector-wazuh``.
+
+Building the docker image
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+
+   This is an optional step, and only necessary if you want the latest
+   development version of the connector.
+
+If you want the cutting edge development version of the cnnector, first clone
+the project from GitHub (no account is needed for this), then build the docker
+image:
+
+#. ``git clone https://github.com/mise/opencti-wazuh-connector``
+#. ``docker build -t openti-wazuh-connector-dev .``
+
+Then you need to replace the reference to the connector image:
+
+-  Replace the line ``image: ghcr.io/misje/opencti-connector-wazuh:0.1.0`` in
+   *docker-compose.yml* with ``image: openti-wazuh-connector-dev``
+
+You may also build the image through ``docker-compose build``/``docker-compose
+up -d --build`` as long as the cloned project is in the same directory as
+OpenCTI's *docker-compose.yml* and with the following lines instead of the
+*image:* directive:
+
+.. code-block:: yaml
+
+    build:
+      context: .
+
+Creating users
+~~~~~~~~~~~~~~
+
+Before running the connector, you need to create an OpenCTI user and generate a
+token, as well as create an OpenSearch read-only user:
 
 .. toctree::
    :maxdepth: 2
    
    create_opensearch_user
    create_opencti_user
-   connector-compose
 
-.. _opencti-configuration:
+Finishing touches
+~~~~~~~~~~~~~~~~~
 
-OpenCTI configuration
-~~~~~~~~~~~~~~~~~~~~~
+In order to get the most out of OpenCTI along with this connector, you may want
+to go through a few settings and customisation in OpenCTI:
 
-This section provides some useful hints on how to configure OpenCTI for
-connecting to Wazuh. Please refer to the :octid:`OpenCTI documentation
-<overview>` for more details.
+.. toctree::
+   :maxdepth: 2
 
-TODO: connectors, alerting
-
-.. _status-templates:
-
-Status templates
-----------------
-
-:octia:`Status templates <ontologies/?h=status+templates#status-templates>`
-are used to assign statuses on reports, tasks, incidents and cases, typically
-used to track progress. They are not assigned directly, but used as individual
-states as part of :ref:`workflows <workflows>`. Status templates are shared
-between workflows and can be created either under Settings → Taxonomies →
-Status templates, or directly in the workflow editor.
-
-OpenCTI provides the following default status templates:
-
-.. figure:: images/status_templates_1.png
-
-   OpenCTI status template overview with default status templates
-
-.. _workflows:
-
-Workflows
----------
-
-Although OpenCTI provides default status templates, there are no default
-:octia:`workflows <entities/?h=workflow#workflow>`. Workflows are needed to
-set statuses on reports, tasks, incidents and cases.
-
-Workflows are configured under Settings → Customization → <entity type> →
-Workflow:
-
-.. figure:: images/workflows_1.png
-
-   Customising the entity *Incident response*
-
-.. figure:: images/workflows_2.png
-
-   Modifying workflows for *Incident response*
-
-Workflows are defined with status templates in a logic order, like *New* → *In
-progress* → *Closed*. Different types of entities may warrant different
-workflows. Note that it's possible to have several alternatives to a workflow
-stage by assigning a status label to the same index.
-
-.. figure:: images/workflows_3.png
-
-   Example workflow for *Incident response*
-
-.. _case-templates:
-
-Case templates
---------------
-
-Case templates lets you convenientely assign a set of default tasks on a case. They are configured under Settings → Taxonomies → Case templates.
-
-.. figure:: images/case_templates_1.png
-
-   Creating a new case template by adding tasks
-
-.. figure:: images/case_templates_2.png
-
-   Case template task list
-
-The connector will not use any case template when creating incident response
-cases, but case templates can easily be applied by using the *Apply a new case
-template* button in the tasks section:
-
-.. figure:: images/apply_case_template_1.png
-
-   Applying case template to a new case
-
-.. figure:: images/tasks_1.png
-
-   Tasks created by applying a case template
+   opencti_configuration

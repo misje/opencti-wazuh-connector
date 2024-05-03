@@ -24,7 +24,8 @@ reference.
 .. warning::
 
    The docker-compose example is just that, an example. You **must** understand
-   at least the most important settings before using the connector.
+   at least the :ref:`most important settings <required-settings>` before using
+   the connector.
 
 .. note::
 

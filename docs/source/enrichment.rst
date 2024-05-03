@@ -32,7 +32,7 @@ Unless specified otherwise, the relationships between the entities created and
 the incident are of type "related-to" (in lack of better standard-conforming
 types). Each relationship object contains information about which alert and
 which field the entity was created from. You can retrieve this information in
-the incident response case *knowledge* view by clickin on the relationship
+the incident response case *knowledge* view by clicking on the relationship
 arrows.
 
 .. figure:: images/ir_case_2.png

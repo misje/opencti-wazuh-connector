@@ -3,9 +3,11 @@ Introduction
 
 .. toctree::
    :hidden:
+   :maxdepth: 2
 
    wazuh
    opencti
+   quick_start
 
 If you are very familiar with both Wazuh and OpenCTI, feel free to skip to
 :ref:`architecture <architecture>` to read about the connector, or if you are
@@ -22,30 +24,3 @@ to ensure that you are familiar with the core concepts.
 
 Next, look at the :ref:`OpenCTI <opencti>` chapter and then the :ref:`connector
 architecture <architecture>`.
-
-.. _quick-start:
-
-Quick start
-~~~~~~~~~~~
-
-If you're impatient to get the connector up and running in your OpenCTI instance, you may 
-
-.. _opencti-docker:
-
-OpenCTI demo
-------------
-
-.. toctree::
-   :hidden:
-
-   opencti-compose
-
-.. _full-demo:
-
-Full demo
----------
-
-.. toctree::
-   :hidden:
-
-   full-demo-compose

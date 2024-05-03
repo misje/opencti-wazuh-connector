@@ -16,7 +16,9 @@ automatically scan your whole SIEM database whenever there is a new indicator
 imported in OpenCTI. However, it can also act as a comfortable search
 interface, automatically creating sightings for you for every hit.
 
-See :ref:`quick start <quick-start>` FIXME
+See :ref:`quick start <quick-start>` if you are in a real hurry to try it out,
+otherwise please continue reading to get a better understanding of the
+connector, how to install it, how to configure it and how to use it.
 
 Introduction
 ---------------------------------------------------

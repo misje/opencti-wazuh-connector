@@ -68,7 +68,7 @@ Domain objects
 ~~~~~~~~~~~~~~
 
 Domain objects, commonly referred to as :term:`SDOs <SDO>`, are most
-:term:`STIX` objects that are not observables: Attack patterns, identities,
+:term:`STIX` objects that are not observables: attack patterns, identities,
 inidents, locations, malware, reports, tools, vulnerabilites etc.
 
 .. _indicator:
@@ -134,7 +134,7 @@ sightings are instead created directly against observables or indicators.
 Sighting
 --------
 
-A Sighting is a relationship (:term:`SRO`) that tells us that an observable is
+A sighting is a relationship (:term:`SRO`) that tells us that an observable is
 detected by or within an information system, an individual or an organisation.
 The targeted entities used by this connector are systems, either Wazuh itself
 or its agents.
@@ -145,7 +145,7 @@ Sightings contain the following information:
 - Last seen
 - Count
 
-Which lets a single sighting object between an observable and a system cover
+This lets a single sighting object between an observable and a system cover
 all sightings. If a new sighting is uploaded to OpenCTI, it will extend the
 first/last seen range and increment count.
 
@@ -204,8 +204,8 @@ Knowledge graph
 .. figure:: images/ir_case_example2.png
 
 The knowledge graph is a central component of OpenCTI, visualising entities and
-their relationships in a graph. The graph can be furter expanded and modifying
-by starting an :ref:`investigation`.
+their relationships in a graph. The graph can be furter expanded and modified
+by starting an :ref:`investigation <investigation>`.
 
 .. _investigation:
 
@@ -224,7 +224,7 @@ Investigations are private and only available to you unless you share them, or
 later publish them in reports or export them as a PDF. In an investigation,
 objects can be added or removed from the graph, relationships can be created,
 removed or included. As more and more nodes appear, the investigation can pivot
-on a new object. See :ref:`case management <case-management>` in the
+on new objects. See :ref:`case management <case-management>` in the
 :ref:`usage` chapter for more information.
 
 Connector
@@ -236,7 +236,7 @@ Connector
    :octid:`OpenCTI documentation <connectors>`)
 
 :octid:`Connectors <connectors>` are ways for OpenCTI to ingest, enrich and
-export data. The fie types of connectors are
+export data. The five types of connectors are
 
 - External import
 - Internal enrichment (this is what opencti-wazuh-connector is)
@@ -254,7 +254,7 @@ not stream data to OpenCTI. OpenCTI is the one looking up new data in Wazuh,
 not the other way around. For this, the enrichment interface is more suitable.
 
 There is clearly a missing piece in this integration, and that is looking up
-new alerts in Wazuh in OpenCTI. This is on the :ref:`roadmap`.
+new alerts in Wazuh in OpenCTI. This is on the :ref:`roadmap <roadmap>`.
 
 If you are new to OpenCTI and want some help on finding useful connectors (free
 of charge), look at :ref:`this overview <connector-list>`.
