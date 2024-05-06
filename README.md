@@ -19,6 +19,11 @@ See the [extensive
 documentation](https://misje.github.io/opencti-wazuh-connector/) for information
 about installation, configuration and usage.
 
+> [!CAUTION]
+> opencti-wazuh-connector is in an **early alpha stage**. Although the
+> connector does not make any changes to Wazuh, it may produce a lot of data in
+> OpenCTI. **Do not use the connector yet in production**.
+
 ## Overview
 
 The connector performs its work in the following defined stages:

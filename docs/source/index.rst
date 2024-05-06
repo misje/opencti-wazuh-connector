@@ -20,6 +20,8 @@ See :ref:`quick start <quick-start>` if you are in a real hurry to try it out,
 otherwise please continue reading to get a better understanding of the
 connector, how to install it, how to configure it and how to use it.
 
+   .. include:: alpha_warning.rst
+
 Introduction
 ---------------------------------------------------
 
