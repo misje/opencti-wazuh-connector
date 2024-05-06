@@ -40,7 +40,7 @@ html_context = {
     "display_github": True,
     "github_user": "misje",
     "github_repo": "opencti-wazuh-connector",
-    "github_version": "master",
+    "github_version": "dev",
     "conf_py_path": "/docs/source/",
 }
 
