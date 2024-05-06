@@ -5,6 +5,8 @@ on:
       - .github/workflows/docs.yml
       - docs/source/**
       - src/**/*.py
+  workflow_dispatch:
+
 jobs:
   build-docs:
     runs-on: ubuntu-22.04
