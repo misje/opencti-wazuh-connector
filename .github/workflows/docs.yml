@@ -2,8 +2,9 @@ name: Build and publish docs
 on:
   push:
     paths:
-      - src/**/*.py
+      - .github/workflows/docs.yml
       - docs/source/**
+      - src/**/*.py
 jobs:
   build-docs:
     runs-on: ubuntu-22.04
