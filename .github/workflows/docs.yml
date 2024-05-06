@@ -13,7 +13,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10.12"
-      - name: Install dependencies
+      - name: Install connector dependencies
+        run: pip install -r src/requirements.txt
+      - name: Install doc. dependencies
         run: pip install -r docs/requirements.txt
       - name: Build sphinx HTML
         run: sphinx-build -M html docs/source docs/build
