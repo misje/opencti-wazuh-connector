@@ -462,7 +462,7 @@ class WazuhConnector:
             isinstance(obj, stix2.Incident) for obj in bundle
         ):
             bundle += self.create_incident_response_case(
-                entity=entity, result=result, bundle=bundle
+                entity=entity, indicators=obs_indicators, result=result, bundle=bundle
             )
 
         if (
@@ -1021,7 +1021,7 @@ class WazuhConnector:
         )
 
     def create_incident_response_case(
-        self, *, entity: dict, result: dict, bundle: list[Any]
+        self, *, entity: dict, indicators: list[dict], result: dict, bundle: list[Any]
     ):
         incidents = [obj for obj in bundle if isinstance(obj, stix2.Incident)]
         timestamp = max(incident.created for incident in incidents)
@@ -1033,16 +1033,25 @@ class WazuhConnector:
         )
         hits_dropped = result["hits"]["total"]["value"] > len(result["hits"]["hits"])
         name = f"{entity_name_value(entity)} sighted {sightings_count}{'+' if hits_dropped else ''} time(s)"
+        ind_info = "(no indicator)"
+        if (ind_count := len(indicators)) > 1:
+            ind_info = f"(part of {ind_count} indicators"
+        elif ind_count == 1:
+            ind_info = f"(part of the indicator {indicators[0]['name']})"
         # Remove any objects not referenced in relationships, as they will just
         # pollute the knowledge graph. These objects are typically nested
         # objects that the knowledge graph will not display anyway:
-        refs = [o.id for o in remove_unref_objs(bundle)] + [entity["standard_id"]]
+        refs = (
+            [o.id for o in remove_unref_objs(bundle)]
+            + [entity["standard_id"]]
+            + [i["standard_id"] for i in indicators]
+        )
         return (
             CustomObjectCaseIncident(
                 id=CaseIncident.generate_id(name, timestamp),
                 name=name,
                 # TODO: include info from Notes (not included in bundle?):
-                description="FIXME",
+                description=f"Observable {entity_name_value(entity)} {ind_info} has been sighted {f'at least {sightings_count}' if hits_dropped else f'{sightings_count}'} times(s)",
                 # TODO: this may break if user changes case_severity_ov. Make customisable from setting
                 severity=severity,
                 priority=priority_from_severity(severity),
