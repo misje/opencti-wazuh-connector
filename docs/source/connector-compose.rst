@@ -11,6 +11,8 @@ more complete example.
    :language: yaml
    :linenos:
 
+.. _connector-compose-full:
+
 The following expands on the example above, with most or all available settings
 with their default values:
 

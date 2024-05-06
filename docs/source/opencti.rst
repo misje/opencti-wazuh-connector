@@ -261,5 +261,6 @@ of charge), look at :ref:`this overview <connector-list>`.
 
 .. toctree::
    :hidden:
+   :maxdepth: 2
 
    connector-list

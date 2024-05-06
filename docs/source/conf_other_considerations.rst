@@ -1,3 +1,9 @@
+Other considerations
+~~~~~~~~~~~~~~~~~~~~
+
+Look at how your OpenCTI rules engine is configured in order to avoid any
+surprises:
+
 .. _rules-engine:
 
 Rules engine

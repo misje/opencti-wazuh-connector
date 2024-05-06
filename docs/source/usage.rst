@@ -105,6 +105,7 @@ limited. See :ref:`example summary note <enrichment-note>` for details.
 
 .. toctree::
    :hidden:
+   :maxdepth: 2
 
    example_summary_note
 
