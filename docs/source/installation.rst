@@ -31,36 +31,6 @@ See :ref:`versions and compatibility <versions>` for a connector–OpenCTI
 version compatibility list. docker tags matching OpenCTI version will be
 provided in the future.
 
-Building the docker image
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. note::
-
-   This is an optional step, and only necessary if you want the latest
-   development version of the connector.
-
-If you want the cutting edge development version of the cnnector, first clone
-the project from GitHub (no account is needed for this), then build the docker
-image:
-
-#. ``git clone https://github.com/mise/opencti-wazuh-connector``
-#. ``docker build -t openti-wazuh-connector-dev .``
-
-Then you need to replace the reference to the connector image:
-
--  Replace the line ``image: ghcr.io/misje/opencti-connector-wazuh:0.1.0`` in
-   *docker-compose.yml* with ``image: openti-wazuh-connector-dev``
-
-You may also build the image through ``docker-compose build``/``docker-compose
-up -d --build`` as long as the cloned project is in the same directory as
-OpenCTI's *docker-compose.yml* and with the following lines instead of the
-*image:* directive:
-
-.. code-block:: yaml
-
-    build:
-      context: .
-
 Creating users
 ~~~~~~~~~~~~~~
 
