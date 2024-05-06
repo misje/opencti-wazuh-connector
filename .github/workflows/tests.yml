@@ -24,4 +24,5 @@ jobs:
         run: python3 run_doctests.py
       - name: Run unit tests
         working-directory: tests/unit
-        run: pytest --doctest-modules --junitxml=junit/test-results.xml --cov=com --cov-report=xml --cov-report=html
+        # TODO: Coverage reports:
+        run: pytest
