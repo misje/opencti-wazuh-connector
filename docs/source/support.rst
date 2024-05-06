@@ -13,6 +13,20 @@ time writing good support requests, and you're more likely to be heard.
 The project is currently in no need of a dedicated communication forum. If you
 are in need of a help, :ref:`file an issue <issue>`.
 
+.. _versions:
+
+Versions and compatibility
+--------------------------
+
+.. list-table:: OpenCTI compatibility overview
+   :header-rows: 1
+
+   * - Connector v.
+     - OpenCTI v. from
+     - OpenCTI v. to
+   * - 0.1.0
+     - 6.0.9
+     - –
 
 .. _issue:
 
