@@ -69,6 +69,11 @@ at the same time as the observable, this information is not available at the
 time the connector is told to enrich the observable automatically. The separate
 enrichment of the indicator is therefore necessary.
 
+:octiu:`Automation <automation>` can be used to automatically create
+observables from a STIX-only indicator without any *based-on* relationship.
+See :ref:`automatically create obserables from indicators <obs-from-inds>` for
+details.
+
 .. note:: The indicator pattern is not used at all.
 .. note:: If the indicator is based on more than one observable, only the first
           relationship is taked into    consideration.

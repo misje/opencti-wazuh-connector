@@ -49,21 +49,16 @@ from .sightings import SightingsCollector
 from .search import AlertSearcher
 from .enrich import Enricher
 
-# TODO: Enrichment connector that uses snipeit to get system owner
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
 # TODO: update wazuh api completely in background
-# FIXME: Ignoring obs. from Wazuh is not a good solution. Manual enrichment must be allowed, if so.
 # TODO: escape_md() function (for use in all text going into opencti)
-# TODO: Add search options to prevent too many hits, like: search_{file::name}. Hæ?
 # TODO: Use TypeAlias (from typing) for things like Bundle, SCO etc.
-# TODO: create issue for getting type of enrichment (manual or automatic)
 # TODO: Alert notes in incidents (already in sighting and case, but not incident)
 # TODO: aws, google and office
 # - user accounts
 # - emails
 # - files
 # - directories
-# FIXME: 188.95.241.209 creates missing ref to what I assume is wazu siem system
 # TODO: Identities for AWS, GitHub, Office365, etc.(?)
 # TODO: Rule_id ignore list
 
