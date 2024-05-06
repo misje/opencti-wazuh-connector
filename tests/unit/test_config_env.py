@@ -144,6 +144,7 @@ def test_config_from_env():
         },
         "hits_abort_limit": 1000,
         "ignore_own_entities": False,
+        "ignore_revoked_indicators": True,
         "label_ignore_list": {
             "foobar",
             "hygiene",
@@ -178,6 +179,7 @@ def test_config_from_env():
             "username": "cti_connector",
             "verify_tls": False,
         },
+        "require_indicator_detection": False,
         "require_indicator_for_incidents": True,
         "system_name": "Wazuh SIEM",
         "tlps": {
