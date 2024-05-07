@@ -4,7 +4,7 @@ Installation
 ============
 
 This installation documentation assumes that you already have Wazuh installed.
-If you do not aleady have OpenCTI installed, please follow the project's
+If you do not already have OpenCTI installed, please follow the project's
 :octid:`installation instructions (docker) <installation/#using-docker>`. If
 you are running or planning to install OpenCTI manually, i.e. not in docker,
 note that all of the installation documentation for this connector is written

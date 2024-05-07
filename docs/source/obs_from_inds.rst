@@ -42,7 +42,7 @@ Creating the automation rule
 
    .. figure:: images/playbook_5.png
 
-   Select component *Extract obserables from indicator*
+   Select component *Extract observables from indicator*
 
 #. Select *Create observables from all indicators in the bundle*
 #. For both outputs, *out* and *unmodified*, add a *Send for ingestion* component
@@ -59,5 +59,5 @@ Finally, start the playbook:
 
    Starting the playbook
 
-The status and restults can be monitored by clicking on the button in the
+The status and results can be monitored by clicking on the button in the
 upper-right corner.

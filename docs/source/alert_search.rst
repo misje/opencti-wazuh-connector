@@ -5,7 +5,7 @@ Alert search
 
 Before the connector can produce any meaningful information to import in
 OpenCTI, it has to look up entity metadata in Wazuh's OpenSearch database. A
-typicaly use case in an automated setup, is to look up every new :stix:`File
+typically use case in an automated setup, is to look up every new :stix:`File
 <#_99bl2dibcztv>` and :stix:`Artifact <#_4jegwl6ojbes>` hash :term:`IoCs <IoC>`
 imported into OpenCTI. Other common IoCs are :stix:`domain names
 <#_prhhksbxbg87>` and :stix:`IPv4 <#_ki1ufj1ku8s0>`/:stix:`IPv6
@@ -76,7 +76,7 @@ details.
 
 .. note:: The indicator pattern is not used at all.
 .. note:: If the indicator is based on more than one observable, only the first
-          relationship is taked into    consideration.
+          relationship is taken into    consideration.
 
 .. autoclass:: wazuh.search::AlertSearcher.query_file
    :members:

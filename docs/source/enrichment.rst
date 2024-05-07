@@ -19,13 +19,13 @@ Examples:
   <wazuh.enrich_config.EnrichmentConfig.EntityType.AttackPattern>` is enabled,
   the *rule.mitre* field in alerts will be used to create relationships to
   `MITRE attack patterns <https://attack.mitre.org/>`_. The relationship type
-  wil lbe *uses*.
+  will be *uses*.
 - If :attr:`File <wazuh.enrich_config.EnrichmentConfig.EntityType.File>` is
   enabled, any filename / file path references will result in a File
   :term:`SCO` being created, including an optional parent directory.
 - If :attr:`Process <wazuh.enrich_config.EnrichmentConfig.EntityType.Process>`
   is enabled, process :term:`SCOs <SCO>` are created from alerts like those
-  coming from sysmon and audtid. Metadata like PID, parent processes, images as
+  coming from sysmon and auditd. Metadata like PID, parent processes, images as
   File SCOs, user accounts and command lines are extracted.
 
 Unless specified otherwise, the relationships between the entities created and

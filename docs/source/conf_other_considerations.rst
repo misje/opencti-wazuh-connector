@@ -35,7 +35,7 @@ Raise incident based on sightings
 This rule creates incidents if an indicator is sighted in an
 entity, and then creates a "targets" relationship between the
 incident and the entity. This connector does not create
-sightings of indicators, but these can be automaticallycreated
+sightings of indicators, but these can be automatically created
 by using the rule :ref:`sightings propagation from observable
 <rule-sightings-propagations>`. However, enabling this rule
 may create a huge amount of incidents if your other (import)
@@ -59,7 +59,7 @@ OpenCTI enterprise licence. It is a very powerful feature that can be used for
 creating complicated rules within OpenCTI. One example is configuring the
 connector to be run only when specific conditions are true (i.e. not just the
 default choices *auto*/*manual*, as described in :ref:`when to run
-<when-to-run>`. Another exaple is using automation to :ref:`automatically
+<when-to-run>`). Another example is using automation to :ref:`automatically
 create observables from indicators <obs-from-inds>`, a very useful rule.
 
 .. toctree::

@@ -8,8 +8,8 @@ are run as the OpenCTI admin user, this is not at all encouraged. – Not just
 because the connector should not be run with administrator privileges on the
 platform, but because starting with OpenCTI version 6, maximum confidence level
 is no longer specified in the connector config, but per user/group. This
-breaking change is explain :octid:`here
-<connectors/?h=connector+token#connector-token>`.
+breaking change is explain `here
+<https://blog.filigran.io/breaking-change-evolution-of-the-way-connector-streams-and-feeds-import-data-in-opencti-d10d7eb4407e>`_.
 
 Maximum confidence
 ~~~~~~~~~~~~~~~~~~
@@ -93,7 +93,7 @@ Create a new user:
 
    Create new user interface
 
-Clik on the user after it has been created and copy the token:
+Click on the user after it has been created and copy the token:
 
 .. figure:: images/cti_user_7.png
 

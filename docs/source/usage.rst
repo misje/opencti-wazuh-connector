@@ -10,7 +10,7 @@ This chapter assumes that you have
 
 #. :ref:`Installed the connector<installation>` and set up users and tokens
 #. :ref:`Configured <config>` the connector
-#. (A populated Wazuh database, either with real [#f1]_ or simualted data,
+#. (A populated Wazuh database, either with real [#f1]_ or simulated data,
    if you intend test the setup as you read along)
 
 In order to use the connector, you need to call it through OpenCTI's
@@ -194,7 +194,7 @@ Incident response cases are one of several :octiu:`cases <exploring-cases>` in
 OpenCTI. Cases are an extension to :term:`STIX` that brings case management to
 OpenCTI.
 
-Before using case managemnt, be sure to configure :ref:`status templates
+Before using case management, be sure to configure :ref:`status templates
 <status-templates>` and :ref:`workflows <workflows>` in your OpenCTI
 installation, as well as :ref:`case templates <case-templates>`. Otherwise,
 cases and tasks will not be very useful. You may set these up after having
@@ -235,7 +235,7 @@ button in the upper-right corner:
 
    Start an investigation from a case
 
-The resulting investigaton is yours only, completely private unless you
+The resulting investgation is yours only, completely private unless you
 explicitly share it with team members.
 
 Clicking on entities gives you information about the selected entity, and
@@ -247,7 +247,7 @@ interface for *expanding elements*:
    Expand nested entities, relationships and related entities
 
 When you have a knowledge graph that you would like to use in a report, you
-can create a report from your investigation by clickon on the *Add to a
+can create a report from your investigation by click on the *Add to a
 container button*:
 
 .. figure:: images/investigation_3.png

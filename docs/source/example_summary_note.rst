@@ -49,7 +49,7 @@ The next table provides a summary of the alerts found:
    :stub-columns: 1
 
    * - Rule
-     - The alert rule ID, with a link ot the Wazuh instance rule overview
+     - The alert rule ID, with a link to the Wazuh instance rule overview
    * - Level
      - The :wazuh:`alert rule level <ruleset/rules-classification.html>`
    * - Count

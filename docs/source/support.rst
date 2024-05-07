@@ -50,7 +50,7 @@ many of the following steps as possible (this assumes a docker setup):
      entity on subsequent enrichments
 #. Copy all the connector logs up to and including the failure, and be sure to
    include the worker log if the fault is a MISSING REFERENCE error.
-#. Include your connector configuration, but **remember to remove all screts
+#. Include your connector configuration, but **remember to remove all secrets
    and sensible information, like URLs, usernames and passwords**. Use a line
    like this to strip sensible information: ``sed -r
    '/TOKEN|USERNAME|PASSWORD|URL/c\(REDACTED)' docker-compose.yml >

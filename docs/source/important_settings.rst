@@ -61,7 +61,7 @@ The CONNECTOR_AUTO setting can be either true (*auto*) or false (*manual*).
 Auto is most likely the most preferred choice. However, it is possible to use
 :octiu:`playbooks <automation>` to run :octiu:`enrichments
 <automation/?h=enrich#enrich-through-connector>` if you have an OpenCTI
-enterprice licence. In the example below, the opencti-wazuh-connector is
+enterprise licence. In the example below, the opencti-wazuh-connector is
 configured as *manual*, and called through a playbook. The first block is set
 to filter on author, so that the connector will only look up entities from
 high-quality data sources:

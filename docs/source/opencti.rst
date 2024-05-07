@@ -57,7 +57,7 @@ Observables
 
 Observables, commonly referred to as :term:`SCOs <SCO>` (:term:`STIX` cyber
 observables) are immutable objects, such as an IPv4 address, MAC address,
-domain name, URL, user account etc. They do not inheritly implicy malicious
+domain name, URL, user account etc. They do not inherently imply malicious
 content, but serve as raw data points, used to indicate that something was
 observed somewhere, or to provide useful context in a :ref:`knowledge graph
 <knowledge-graph>`. When data is considered malicious, :ref:`indicators
@@ -69,7 +69,7 @@ Domain objects
 
 Domain objects, commonly referred to as :term:`SDOs <SDO>`, are most
 :term:`STIX` objects that are not observables: attack patterns, identities,
-inidents, locations, malware, reports, tools, vulnerabilites etc.
+incidents, locations, malware, reports, tools, vulnerabilities etc.
 
 .. _indicator:
 
@@ -91,7 +91,7 @@ indicators with links to the observables that make up the indicator, e.g.:
 
 This relationship is used by this connector in lieu of direct indicator
 support. If an observable is found in Wazuh, and an indicator is linked to that
-observable, an indicdent can be created.
+observable, an incident can be created.
 
 
 Identities
@@ -159,7 +159,7 @@ negative events, and are used by this connector when an :term:`IoC`, rather
 than just an observable, is detected. That is, when an observable is sighted,
 and that observable is part of an indicator.
 
-Indidents also come with more information that just a sighting. The connector
+Incidents also come with more information that just a sighting. The connector
 will :ref:`enrich <enrichment>` alerts, i.e. create observables and other
 entities as context, and link them to the incident.
 
@@ -204,7 +204,7 @@ Knowledge graph
 .. figure:: images/ir_case_example2.png
 
 The knowledge graph is a central component of OpenCTI, visualising entities and
-their relationships in a graph. The graph can be furter expanded and modified
+their relationships in a graph. The graph can be further expanded and modified
 by starting an :ref:`investigation <investigation>`.
 
 .. _investigation:

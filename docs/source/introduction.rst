@@ -15,7 +15,7 @@ impatient, skip to :ref:`installation <installation>`. If you are very, very
 impatient, have a look at :ref:`quick start <quick-start>`.
 
 If you are showing interest in this connector, it is assumed that you are
-already a Wazuh user. After all, the conector has little to no use unless you
+already a Wazuh user. After all, the connector has little to no use unless you
 have Wazuh deployed. Installing, configuring and using Wazuh is very much out
 of scope of this documentation, as it focuses on OpenCTI.
 

@@ -62,7 +62,7 @@ the state following *TO_BE_QUALIFIED* can be either *IN_PROGRESS* or *HUNTING*:
 Case templates
 --------------
 
-Case templates lets you convenientely assign a set of default tasks on a case. They are configured under Settings → Taxonomies → Case templates.
+Case templates lets you conveniently assign a set of default tasks on a case. They are configured under Settings → Taxonomies → Case templates.
 
 .. figure:: images/case_templates_1.png
 
