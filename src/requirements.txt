@@ -1,4 +1,4 @@
-pycti==6.0.9
+pycti==6.0.10
 dateparser==1.1.1
 pydantic==2.7.1
 pydantic_settings==2.2.1
