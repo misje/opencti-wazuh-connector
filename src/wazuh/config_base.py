@@ -20,14 +20,12 @@ class EnvSource(EnvSettingsSource):
     Source class with convenience methods for parsing certain complex types
     from environment variables
 
-    Environment variables, or .env files, is expected to be the favourable way
+    Environment variables, or .env files, are expected to be the favourable way
     to configure opencti-wazuh-connector. This works just fine for simple field
     types, but it can be tricky for more complex field types.
-
-    :pydantic:`<>`
     """
 
-    # TODO: possible to stringigy enum names (not values) and match? If not, accept without hyphen?
+    # TODO: possible to stringify enum names (not values) and match? If not, accept without hyphen?
 
     def prepare_field_value(
         self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
@@ -56,6 +54,8 @@ class EnvSource(EnvSettingsSource):
                     return comma_string_to_set(
                         value.lower(), args[0] if is_enum else None
                     )
+        # Otherwise, provide a special parsing strategy for a set of classes
+        # that can be converted into a list of key–value pairs:
         elif (
             isinstance(value, str)
             and typing.get_origin(field.annotation) is list

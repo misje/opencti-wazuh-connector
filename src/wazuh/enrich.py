@@ -407,12 +407,12 @@ class Enricher(BaseModel):
                             "syscheck.sha1_after",
                             "syscheck.sha256_after",
                         ],
-                        # In syscheck modificaiton events, both 'before' and
+                        # In syscheck modification events, both 'before' and
                         # 'after' hashes are present. In such cases, the
                         # 'after' hash is wanted. However, if only 'before' is
-                        # present, be sure to include that one. Add before
+                        # present, be sure to include that one. Add 'before'
                         # hashes as a second list argument to indicate lesser
-                        # prefere:
+                        # preference:
                         [
                             "syscheck.md5_before",
                             "syscheck.sha1_before",
