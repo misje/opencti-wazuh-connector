@@ -1,4 +1,4 @@
-FROM python:3.11-alpine
+FROM python:3.12-alpine
 ENV CONNECTOR_TYPE=INTERNAL_ENRICHMENT
 
 LABEL org.opencontainers.image.documentation="https://misje.github.io/opencti-wazuh-connector"
