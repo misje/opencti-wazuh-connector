@@ -2,7 +2,6 @@
 import os
 import sys
 import pytest
-from pydantic import ValidationError
 
 sys.path.insert(0, os.path.abspath("../../src"))
 from wazuh.opensearch_dsl import Match, OrderBy, Regexp, Wildcard

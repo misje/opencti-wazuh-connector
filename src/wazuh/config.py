@@ -6,7 +6,7 @@ from pydantic import (
     field_validator,
     ValidationInfo,
 )
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 from typing import Iterable
 
 from .search_config import SearchConfig
@@ -360,7 +360,7 @@ class Config(ConfigBase):
     recursion).
 
     .. note::
-        
+
         When modifying this setting, be sure to include relevant labels in
         :attr:`label_ignore_list`.
     """

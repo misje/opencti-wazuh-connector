@@ -5,7 +5,6 @@ import pytest
 from pydantic import AnyHttpUrl
 
 sys.path.insert(0, os.path.abspath("../../src"))
-from wazuh.opensearch_config import OpenSearchConfig
 from wazuh.enrich_config import EnrichmentConfig, FilenameBehaviour
 from wazuh.opensearch_dsl import SortOrder
 from wazuh.config import Config

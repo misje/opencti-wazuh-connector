@@ -12,8 +12,7 @@ from wazuh.search import AlertSearcher
 from wazuh.search_config import FileSearchOption, SearchConfig
 from wazuh.opensearch import OpenSearchClient
 from wazuh.opensearch_config import OpenSearchConfig
-from wazuh.opensearch_dsl import Bool, Match, MultiMatch, Regexp, Term, Wildcard
-from wazuh.utils import merge_outof
+from wazuh.opensearch_dsl import Bool, MultiMatch, Regexp, Term
 from test_common import osConf
 
 random.seed(0)

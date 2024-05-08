@@ -7,7 +7,7 @@ from pydantic import (
     field_validator,
 )
 from typing import Any
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 from .utils import parse_human_datetime, truthy, verify_url
 from .opensearch_dsl import Match, OrderBy, QueryType
 from .opensearch_dsl_helper import dsl_matches_from_string, dsl_order_by_from_string

@@ -1,7 +1,7 @@
 import re
 import ipaddress
 import logging
-from pydantic import AnyUrl, BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict
 from typing import Sequence
 from pycti import OpenCTIConnectorHelper
 
@@ -12,12 +12,10 @@ from .search_config import (
     FileSearchOption,
 )
 from .opensearch import OpenSearchClient
-from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Term, Wildcard
+from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Wildcard
 from .utils import (
     field_as_list,
     get_path_sep,
-    has,
-    has_any,
     oneof_nonempty,
     list_or_empty,
     mac_permutations,

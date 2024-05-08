@@ -1,5 +1,5 @@
 from pydantic import AnyHttpUrl, AnyUrl, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import SettingsConfigDict
 from .utils import verify_url
 from .config_base import ConfigBase
 

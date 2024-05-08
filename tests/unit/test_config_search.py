@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 sys.path.insert(0, os.path.abspath("../../src"))
-from wazuh.search_config import DirSearchOption, FileSearchOption, SearchConfig
+from wazuh.search_config import SearchConfig
 
 
 @pytest.fixture(

@@ -1173,12 +1173,14 @@ class WazuhConnector:
             )
             rel = stix2.Relationship(
                 id=StixCoreRelationship.generate_id(
-                    "related-to", agent["standard_id"], hostname.id
+                    "related-to",
+                    agent["standard_id"],
+                    hostname.id,  # pylint: disable=no-member
                 ),
                 **self.stix.common_properties,
                 relationship_type="related-to",
                 source_ref=agent["standard_id"],
-                target_ref=hostname.id,
+                target_ref=hostname.id,  # pylint: disable=no-member
                 # If this is a new entry based off of the Wazuh API, don't use
                 # the alert timestamp:
                 start_time=(None if agent.get("is_new") else earliest),

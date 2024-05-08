@@ -179,7 +179,7 @@ class Bool(BaseModel):
         return {type(self).__name__.lower(): handler(self)}
 
 
-## Cannot be used in Bool, unfortunately, due to self-referencing:
+# Cannot be used in Bool, unfortunately, due to self-referencing:
 QueryType: TypeAlias = (
     Term | Exists | Range | Match | MultiMatch | Wildcard | Regexp | Bool
 )

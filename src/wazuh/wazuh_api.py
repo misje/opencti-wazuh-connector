@@ -73,10 +73,12 @@ class Connection(WAPIResult):
     process_name: str = Field(validation_alias=AliasChoices("process", "process_name"))
 
     @field_validator("local_ip", "remote_ip", mode="before")
+    @classmethod
     def parse_ip(cls, address: dict | str):
         return address["ip"] if isinstance(address, dict) else address
 
     @field_validator("local_port", "remote_port", mode="before")
+    @classmethod
     def parse_port(cls, address: dict | str):
         return address["port"] if isinstance(address, dict) else address
 

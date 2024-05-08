@@ -2,16 +2,12 @@
 import os
 import sys
 import pytest
-import random
-import json
-from pydantic import AnyHttpUrl, ValidationError
+from pydantic import ValidationError
 from datetime import datetime
 
 sys.path.insert(0, os.path.abspath("../../src"))
-from wazuh.opensearch_config import OpenSearchConfig
 from test_common import osConf
 from wazuh.opensearch_dsl import Match, OrderBy
-from wazuh.utils import merge_outof
 
 # random.seed(0)
 

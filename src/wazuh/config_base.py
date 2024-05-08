@@ -10,7 +10,7 @@ from pydantic_settings import (
 from typing import Any
 from pydantic.fields import FieldInfo
 from enum import Enum
-from json import JSONDecodeError, JSONEncoder
+from json import JSONDecodeError
 from .utils import comma_string_to_set
 from .opensearch_dsl import OrderBy, Match, Term, Regexp, Wildcard
 

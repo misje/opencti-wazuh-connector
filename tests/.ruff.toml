@@ -1,1 +1,1 @@
-extend-ignore = ['E402']
+lint.extend-ignore = ['E402']

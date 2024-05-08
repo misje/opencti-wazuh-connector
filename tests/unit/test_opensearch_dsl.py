@@ -2,15 +2,12 @@
 import os
 import sys
 import pytest
-import random
 import json
 from pydantic import ValidationError
-from typing import TypeAlias
 
 sys.path.insert(0, os.path.abspath("../../src"))
 from wazuh.opensearch_dsl import (
     Bool,
-    Exists,
     Match,
     MultiMatch,
     OrderBy,
@@ -18,7 +15,6 @@ from wazuh.opensearch_dsl import (
     Range,
     Regexp,
     SortOrder,
-    Term,
     Wildcard,
 )
 
