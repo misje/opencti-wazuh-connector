@@ -1,4 +1,4 @@
-autodoc_pydantic==2.1.0
+autodoc_pydantic==2.2.0
 sphinx==7.2.6
 sphinx_paramlinks==0.6.0
 sphinx_rtd_theme==2.0.0
