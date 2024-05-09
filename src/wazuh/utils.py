@@ -2,7 +2,7 @@ import re
 import ipaddress
 import dateparser
 from enum import Enum
-from typing import Any, Callable, Literal, Mapping, Type, TypeVar
+from typing import Any, Callable, Literal, Mapping, Sequence, Type, TypeVar
 from os.path import commonprefix
 from pydantic import AnyUrl, ValidationError
 from datetime import datetime, timedelta
@@ -1031,8 +1031,8 @@ def none_unless_threshold(
 def verify_url(
     url: AnyUrl | str | None,
     *,
-    must: list[str] | None = None,
-    must_not: list[str] | None = ["username", "password", "query", "fragment"],
+    must: Sequence[str] | None = None,
+    must_not: Sequence[str] | None = ("username", "password", "query", "fragment"),
     throw: bool = False,
 ) -> bool:
     """
