@@ -153,8 +153,6 @@ class WazuhConnector:
         # TODO: Add opencti variables to config for doc, enforce required, and
         # in order to load from yaml (feed opencti dict to helper below):
         self.helper = OpenCTIConnectorHelper({}, True)
-        # FIXME: remove:
-        log.info(self.conf.model_dump_json())
 
         # FIXME: deprecated: remove and don't set confidence:
         self.confidence = (
