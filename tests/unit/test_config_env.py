@@ -103,7 +103,7 @@ def test_config_from_env(monkeypatch):
                 SupportedEntity.Vulnerability,
                 SupportedEntity.Indicator,
             },
-            "type": ConnectorType.Enrichment,
+            "type": ConnectorType.InternalEnrichment,
         },
         "create_agent_hostname_observable": False,
         "create_agent_ip_observable": True,

@@ -18,8 +18,8 @@ def test_nomissing_nothrow():
 
 
 def test_type_from_env(monkeypatch):
-    monkeypatch.setenv("CONNECTOR_TYPE", "enrichment")
-    assert ConnectorConfig(id="foo").type == ConnectorType.Enrichment
+    monkeypatch.setenv("CONNECTOR_TYPE", "internal_enrichment")
+    assert ConnectorConfig(id="foo").type == ConnectorType.InternalEnrichment
 
 
 def test_scope_from_env(monkeypatch):
