@@ -2,6 +2,7 @@
 import os
 import sys
 import pytest
+import datetime
 from pydantic import AnyHttpUrl
 
 sys.path.insert(0, os.path.abspath("../../src"))
@@ -9,62 +10,60 @@ from wazuh.enrich_config import EnrichmentConfig, FilenameBehaviour
 from wazuh.opensearch_dsl import SortOrder
 from wazuh.config import Config
 from wazuh.search_config import DirSearchOption, FileSearchOption, ProcessSearchOption
+from wazuh.connector_config import ConnectorType, LogLevel, SupportedEntity
 
 
-@pytest.fixture(scope="session", autouse=True)
-def set_env():
-    os.environ["OPENCTI_URL"] = "http://opencti:8080"
-    os.environ["OPENCTI_TOKEN"] = "admintoken"
-    os.environ["CONNECTOR_ID"] = "81f9d582-2b4e-45f1-98b6-f33492d66b6e"
-    os.environ["CONNECTOR_NAME"] = "Wazuh"
-    os.environ[
-        "CONNECTOR_SCOPE"
-    ] = "Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability"
-    os.environ["CONNECTOR_AUTO"] = "true"
-    os.environ["CONNECTOR_CONFIDENCE_LEVEL"] = "100"
-    os.environ["CONNECTOR_LOG_LEVEL"] = "debug"
-    os.environ["CONNECTOR_EXPOSE_METRICS"] = "true"
-    os.environ["WAZUH_APP_URL"] = "https://wazuh.example.org"
-    os.environ["WAZUH_OPENSEARCH_URL"] = "https://wazuh.example.org:9200"
-    os.environ["WAZUH_OPENSEARCH_USERNAME"] = "cti_connector"
-    os.environ["WAZUH_OPENSEARCH_PASSWORD"] = "os_password"
-    os.environ["WAZUH_OPENSEARCH_INDEX"] = "wazuh-alerts-*"
-    os.environ["WAZUH_OPENSEARCH_VERIFY_TLS"] = "false"
-    # os.environ["WAZUH_OPENSEARCH_SEARCH_AFTER"] = "3 months ago"
-    os.environ["WAZUH_API_ENABLED"] = "false"
-    os.environ["WAZUH_API_URL"] = "https://wazuh.example.org:55000"
-    os.environ["WAZUH_API_USERNAME"] = "api_ro"
-    os.environ["WAZUH_API_PASSWORD"] = "w_password"
-    os.environ["WAZUH_MAX_HITS"] = "50"
-    os.environ['"WAZUH_SYSTEM_NAME'] = "Wazuh SIEM"
-    os.environ["WAZUH_AUTHOR_NAME"] = "Wazuh"
-    os.environ["WAZUH_ORDER_BY_RULE_LEVEL"] = "true"
-    os.environ["WAZUH_ALERTS_AS_NOTES"] = "true"
-    os.environ["WAZUH_SEARCH_LOOKUP_AGENT_IP"] = "false"
-    os.environ["WAZUH_SEARCH_LOOKUP_AGENT_NAME"] = "true"
-    os.environ["WAZUH_SEARCH_IGNORE_PRIVATE_ADDRS"] = "false"
-    os.environ["WAZUH_CREATE_OBSERVABLE_SIGHTINGS"] = "true"
-    os.environ["WAZUH_MAX_TLP"] = "TLP:RED"
-    os.environ["WAZUH_TLP"] = "TLP:AMBER"
-    os.environ["WAZUH_SIGHTING_MAX_EXTREFS"] = "10"
-    os.environ["WAZUH_SIGHTING_MAX_EXTREFS_PER_ALERT_RULE"] = "2"
-    os.environ["WAZUH_SIGHTING_MAX_NOTES"] = "10"
-    os.environ["WAZUH_SIGHTING_MAX_NOTES_PER_ALERT_RULE"] = "2"
-    os.environ["WAZUH_INCIDENT_REQUIRE_INDICATOR"] = "false"
-    os.environ["WAZUH_INCIDENT_CREATE_MODE"] = "per_sighting"
-    # WAZUH_INCIDENT_CREATE_THRESHOLD=medium # [low, medium, high, critical] or [0–15]
-    os.environ["WAZUH_ENRICH_TYPES"] = "all"
-    os.environ["WAZUH_ENRICH_AGENT"] = "true"
-    os.environ["WAZUH_ENRICH_LABEL_ADD_LIST"] = "wazuh_ignore"
-    os.environ["WAZUH_CREATE_AGENT_IP_OBSERVABLE"] = "true"
-    os.environ["WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE"] = "false"
-    os.environ["WAZUH_ENRICH_FILENAME_BEHAVIOUR"] = "create-dir,remove-path"
-    os.environ["WAZUH_IGNORE_OWN_ENTITIES"] = "false"
-    os.environ["WAZUH_LABEL_IGNORE_LIST"] = "hygiene,wazuh_ignore,foobar"
-    os.environ["WAZUH_CREATE_INCIDENT_RESPONSE"] = "true"
+def test_config_from_env(monkeypatch):
+    monkeypatch.setenv("OPENCTI_URL", "http://opencti:8080")
+    monkeypatch.setenv("OPENCTI_TOKEN", "admintoken")
+    monkeypatch.setenv("CONNECTOR_ID", "81f9d582-2b4e-45f1-98b6-f33492d66b6e")
+    monkeypatch.setenv("CONNECTOR_NAME", "Wazuh")
+    monkeypatch.setenv(
+        "CONNECTOR_SCOPE",
+        "Artifact, Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability, Indicator",
+    )
+    monkeypatch.setenv("CONNECTOR_AUTO", "true")
+    monkeypatch.setenv("CONNECTOR_CONFIDENCE_LEVEL", "100")
+    monkeypatch.setenv("CONNECTOR_LOG_LEVEL", "debug")
+    monkeypatch.setenv("CONNECTOR_EXPOSE_METRICS", "true")
+    monkeypatch.setenv("WAZUH_APP_URL", "https://wazuh.example.org")
+    monkeypatch.setenv("WAZUH_OPENSEARCH_URL", "https://wazuh.example.org:9200")
+    monkeypatch.setenv("WAZUH_OPENSEARCH_USERNAME", "cti_connector")
+    monkeypatch.setenv("WAZUH_OPENSEARCH_PASSWORD", "os_password")
+    monkeypatch.setenv("WAZUH_OPENSEARCH_INDEX", "wazuh-alerts-*")
+    monkeypatch.setenv("WAZUH_OPENSEARCH_VERIFY_TLS", "false")
+    monkeypatch.setenv("WAZUH_OPENSEARCH_SEARCH_AFTER", "3 months ago")
+    monkeypatch.setenv("WAZUH_API_ENABLED", "false")
+    monkeypatch.setenv("WAZUH_API_URL", "https://wazuh.example.org:55000")
+    monkeypatch.setenv("WAZUH_API_USERNAME", "api_ro")
+    monkeypatch.setenv("WAZUH_API_PASSWORD", "w_password")
+    monkeypatch.setenv("WAZUH_MAX_HITS", "50")
+    monkeypatch.setenv("WAZUH_SYSTEM_NAME", "Wazuh SIEM")
+    monkeypatch.setenv("WAZUH_AUTHOR_NAME", "Wazuh")
+    monkeypatch.setenv("WAZUH_ORDER_BY_RULE_LEVEL", "true")
+    monkeypatch.setenv("WAZUH_ALERTS_AS_NOTES", "true")
+    monkeypatch.setenv("WAZUH_SEARCH_LOOKUP_AGENT_IP", "false")
+    monkeypatch.setenv("WAZUH_SEARCH_LOOKUP_AGENT_NAME", "true")
+    monkeypatch.setenv("WAZUH_SEARCH_IGNORE_PRIVATE_ADDRS", "false")
+    monkeypatch.setenv("WAZUH_CREATE_OBSERVABLE_SIGHTINGS", "true")
+    monkeypatch.setenv("WAZUH_MAX_TLP", "TLP:RED")
+    monkeypatch.setenv("WAZUH_TLP", "TLP:AMBER")
+    monkeypatch.setenv("WAZUH_SIGHTING_MAX_EXTREFS", "10")
+    monkeypatch.setenv("WAZUH_SIGHTING_MAX_EXTREFS_PER_ALERT_RULE", "2")
+    monkeypatch.setenv("WAZUH_SIGHTING_MAX_NOTES", "10")
+    monkeypatch.setenv("WAZUH_SIGHTING_MAX_NOTES_PER_ALERT_RULE", "2")
+    monkeypatch.setenv("WAZUH_INCIDENT_REQUIRE_INDICATOR", "false")
+    monkeypatch.setenv("WAZUH_INCIDENT_CREATE_MODE", "per_sighting")
+    monkeypatch.setenv("WAZUH_ENRICH_TYPES", "all")
+    monkeypatch.setenv("WAZUH_ENRICH_AGENT", "true")
+    monkeypatch.setenv("WAZUH_ENRICH_LABEL_ADD_LIST", "wazuh_ignore")
+    monkeypatch.setenv("WAZUH_CREATE_AGENT_IP_OBSERVABLE", "true")
+    monkeypatch.setenv("WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE", "false")
+    monkeypatch.setenv("WAZUH_ENRICH_FILENAME_BEHAVIOUR", "create-dir,remove-path")
+    monkeypatch.setenv("WAZUH_IGNORE_OWN_ENTITIES", "false")
+    monkeypatch.setenv("WAZUH_LABEL_IGNORE_LIST", "hygiene,wazuh_ignore,foobar")
+    monkeypatch.setenv("WAZUH_CREATE_INCIDENT_RESPONSE", "true")
 
-
-def test_config_from_env():
     config = Config.model_validate({})
     expected = {
         "agents_as_systems": True,
@@ -78,6 +77,34 @@ def test_config_from_env():
         "app_url": AnyHttpUrl("https://wazuh.example.org/"),
         "author_name": "Wazuh",
         "bundle_abort_limit": 500,
+        "connector": {
+            "auto": True,
+            "id": "81f9d582-2b4e-45f1-98b6-f33492d66b6e",
+            "log_level": LogLevel.Debug,
+            "name": "Wazuh",
+            "scope": {
+                SupportedEntity.Artifact,
+                SupportedEntity.Directory,
+                SupportedEntity.DomainName,
+                SupportedEntity.EMailAddr,
+                SupportedEntity.Hostname,
+                SupportedEntity.IPv4Addr,
+                SupportedEntity.IPv6Addr,
+                SupportedEntity.MAC,
+                SupportedEntity.NetworkTraffic,
+                SupportedEntity.Process,
+                SupportedEntity.Software,
+                SupportedEntity.StixFile,
+                SupportedEntity.URL,
+                SupportedEntity.UserAccount,
+                SupportedEntity.UserAgent,
+                SupportedEntity.WindowsRegistryKey,
+                SupportedEntity.WindowsRegistryValueType,
+                SupportedEntity.Vulnerability,
+                SupportedEntity.Indicator,
+            },
+            "type": ConnectorType.Enrichment,
+        },
         "create_agent_hostname_observable": False,
         "create_agent_ip_observable": True,
         "create_incident": Config.IncidentCreateMode.PerSighting,
@@ -154,6 +181,11 @@ def test_config_from_env():
         "max_notes": 10,
         "max_notes_per_alert_rule": 2,
         "max_tlp": "TLP:RED",
+        "opencti": {
+            "ssl_verify": False,
+            "token": "admintoken",
+            "url": AnyHttpUrl("http://opencti:8080/"),
+        },
         "opensearch": {
             "exclude_match": [
                 {
@@ -174,6 +206,7 @@ def test_config_from_env():
                 },
             ],
             "password": "os_password",
+            "search_after": datetime.timedelta(days=90),
             "url": AnyHttpUrl("https://wazuh.example.org:9200/"),
             "username": "cti_connector",
             "verify_tls": False,

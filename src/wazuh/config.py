@@ -9,13 +9,15 @@ from pydantic import (
 from pydantic_settings import SettingsConfigDict
 from typing import Iterable
 
+from .opencti_config import OpenCTIConfig
+from .connector_config import ConnectorConfig
 from .search_config import SearchConfig
 from .wazuh_api_config import WazuhAPIConfig
 from .opensearch_config import OpenSearchConfig
 from .enrich_config import EnrichmentConfig
 from .stix_helper import TLPLiteral, tlp_marking_from_string, validate_stix_id
 from .utils import comma_string_to_set, verify_url
-from .config_base import ConfigBase
+from .config_base import ConfigBase, FuzzyEnum
 from enum import Enum
 
 
@@ -35,8 +37,7 @@ class Config(ConfigBase):
 
     model_config = SettingsConfigDict(env_prefix="WAZUH_", validate_assignment=True)
 
-    # TODO: add helper function for parsing without dashes too
-    class IncidentCreateMode(Enum):
+    class IncidentCreateMode(FuzzyEnum):
         """
         How and when incidents should be created
 
@@ -103,6 +104,14 @@ class Config(ConfigBase):
         Critical severity
         """
 
+    opencti: OpenCTIConfig = Field(default_factory=OpenCTIConfig.from_env)
+    """
+    OpenCTI-specific configuration
+    """
+    connector: ConnectorConfig = Field(default_factory=ConnectorConfig.from_env)
+    """
+    OpenCTI connector-specific configuration
+    """
     search: SearchConfig = Field(default_factory=SearchConfig)
     """
     Settings for how searching should be performed

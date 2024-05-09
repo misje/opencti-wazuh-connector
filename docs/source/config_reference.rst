@@ -9,6 +9,21 @@ Main configuration
 .. automodule:: wazuh.config
    :members:
 
+OpenCTI configuration
+------------------------
+
+OPENCTI settings
+^^^^^^^^^^^^^^^^
+
+.. automodule:: wazuh.opencti_config
+   :members:
+
+CONNECTOR settings
+^^^^^^^^^^^^^^^^^^
+
+.. automodule:: wazuh.connector_config
+   :members:
+
 OpenSearch configuration
 ------------------------
 
