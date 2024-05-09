@@ -8,7 +8,7 @@ LABEL org.opencontainers.image.source="https://github.com/misje/opencti-wazuh-co
 
 COPY src/requirements.txt /opt/opencti-connector-wazuh/
 WORKDIR /opt/opencti-connector-wazuh
-RUN apk --no-cache add build-base && \
+RUN apk --no-cache add build-base libmagic && \
    pip3 install --no-cache-dir -r requirements.txt && \
    apk del build-base
 RUN pip3 install --no-cache-dir -r requirements.txt
