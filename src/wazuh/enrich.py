@@ -141,11 +141,11 @@ class Enricher(BaseModel):
             bundle += self.enrich_reg_keys(incident=incident, alerts=alerts)
         if EType.IPv4Address in self.config.types:
             bundle += self.enrich_addrs(
-                incident=incident, alerts=alerts, type="IPv4-Addr"
+                incident=incident, alerts=alerts, proto="IPv4-Addr"
             )
         if EType.IPv6Address in self.config.types:
             bundle += self.enrich_addrs(
-                incident=incident, alerts=alerts, type="IPv6-Addr"
+                incident=incident, alerts=alerts, proto="IPv6-Addr"
             )
         if EType.MAC in self.config.types:
             bundle += self.enrich_macs(incident=incident, alerts=alerts)
@@ -267,7 +267,7 @@ class Enricher(BaseModel):
         return self.create_enrichment_obs_from_search_context(
             incident=incident,
             alerts=alerts,
-            type="User-Account",
+            sco_type="User-Account",
             SCO=stix2.UserAccount,
             # TODO: Maps 0 to user for rule id 5715. Make custom code that only
             # extracts user_id in certain contexts (or not in som cases)?
@@ -302,7 +302,7 @@ class Enricher(BaseModel):
         return self.create_enrichment_obs_from_search(
             incident=incident,
             alerts=alerts,
-            type="Url",
+            sco_type="Url",
             fields=[
                 "data.url",
                 "data.osquery.columns.update_url",
@@ -320,7 +320,7 @@ class Enricher(BaseModel):
         return self.create_enrichment_obs_from_search(
             incident=incident,
             alerts=alerts,
-            type="Email-Addr",
+            sco_type="Email-Addr",
             fields=[
                 "data.gcp.protoPayload.authenticationInfo.principalEmail",
                 "data.office365.UserId",
@@ -334,7 +334,7 @@ class Enricher(BaseModel):
         return self.create_enrichment_obs_from_search(
             incident=incident,
             alerts=alerts,
-            type="Directory",
+            sco_type="Directory",
             fields=[
                 "data.audit.directory.name",
                 "data.home",
@@ -480,7 +480,9 @@ class Enricher(BaseModel):
                     # NOTE: This produces the correct output, but due to
                     # https://github.com/OpenCTI-Platform/opencti/issues/2574,
                     # the values are not imported:
-                    values=[stix2.WindowsRegistryValueType(name=value, data_type=type)]
+                    values=[
+                        stix2.WindowsRegistryValueType(name=value, data_type=value_type)
+                    ]
                     if value is not None
                     else [],
                 ),
@@ -495,7 +497,7 @@ class Enricher(BaseModel):
                 search_field(alert["_source"], field, regex=REGISTRY_PATH_REGEX),
             )
             if path is not None
-            for type in (search_field(alert["_source"], "syscheck.value_type"),)
+            for value_type in (search_field(alert["_source"], "syscheck.value_type"),)
             for value in (search_field(alert["_source"], "syscheck.value_name"),)
         }
         return [
@@ -524,12 +526,12 @@ class Enricher(BaseModel):
         *,
         incident: stix2.Incident,
         alerts: list[dict],
-        type: Literal["IPv4-Addr", "IPv6-Addr"],
+        proto: Literal["IPv4-Addr", "IPv6-Addr"],
     ):
         return self.create_enrichment_obs_from_search(
             incident=incident,
             alerts=alerts,
-            type=type,
+            sco_type=proto,
             fields=[
                 "data.aws.remote_ip",
                 "data.aws.source_ip_address",
@@ -543,7 +545,7 @@ class Enricher(BaseModel):
                 "data.win.eventdata.sourceIp",
             ],
             validator=lambda x: ip_proto(x)
-            == ("ipv4" if type == "IPv4-Addr" else "ipv6"),
+            == ("ipv4" if proto == "IPv4-Addr" else "ipv6"),
         )
 
     def enrich_macs(
@@ -555,7 +557,7 @@ class Enricher(BaseModel):
         return self.create_enrichment_obs_from_search(
             incident=incident,
             alerts=alerts,
-            type="Mac-Addr",
+            sco_type="Mac-Addr",
             fields=[
                 "data.dmac",  # fireeye
                 "data.dstMac",  # sonicwall
@@ -583,7 +585,7 @@ class Enricher(BaseModel):
         return self.create_enrichment_obs_from_search(
             incident=incident,
             alerts=alerts,
-            type="User-Agent",
+            sco_type="User-Agent",
             fields=["data.aws.userAgent", "data.office365.UserAgent"],
             # Ignore empty strings:
             validator=lambda x: x,
@@ -924,7 +926,7 @@ class Enricher(BaseModel):
         return self.create_enrichment_obs_from_search(
             incident=incident,
             alerts=alerts,
-            type="Domain-Name",
+            sco_type="Domain-Name",
             fields=[
                 "data.osquery.columns.hostname",  # FQDN
                 "data.dns.question.name",
@@ -1024,7 +1026,7 @@ class Enricher(BaseModel):
         *,
         incident: stix2.Incident,
         alerts: list[dict],
-        type: str,
+        sco_type: str,
         fields: list[str],
         validator: Callable[[Any], bool] | None = None,
         transform: TransformCallback | None = None,
@@ -1040,12 +1042,12 @@ class Enricher(BaseModel):
                 # is a dict of additional properties to pass to the SCO
                 # constructor:
                 return {
-                    value: self.stix.create_sco(type, value, **properties)
+                    value: self.stix.create_sco(sco_type, value, **properties)
                     for transformed in transform(match)
                     for value, properties in (transformed,)
                 }
             else:
-                return {match: self.stix.create_sco(type, match)}
+                return {match: self.stix.create_sco(sco_type, match)}
 
         results = {
             # Create a dict so that the SRO created later has some useful
@@ -1078,7 +1080,7 @@ class Enricher(BaseModel):
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
-                    description=f"{type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
+                    description=f"{sco_type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
                     source_ref=incident.id,
                     target_ref=sco_bundle.sco.id,
                 ),
@@ -1090,7 +1092,7 @@ class Enricher(BaseModel):
         *,
         incident: stix2.Incident,
         alerts: list[dict],
-        type,
+        sco_type,
         SCO: Any,
         property_field_map: dict[str, dict[str, list[str]]],
         properties_validator: Callable[[dict[str, Any]], bool] | None = None,
@@ -1135,7 +1137,7 @@ class Enricher(BaseModel):
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
-                    description=f"{type} found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
+                    description=f"{sco_type} found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
                     source_ref=incident.id,
                     target_ref=sco.id,
                 ),
