@@ -879,14 +879,14 @@ class AlertSearcher(BaseModel):
         the value (*data*). If the data type is REG_BINARY, the contents is
         expected to be a *hex string*, of which a SHA-256 hash is computed.
         """
-        hash = None
+        reg_hash = None
         match stix_entity["data_type"]:
             case "REG_SZ" | "REG_EXPAND_SZ":
-                hash = sha256(stix_entity["data"].encode("utf-8")).hexdigest()
+                reg_hash = sha256(stix_entity["data"].encode("utf-8")).hexdigest()
             case "REG_BINARY":
                 # The STIX standard says that binary data can be in any form, but in order to be able to use this type of observable at all, support only hex strings:
                 try:
-                    hash = sha256(bytes.fromhex(stix_entity["data"])).hexdigest()
+                    reg_hash = sha256(bytes.fromhex(stix_entity["data"])).hexdigest()
                 except ValueError:
                     log.warning(
                         f"Windows-Registry-Value-Type binary string could not be parsed as a hex string: {stix_entity['data']}"
@@ -899,8 +899,10 @@ class AlertSearcher(BaseModel):
                 return None
 
         return (
-            self.opensearch.search_multi(fields=["syscheck.sha256_after"], value=hash)
-            if hash
+            self.opensearch.search_multi(
+                fields=["syscheck.sha256_after"], value=reg_hash
+            )
+            if reg_hash
             else None
         )
 

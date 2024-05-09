@@ -1034,6 +1034,8 @@ class Enricher(BaseModel):
         # Create a dict where the key is the value found by searching the
         # alert, and the value is the STIX cyber observable:
         def create_sco(match: Any) -> dict[str, SCOBundle]:
+            if sco_type == "Domain-Name":
+                log.info(f"Creating domain name: {match}")
             if transform:
                 # If a custom transformation function is supplied, the value is
                 # probably not a simple string and need to be converted. The

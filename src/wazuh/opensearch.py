@@ -132,15 +132,15 @@ class OpenSearchClient:
 
     def search(
         self,
-        must: Sequence[QueryType] = [],
+        must: Sequence[QueryType] | None = None,
         *,
-        must_not: Sequence[QueryType] = [],
-        should: Sequence[QueryType] = [],
-        filter: Sequence[QueryType] = [],
+        must_not: Sequence[QueryType] | None = None,
+        should: Sequence[QueryType] | None = None,
+        filter: Sequence[QueryType] | None = None,
     ):
         conf = self.config
-        filter = conf.filter
-        if not filter:
+        if filter is None:
+            filter = []
             if isinstance(conf.search_after, datetime):
                 filter += [
                     Range(field="@timestamp", gte=conf.search_after.isoformat() + "Z")
@@ -148,15 +148,16 @@ class OpenSearchClient:
             elif isinstance(conf.search_after, timedelta):
                 timestamp = datetime.now() - conf.search_after
                 filter += [Range(field="@timestamp", gte=timestamp.isoformat() + "Z")]
+
             if conf.include_match or conf.exclude_match:
                 filter += [Bool(must=conf.include_match, must_not=conf.exclude_match)]
         try:
             return self._search(
                 Query(
                     query=Bool(
-                        must=must,
-                        must_not=must_not,
-                        should=should,
+                        must=must or [],
+                        must_not=must_not or [],
+                        should=should or [],
                         filter=filter or conf.filter,
                     )
                 )

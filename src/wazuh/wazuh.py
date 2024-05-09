@@ -100,13 +100,16 @@ def parse_incident_create_threshold(threshold: str | int | None) -> int:
             raise ValueError(f"WAZUH_INCIDENT_CREATE_THRESHOLD is invalid: {threshold}")
 
 
-def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] = []):
+def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] | None = None):
     """
     Create a markdown table with key Wazuh alert information
 
     Any additional rows can be appended to the table using additional_rows.
     """
     s = alert["_source"]
+    if additional_rows is None:
+        additional_rows = []
+
     return (
         "|Key|Value|\n"
         "|---|-----|\n"
@@ -526,15 +529,15 @@ class WazuhConnector:
 
     def create_agent_stix(self, alert):
         s = alert["_source"]
-        id = s["agent"]["id"]
+        agent_id = s["agent"]["id"]
         name = s["agent"]["name"]
         return stix2.Identity(
             # id=Identity.generate_id(name, "system"),
-            id=Identity.generate_id(id, "system"),
+            id=Identity.generate_id(agent_id, "system"),
             **self.stix_common_attrs,
             name=name,
             identity_class="system",
-            description=self.generate_agent_md_tables(id),
+            description=self.generate_agent_md_tables(agent_id),
         )
 
     def relate_agents_to_siem(self, agents: list[stix2.Identity], siem: stix2.Identity):
@@ -1068,22 +1071,22 @@ class WazuhConnector:
             if int(agent["id"]) > 0 and "ip" in agent
         }
         if self.wazuh and self.conf.enrich_agent:
-            for id, agent in agents.copy().items():
-                if id in self.wazuh.state.agents:
-                    api_agent = self.wazuh.state.agents[id].model_dump(
+            for agent_id, agent in agents.copy().items():
+                if agent_id in self.wazuh.state.agents:
+                    api_agent = self.wazuh.state.agents[agent_id].model_dump(
                         include={"name", "ip", "scan_time"}
                     )
                     # The agent has changed its address at some point in time.
                     # Add the new address as well:
                     if api_agent["ip"] != agent["ip"]:
                         # Createa new key to be able to add the new agent metadata:
-                        agents[id + str(api_agent["ip"])] = api_agent | {
+                        agents[agent_id + str(api_agent["ip"])] = api_agent | {
                             "standard_id": agent["standard_id"],
                             "is_new": True,
                         }
                     else:
                         # Add new metadata:
-                        agents[id] |= api_agent
+                        agents[agent_id] |= api_agent
 
         bundle = []
         earliest = min(alert["_source"]["@timestamp"] for alert in alerts)
@@ -1095,7 +1098,7 @@ class WazuhConnector:
         for agent in agents.values():
             SCO = (
                 stix2.IPv4Address
-                if type(agent["ip"]) is ipaddress.IPv4Address
+                if isinstance(agent["ip"], ipaddress.IPv4Address)
                 else stix2.IPv6Address
             )
             addr = SCO(
@@ -1199,8 +1202,8 @@ class WazuhConnector:
 
         return bundle
 
-    def alert_rule_link(self, id: str) -> str:
+    def alert_rule_link(self, rule_id: str) -> str:
         return urljoin(
             self.app_url,  # type: ignore
-            f"app/wazuh#/manager/?tab=rules&redirectRule={id}",
+            f"app/wazuh#/manager/?tab=rules&redirectRule={rule_id}",
         )

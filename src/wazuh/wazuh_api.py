@@ -157,7 +157,9 @@ class WazuhAPIClient:
 
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    def _query(self, endpoint, params, *, method="GET", auth=None, headers: dict = {}):
+    def _query(
+        self, endpoint, params, *, method="GET", auth=None, headers: dict | None = None
+    ):
         if not self.conf.url:
             raise ValueError("URL is not set")
         if not self.conf.username:
@@ -176,7 +178,7 @@ class WazuhAPIClient:
         http.headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            **headers,
+            **(headers or {}),
         }
         http.mount(str(self.conf.url), adapter)
         # TODO:: allow import of cert
@@ -224,7 +226,7 @@ class WazuhAPIClient:
             f"Successfully logged into Wazuh API at {str(self.conf.url)} as user {self.conf.username}"
         )
 
-    def query(self, endpoint, params={}):
+    def query(self, endpoint, params: dict | None = None):
         if (
             not self.jwt_timestamp
             or (datetime.now() - self.jwt_timestamp).total_seconds() >= 900

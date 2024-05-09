@@ -79,7 +79,7 @@ TLPLiteral = Literal[
 DUMMY_INDICATOR_ID: Final[str] = "indicator--167565fe-69da-5e2f-a1c1-0542736f9f9a"
 
 
-def validate_stix_id(id: str, object_type: str = "") -> bool:
+def validate_stix_id(uuid: str, object_type: str = "") -> bool:
     """
     Test whether a string is a STIX standard ID ([object-type]--[UUID])
 
@@ -95,10 +95,10 @@ def validate_stix_id(id: str, object_type: str = "") -> bool:
     return bool(
         re.match(
             r"^.+--[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
-            id,
+            uuid,
             re.IGNORECASE,
         )
-    ) and id.startswith(object_type)
+    ) and uuid.startswith(object_type)
 
 
 class SCOBundle(BaseModel):
@@ -424,9 +424,9 @@ class StixHelper(BaseModel):
             if FilenameBehaviour.RemovePath in self.filename_behaviour
             else names[1:]
         )
-        dir = None
+        dir_sco = None
         if paths and FilenameBehaviour.CreateDir in self.filename_behaviour:
-            dir = stix2.Directory(
+            dir_sco = stix2.Directory(
                 path=paths[0],
                 allow_custom=True,
                 **self.common_properties,
@@ -440,14 +440,14 @@ class StixHelper(BaseModel):
                     properties,
                     name=main_name,
                     hashes={"SHA-256": sha256} if sha256 else None,
-                    parent_directory_ref=dir,
+                    parent_directory_ref=dir_sco,
                     allow_custom=True,
                     **self.common_properties,
                     labels=self.sco_labels,
                     x_opencti_additional_names=extra_names,
                 )
             ),
-            nested_objs=filter_truthy(dir),
+            nested_objs=filter_truthy(dir_sco),
         )
 
     def create_addr_sco(
@@ -473,7 +473,7 @@ class StixHelper(BaseModel):
             **properties,
         )
 
-    def create_sco(self, type: str, value: str | None, **properties) -> SCOBundle:
+    def create_sco(self, sco_type: str, value: str | None, **properties) -> SCOBundle:
         """
         Create a SCO from its type name and properties
 
@@ -491,7 +491,7 @@ class StixHelper(BaseModel):
                 sco=SCO(**merge_outof(properties, **common_attrs, **kwargs))
             )
 
-        match type:
+        match sco_type:
             case "Directory":
                 return _create_sco(stix2.Directory, path=value)
             case "Domain-Name":
@@ -523,7 +523,7 @@ class StixHelper(BaseModel):
             case "Windows-Registry-Key":
                 return _create_sco(stix2.WindowsRegistryKey, key=value)
             case _:
-                raise ValueError(f"Enrichment SCO {type} not supported")
+                raise ValueError(f"Enrichment SCO {sco_type} not supported")
 
     def create_account_from_username(self, username: str | None, **stix_properties):
         """

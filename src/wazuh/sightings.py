@@ -75,7 +75,7 @@ class SightingsCollector:
                 first_seen=timestamp,
                 last_seen=timestamp,
                 count=1,
-                alerts={rule_id: [alert]},
+                alerts={str(rule_id): [alert]},
                 max_rule_level=alert["_source"]["rule"]["level"],
             )
             self._latest = timestamp

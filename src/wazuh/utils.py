@@ -190,7 +190,7 @@ def first_or_empty(values: list[str]) -> str:
     return values[0] if values else ""
 
 
-def first_of(values: list[Any], type: type) -> Any:
+def first_of(values: list[Any], item_type: type) -> Any:
     """
     Return the first item of the given type in the list
 
@@ -200,7 +200,7 @@ def first_of(values: list[Any], type: type) -> Any:
     '2'
     >>> first_of([1, '2'], dict)
     """
-    return first_or_none(list(filter(lambda x: isinstance(x, type), values)))
+    return first_or_none(list(filter(lambda x: isinstance(x, item_type), values)))
 
 
 def truthy(value) -> bool:
@@ -224,7 +224,7 @@ def filter_truthy(*values: Any) -> list[Any]:
     >>> filter_truthy(None, 1, '', 0)
     [1, 0]
     """
-    return list(filter(lambda x: truthy(x), values))
+    return list(filter(truthy, values))
 
 
 def listify(value: T | list[T] | None) -> list[T]:
@@ -338,7 +338,9 @@ def search_field(obj: Mapping, field: str, *, regex: str = "") -> str | None:
     return search_fields(obj, [field], regex=regex).get(field)
 
 
-def field_or_empty(obj: Mapping, field: str, type: SimpleTypeType = None) -> Any:
+def field_or_empty(
+    obj: Mapping, field: str, default_type: SimpleTypeType = None
+) -> Any:
     """
     Extract a field from an object or create a default value
 
@@ -359,12 +361,12 @@ def field_or_empty(obj: Mapping, field: str, type: SimpleTypeType = None) -> Any
     value = search_field(obj, field)
     default_values = {int: 0, str: "", dict: {}, list: []}
     if value is None:
-        if type is None:
+        if default_type is None:
             raise ValueError(
                 f"Field {field} is not found, and no default type is specified"
             )
 
-        return default_values[type]
+        return default_values[default_type]
     else:
         return value
 
@@ -542,7 +544,7 @@ def max_severity(severities: list[str]):
     """
     Return the maximum incident severity, by mapping each value to an integer
     """
-    return max(severities, key=lambda s: severity_to_int(s))
+    return max(severities, key=severity_to_int)
 
 
 def common_prefix_string(strings: list[str], elideString: str = "[…]"):
@@ -685,7 +687,7 @@ def search_in_object(obj: dict, search_term: str) -> dict[str, str]:
 
 
 def search_in_object_multi(
-    alert: dict, *search_terms: str, exclude_fields: list[str] = []
+    alert: dict, *search_terms: str, exclude_fields: list[str] | None = None
 ):
     """
     Search for multiple words in a dict recursively
@@ -699,6 +701,9 @@ def search_in_object_multi(
     >>> search_in_object_multi({'a': {'b': 'one two three', 'c': 'two', 'd': 'three'}}, 'two', 'three', exclude_fields=['a.d'])
     {'a.b': 'one two three', 'a.c': 'two'}
     """
+    if exclude_fields is None:
+        exclude_fields = []
+
     return {
         key: value
         for results in [search_in_object(alert, term) for term in search_terms]
@@ -707,13 +712,13 @@ def search_in_object_multi(
     }
 
 
-def regex_transform_keys(obj: dict[str, T], map: dict[str, str]) -> dict[str, T]:
+def regex_transform_keys(obj: dict[str, T], transforms: dict[str, str]) -> dict[str, T]:
     """
     Apply a regex tranformation to each key in object
 
-    Each key in the map is a regular expression, and each value is the
-    substitution pattern. The returned dict contains the substituted keys, and
-    the original values from obj.
+    Each key in the transforms map is a regular expression, and each value is
+    the substitution pattern. The returned dict contains the substituted keys,
+    and the original values from obj.
 
     Examples:
 
@@ -723,7 +728,7 @@ def regex_transform_keys(obj: dict[str, T], map: dict[str, str]) -> dict[str, T]
     return {
         re.sub(pattern, replacement, key): value
         for key, value in obj.items()
-        for pattern, replacement in map.items()
+        for pattern, replacement in transforms.items()
         if re.match(pattern, key)
     }
 
@@ -773,10 +778,15 @@ def ip_protos(*addrs: str) -> list[str]:
 
 # TODO: {src,dst}_ref should be a stix2.IPvxAddress type
 def connection_string(
-    *, src_ref=None, src_port=None, dst_ref=None, dst_port=None, protos: list[str] = []
+    *,
+    src_ref=None,
+    src_port=None,
+    dst_ref=None,
+    dst_port=None,
+    protos: list[str] | None = None,
 ):
     return (
-        f"{':'.join(protos)} "
+        f"{':'.join(protos or [])} "
         f"{src_ref.value if src_ref else '?'}:{src_port if src_port is not None else '?'}"
         " → "
         f"{dst_ref.value if dst_ref else '?'}:{dst_port if dst_port is not None else '?'}"
@@ -1021,8 +1031,8 @@ def none_unless_threshold(
 def verify_url(
     url: AnyUrl | str | None,
     *,
-    must: list[str] = [],
-    must_not: list[str] = ["username", "password", "query", "fragment"],
+    must: list[str] | None = None,
+    must_not: list[str] | None = ["username", "password", "query", "fragment"],
     throw: bool = False,
 ) -> bool:
     """
@@ -1083,6 +1093,11 @@ def verify_url(
     # >>> verify_url(AnyHttpUrl('http://foo.bar/baz?qux=quux'), throw=True)
     # Traceback (most recent call last):
     # ValueError: Invalid URL: properties expected to be empty: query
+    if must is None:
+        must = []
+    if must_not is None:
+        must_not = []
+
     if isinstance(url, str):
         try:
             url = AnyUrl(url)
