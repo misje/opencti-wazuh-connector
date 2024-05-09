@@ -1,6 +1,5 @@
 from pydantic import AnyHttpUrl
 from pydantic_settings import SettingsConfigDict
-from typing import Any
 from .config_base import ConfigBase
 
 
