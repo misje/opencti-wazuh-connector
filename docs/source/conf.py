@@ -3,9 +3,9 @@ import sys
 
 # -- Project information -----------------------------------------------------
 project = "opencti-wazuh-connector"
-copyright = "2024, Andreas Misje"
+copyright = "2024, Andreas Misje"  # pylint: disable=redefined-builtin
 author = "Andreas Misje"
-release = "0.0.1"
+release = "0.1.0"
 ## The full version, including alpha/beta/rc tags
 # with open("../../../version.txt", "r") as f:
 #    release = f.readline().rstrip()
@@ -88,7 +88,5 @@ extlinks = {
         "Project's GitHub page",
     ),
 }
-
-# TODO: gloassary and :term:
 
 sys.path.insert(0, os.path.abspath("../../src"))

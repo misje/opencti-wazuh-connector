@@ -103,18 +103,18 @@ class Config(ConfigBase):
         Critical severity
         """
 
-    search: SearchConfig = Field(default_factory=lambda: SearchConfig())
+    search: SearchConfig = Field(default_factory=SearchConfig)
     """
     Settings for how searching should be performed
     """
-    enrich: EnrichmentConfig = Field(default_factory=lambda: EnrichmentConfig())
+    enrich: EnrichmentConfig = Field(default_factory=EnrichmentConfig)
     """
     Settings for what and how to enrich
     """
     opensearch: OpenSearchConfig = Field(
         default_factory=lambda: OpenSearchConfig.model_validate({})
     )
-    api: WazuhAPIConfig = Field(default_factory=lambda: WazuhAPIConfig())
+    api: WazuhAPIConfig = Field(default_factory=WazuhAPIConfig)
 
     max_tlp: TLPLiteral
     """
@@ -497,29 +497,31 @@ class Config(ConfigBase):
 
     @field_validator("max_extrefs_per_alert_rule", mode="after")
     @classmethod
-    def max_ext_refs_below_total_max(cls, max: int | None, info: ValidationInfo):
+    def max_ext_refs_below_total_max(
+        cls, max_per_rule: int | None, info: ValidationInfo
+    ):
         """
         Ensure that max_extrefs is not below max_extrefs_per_alert_rule
         """
-        if max > info.data["max_extrefs"]:
+        if max_per_rule > info.data["max_extrefs"]:
             raise ValueError(
                 "max_extrefs_per_alert_rule must be less or equal to max_extrefs"
             )
 
-        return max
+        return max_per_rule
 
     @field_validator("max_notes_per_alert_rule", mode="after")
     @classmethod
-    def max_notes_below_total_max(cls, max: int | None, info: ValidationInfo):
+    def max_notes_below_total_max(cls, max_per_rule: int | None, info: ValidationInfo):
         """
         Ensure that max_notes is not below max_notes_per_alert_rule
         """
-        if max > info.data["max_notes"]:
+        if max_per_rule > info.data["max_notes"]:
             raise ValueError(
                 "max_notes_per_alert_rule must be less or equal to max_notes"
             )
 
-        return max
+        return max_per_rule
 
     @field_validator("app_url", mode="before")
     @classmethod
