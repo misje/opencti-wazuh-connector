@@ -146,13 +146,21 @@ class WazuhConnector:
             if exc_type is not None:
                 self.metric.inc("client_error_count")
 
-    def __init__(self):
+    def __init__(self, config: Config):
         self.CONNECTOR_VERSION: Final[str] = "0.0.1"
 
-        self.conf = Config.from_env()
-        # TODO: Add opencti variables to config for doc, enforce required, and
-        # in order to load from yaml (feed opencti dict to helper below):
-        self.helper = OpenCTIConnectorHelper({}, True)
+        self.conf = config
+        self.helper = OpenCTIConnectorHelper(
+            # Give the helper a dict with only the relevant members:
+            {
+                k: v
+                for k, v in config.model_dump(mode="json").items()
+                if k in ("opencti", "connector")
+            },
+            True,
+        )
+        log.info(f"DUMP: {config.model_dump(mode='json')['opencti']}")
+        log.info(f"OPENCTI URL: {self.helper.opencti_url}")
 
         # FIXME: deprecated: remove and don't set confidence:
         self.confidence = (

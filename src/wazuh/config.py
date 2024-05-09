@@ -35,7 +35,9 @@ class Config(ConfigBase):
     FIXME
     """
 
-    model_config = SettingsConfigDict(env_prefix="WAZUH_", validate_assignment=True)
+    model_config = SettingsConfigDict(
+        env_prefix="WAZUH_", validate_assignment=True, env_file=".env"
+    )
 
     class IncidentCreateMode(FuzzyEnum):
         """
