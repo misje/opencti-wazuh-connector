@@ -67,9 +67,13 @@ class Range(BaseModel):
 
     @model_validator(mode="after")
     def require_something(self) -> Range:
-        assert self.field and any(
+        if not self.field or not any(
             getattr(self, prop) is not None for prop in ["gte", "gt", "lte", "lt"]
-        )
+        ):
+            raise ValueError(
+                "Range requires a non-empty field and at least one operator"
+            )
+
         return self
 
     @model_serializer(mode="wrap")
@@ -166,9 +170,13 @@ class Bool(BaseModel):
 
     @model_validator(mode="after")
     def require_something(self) -> Bool:
-        assert any(
+        if not any(
             getattr(self, prop) for prop in ["must", "must_not", "should", "filter"]
-        )
+        ):
+            raise ValueError(
+                "At least one of must, must_not, should or filter must be set"
+            )
+
         if self.should and self.minimum_should_match is None:
             self.minimum_should_match = 1
 

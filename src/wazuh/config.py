@@ -480,7 +480,9 @@ class Config(ConfigBase):
         """
         Ensure that the string is a STIX standard ID (<type>--<UUID>)
         """
-        assert all(validate_stix_id(id) for id in ids)
+        if not all(validate_stix_id(id) for id in ids):
+            raise ValueError(f"STIX ID list contains an invalid ID: {ids}")
+
         return ids
 
     # TODO: depend on opensearch hits:
@@ -499,8 +501,11 @@ class Config(ConfigBase):
         """
         Ensure that max_extrefs is not below max_extrefs_per_alert_rule
         """
-        max_total = info.data["max_extrefs"]
-        assert max == max_total == 0 or max <= max_total
+        if max > info.data["max_extrefs"]:
+            raise ValueError(
+                "max_extrefs_per_alert_rule must be less or equal to max_extrefs"
+            )
+
         return max
 
     @field_validator("max_notes_per_alert_rule", mode="after")
@@ -509,8 +514,11 @@ class Config(ConfigBase):
         """
         Ensure that max_notes is not below max_notes_per_alert_rule
         """
-        max_total = info.data["max_notes"]
-        assert max == max_total == 0 or max <= max_total
+        if max > info.data["max_notes"]:
+            raise ValueError(
+                "max_notes_per_alert_rule must be less or equal to max_notes"
+            )
+
         return max
 
     @field_validator("app_url", mode="before")

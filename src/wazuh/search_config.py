@@ -301,8 +301,11 @@ class SearchConfig(ConfigBase):
     @field_validator("filesearch_options", mode="after")
     @classmethod
     def check_fileopt_regexp_dep(cls, opts: Any) -> Any:
-        if FileSearchOption.CaseInsensitive in opts:
-            assert FileSearchOption.AllowRegexp in opts
+        if (
+            FileSearchOption.CaseInsensitive in opts
+            and FileSearchOption.AllowRegexp not in opts
+        ):
+            raise ValueError("CaseInsensitive requires AllowRegexp")
 
         return opts
 
@@ -317,7 +320,8 @@ class SearchConfig(ConfigBase):
                 | D.CaseInsensitive
                 | D.IgnoreTrailingSlash
             ):
-                assert D.AllowRegexp in opts
+                if D.AllowRegexp not in opts:
+                    raise ValueError(f"{opts} requires AllowRegexp")
             case _:
                 pass
 
