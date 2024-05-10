@@ -76,5 +76,5 @@ services:
       - opencti:opencti
     # Set a limit on logs:
     logging:
-      option:
+      options:
         max-size: 50m

@@ -30,7 +30,7 @@ services:
         hard: 65536
     # Set a limit on logs:
     logging:
-      option:
+      options:
         max-size: 50m
 
   minio:
@@ -46,7 +46,7 @@ services:
     restart: always
     # Set a limit on logs:
     logging:
-      option:
+      options:
         max-size: 50m
 
   rabbitmq:
@@ -60,7 +60,7 @@ services:
     restart: always
     # Set a limit on logs:
     logging:
-      option:
+      options:
         max-size: 50m
 
   opencti:
@@ -100,7 +100,7 @@ services:
     restart: always
     # Set a limit on logs:
     logging:
-      option:
+      options:
         max-size: 50m
 
   worker:
@@ -117,7 +117,7 @@ services:
     restart: always
     # Set a limit on logs:
     logging:
-      option:
+      options:
         max-size: 50m
 
   connector-export-file-stix:
@@ -136,7 +136,7 @@ services:
       - opencti
     # Set a limit on logs:
     logging:
-      option:
+      options:
         max-size: 50m
 
   connector-import-file-stix:
@@ -157,7 +157,7 @@ services:
       - opencti
     # Set a limit on logs:
     logging:
-      option:
+      options:
         max-size: 50m
 
   connector-wazuh:
@@ -187,7 +187,7 @@ services:
       - opencti:opencti
     # Set a limit on logs:
     logging:
-      option:
+      options:
         max-size: 50m
 
 volumes:
