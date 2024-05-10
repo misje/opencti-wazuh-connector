@@ -14,6 +14,18 @@ TODO: example data + @timestamp script
    :language: yaml
    :linenos:
 
+In addition to the docker-compose.yml file above, you need an .env file for
+common environment variables needed by OpenCI:
+
+.. literalinclude:: opencti-env.env
+   :language: bash
+   :linenos:
+
+.. note::
+
+   All passwords in docker and docker-compose files must have their "**$**"
+   escaped by another "$" (i.e. "$" becomes "$$").
+
 .. note::
 
    The default **Wazuh** login is
@@ -23,10 +35,11 @@ TODO: example data + @timestamp script
 
 .. note::
 
-   The default **OpenCTI** login is
+   The default **OpenCTI** login is as you specified in .env (see above). The
+   defaults in the example above is:
 
    - Username: **admin@opencti.io**
-   - Password: TODO
+   - Password: **SecretPassword**
 
 .. note::
 

@@ -18,9 +18,22 @@ replace:
    :language: yaml
    :linenos:
 
+In addition to the docker-compose.yml file above, you need an .env file for
+common environment variables needed by OpenCI:
+
+.. literalinclude:: opencti-env.env
+   :language: bash
+   :linenos:
+
 .. note::
 
-   The default login is
+   All passwords in docker and docker-compose files must have their "**$**"
+   escaped by another "$" (i.e. "$" becomes "$$").
+
+.. note::
+
+   The default login is as you specified in .env (see above). The defaults in
+   the example above is:
 
    - Username: **admin@opencti.io**
-   - Password: TODO
+   - Password: **SecretPassword**
