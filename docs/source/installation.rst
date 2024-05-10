@@ -22,7 +22,7 @@ OpenCTI docker-compose file:
 
 After starting OpenCTI, look for any errors (get a continuous log wit ha
 little bit of history by running ``docker-compose logs -f --tail=100
-connector-wazuh``.
+connector-wazuh``).
 
    .. include:: alpha_warning.rst
 

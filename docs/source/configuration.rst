@@ -10,6 +10,11 @@ usernames and passwords), and there are some settings you :ref:`should
 <important-settings>` read about and possibly adjust, since they greatly affect
 the behaviour of the connector.
 
+Configuration sources
+---------------------
+
+TODO: docker: docker-compose and .env. non-docker: config.yml
+
 .. seealso::
 
       See :ref:`OpenCTI configuration <opencti-configuration>` for
