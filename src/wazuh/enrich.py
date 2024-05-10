@@ -10,6 +10,7 @@ from pycti import (
     AttackPattern,
     OpenCTIConnectorHelper,
     StixCoreRelationship,
+    Vulnerability,
 )
 from .stix_helper import (
     STIXList,
@@ -968,6 +969,7 @@ class Enricher(BaseModel):
                 )
             )
             vuln = stix2.Vulnerability(
+                id=Vulnerability.generate_id(name=fields["cve"]),
                 name=fields["cve"],
                 x_opencti_cvss_base_score=float_or_none(
                     fields.get("cvss.cvss3.base_score")
