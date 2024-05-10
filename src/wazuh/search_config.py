@@ -181,6 +181,10 @@ class DirSearchOption(FuzzyEnum):
 
 class ProcessSearchOption(FuzzyEnum):
     CaseInsensitive = "case-insensitive"
+    """
+    Perform a case-insensitive search for filenames/paths/arguments on all
+    platforms
+    """
 
 
 class SearchConfig(ConfigBase):
