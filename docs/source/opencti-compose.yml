@@ -64,7 +64,7 @@ services:
         max-size: 50m
 
   opencti:
-    image: opencti/platform:6.0.9
+    image: opencti/platform:6.0.10
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
       - APP__PORT=8080
@@ -104,7 +104,7 @@ services:
         max-size: 50m
 
   worker:
-    image: opencti/worker:6.0.9
+    image: opencti/worker:6.0.10
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
@@ -121,7 +121,7 @@ services:
         max-size: 50m
 
   connector-export-file-stix:
-    image: opencti/connector-export-file-stix:6.0.9
+    image: opencti/connector-export-file-stix:6.0.10
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
@@ -140,7 +140,7 @@ services:
         max-size: 50m
 
   connector-import-file-stix:
-    image: opencti/connector-import-file-stix:6.0.9
+    image: opencti/connector-import-file-stix:6.0.10
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}

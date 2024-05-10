@@ -25,8 +25,10 @@ Versions and compatibility
      - OpenCTI v. from
      - OpenCTI v. to
    * - 0.1.0
-     - 6.0.9
+     - 6.0.10
      - –
+
+Some minor OpenCTI versions prior to 6.0.10 should also work.
 
 .. _issue:
 
