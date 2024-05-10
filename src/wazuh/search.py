@@ -980,9 +980,9 @@ class AlertSearcher(BaseModel):
         esc_args = [escape_lucene_regex(arg) for arg in args]
         # Replace any Windows path escapes with a pattern that searches for any
         # number of backslash escapes:
-        esc_args = [re.sub(r"\\{2,}", r"\\\\+", arg) for arg in args]
+        esc_args = [re.sub(r"\\{2,}", r"\\\\+", arg) for arg in esc_args]
         # Wrap each argument in a word boundary:
-        esc_args = [rf"(.*[ \\t\\n\\r]*)?{arg}([ \\t\\n\\r]*.*)?" for arg in args]
+        esc_args = [rf"(.*[ \\t\\n\\r]*)?{arg}([ \\t\\n\\r]*.*)?" for arg in esc_args]
 
         # owner_sid  => data.audit.auid, data.audit.euid
         return self.opensearch.search(
