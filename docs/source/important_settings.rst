@@ -9,9 +9,9 @@ and adjust the following settings:
 TLS verification
 ----------------
 
-FIXME: replace with first-time cert import?:
+:attr:`opensearch.verify_tls <wazuh.opensearch_config.OpenSearchConfig.verify_tls>`
 
-- :attr:`Verify OpenSearch TLS certificate <wazuh.opensearch_config.OpenSearchConfig.verify_tls>`
+   Whether the OpenSearch TLS certificate should be verified.
 
 Searching
 ---------

@@ -18,6 +18,8 @@ replace:
    :language: yaml
    :linenos:
 
+.. _opencti-env:
+
 In addition to the docker-compose.yml file above, you need an .env file for
 common environment variables needed by OpenCI:
 

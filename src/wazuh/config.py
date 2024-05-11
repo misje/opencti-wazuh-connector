@@ -32,7 +32,13 @@ from enum import Enum
 # format of description into docstrings
 class Config(ConfigBase):
     """
-    FIXME
+    Complete connector configuration
+
+    Settings are grouped together in relevant objects, like :attr:`search`,
+    :attr:`enrich` and :attr:`opencti`. Every setting may also be loaded from
+    environment variables, where the setting name is capitalised and prefixed
+    by *WAZUH\_* or a prefixed specified by its group (WAZUH_SEARCH\_,
+    WAZUH_ENRICH\_, OPENCTI\_ etc.).
     """
 
     model_config = SettingsConfigDict(

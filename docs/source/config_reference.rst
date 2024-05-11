@@ -1,10 +1,17 @@
 .. _config-reference:
 
 Configuration reference
-~~~~~~~~~~~~~~~~~~~~~~~
+=======================
+
+The connector has a plethora of configuration options, allowing for detailed
+customisation in searching and enrichment. There are some settings you
+:ref:`have to <required-settings>` set (there are no defaults, like
+usernames and passwords), and there are some settings you :ref:`should
+<important-settings>` read about and possibly adjust, since they greatly affect
+the behaviour of the connector.
 
 Main configuration
-------------------
+~~~~~~~~~~~~~~~~~~
 
 .. automodule:: wazuh.config
    :members:

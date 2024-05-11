@@ -5,7 +5,15 @@ from .config_base import ConfigBase, FuzzyEnum
 # There are five types, but we only support the type that the connector is
 # implemented as:
 class ConnectorType(FuzzyEnum):
+    """
+    OpenCTI connector type
+    """
+
     InternalEnrichment = "internal_enrichment"
+    """
+    :octid:`Internal enrichment <connectors/?h=internal+enrich#enrichment>`,
+    then only supported type for this connector
+    """
 
 
 class SupportedEntity(FuzzyEnum):
@@ -39,20 +47,35 @@ class SupportedEntity(FuzzyEnum):
 
 
 class LogLevel(FuzzyEnum):
+    """
+    Log level
+    """
+
     Debug = "debug"
+    """
+    Debug, info, warning and error messages
+    """
     Info = "info"
+    """
+    Info, warning and error messages
+    """
     Warning = "warning"
+    """
+    Warning and error messages
+    """
     Error = "error"
+    """
+    Error messages only
+    """
 
 
 class ConnectorConfig(ConfigBase):
     """
-    Helper class to parse the most important OpenCTI connector settings (from
-    file)
+    Connector settings
 
-    This class is not complete, and does not reference all possible
-    configuration options. These are still parsed by opencti_connector_helper.py
-    as environment vairables.
+    These settings are the most important settings used by the connector. There
+    are other settings supported by the connector API, but they are not listed
+    here, nor is there any official documentation for them.
     """
 
     model_config = SettingsConfigDict(
@@ -74,21 +97,38 @@ class ConnectorConfig(ConfigBase):
     """
     name: str = "Wazuh"
     """
-    The name of the connector
+    Name used to identify the connector in OpenCTI
     """
     scope: set[SupportedEntity] = set(SupportedEntity)
     """
-    Which entities the connector should enrich
+    Which entities to enable enrichment for
 
-    See :ref:`supported entities <supported-entities>` for details.
+    This specifies all entities that the connector should be made available for
+    enrichment. If an entity is not lsted here, the connector will not show up as
+    an option when clicking on the enrichment button in OpenCTI.
+
+    .. seealso::
+    
+        See :ref:`supported entities <supported-entities>` for supported
+        choices.
     """
     auto: bool = True
     """
     Run automatically or manually
 
-    See :ref:`when to run <when-to-run>` for details.
+    Whether to run the connector automatically whenever an entity in
+    *CONNECTOR_SCOPE* is created, or just manually.
+
+    .. seealso:: See :ref:`when to run <when-to-run>` for details.
     """
     log_level: LogLevel = LogLevel.Warning
     """
     Log level
+
+    Set the log level to *warning* or *error* under normal use. Use *debug* when
+    troubleshooting and gathering info for an issue.
+
+    .. seealso::
+
+        See how to access logs in :ref:`troubleshooting <search-logs>`
     """
