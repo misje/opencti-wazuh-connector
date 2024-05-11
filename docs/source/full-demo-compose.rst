@@ -8,7 +8,7 @@ docker-compose example file also runs Wazuh in a single-node deployment with
 example data. No change to the docker-compose file is strictly needed to test
 the demo.
 
-TODO: example data + @timestamp script
+TODO: example data + @timestamp script. See :github:`#10 <issues/10>`.
 
 .. literalinclude:: full-demo-compose.yml
    :language: yaml
