@@ -26,12 +26,29 @@ connector-wazuh``).
 
 .. include:: alpha_warning.rst
 
+.. _versioning:
+
 Versioning
 ~~~~~~~~~~
 
-See :ref:`versions and compatibility <versions>` for a connector–OpenCTI
-version compatibility list. docker tags matching OpenCTI version will be
-provided in the future.
+The following tags are published to the docker registry:
+
+.. list-table:: Connector docker tags
+   :header-rows: 1
+
+   * - Tag
+     - Description
+   * - 0.1.0
+     - A connector (stable) release
+   * - dev
+     - Latest development version (branch *dev*) of the connector
+   * - latest
+     - The lastest release (à la tag 0.1.0) of the connector
+
+Use a version like *0.1.0* to references a stable version of the connector, or
+*latest* if you want the latest stable version. There are no tags that
+reference the OpenCTI version. See :ref:`versions and compatibility <versions>`
+for a connector–OpenCTI version compatibility list.
 
 Creating users
 ~~~~~~~~~~~~~~

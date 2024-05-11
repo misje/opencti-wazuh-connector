@@ -161,7 +161,7 @@ services:
         max-size: 50m
 
   connector-wazuh:
-    image: ghcr.io/misje/opencti-connector-wazuh:dev
+    image: ghcr.io/misje/opencti-connector-wazuh:0.1.0
     restart: always
     environment:
       # A timezone is needed for datetime tools to work as expected:

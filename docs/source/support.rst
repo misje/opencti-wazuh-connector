@@ -28,7 +28,9 @@ Versions and compatibility
      - 6.0.10
      - –
 
-Some minor OpenCTI versions prior to 6.0.10 should also work.
+Some minor OpenCTI versions prior to 6.0.10 should also work. See
+:ref:`versioning <versioning>` for an overview of how version numbers and
+docker tags are used.
 
 .. _issue:
 
