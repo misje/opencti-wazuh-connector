@@ -93,6 +93,13 @@ is optionally created for an incident. Cases help visualise incidents by
 providing a graph of all entities involved, starting from the entitiy the
 connector was run on, sightings, incidents and enriched entities.
 
+## Installation
+
+See the [installation
+chapter](https://misje.github.io/opencti-wazuh-connector/installation.html) in
+the documentation, followed by
+[configuration](https://misje.github.io/opencti-wazuh-connector/configuration.html).
+
 ## Screenshots
 
 ![Incident response case overview tab](docs/source/images/ir_case_example2_overview1.png)
