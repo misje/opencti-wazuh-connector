@@ -1,11 +1,10 @@
 from pydantic import field_validator
 from pydantic_settings import SettingsConfigDict
 from typing import Any
-from .config_base import ConfigBase
-from enum import Enum
+from .config_base import ConfigBase, FuzzyEnum
 
 
-class FileSearchOption(Enum):
+class FileSearchOption(FuzzyEnum):
     """
     Options determining how to search for :stix:`File
     <#_99bl2dibcztv>`/:stix:`Artifact <#_4jegwl6ojbes>` :term:`SCOs <SCO>`
@@ -114,7 +113,7 @@ class FileSearchOption(Enum):
     # TODO: UseWazuhAPI
 
 
-class DirSearchOption(Enum):
+class DirSearchOption(FuzzyEnum):
     """
     Options determining how to search for :stix:`Directory <#_lyvpga5hlw52>`
     :term:`SCOs <SCO>`
@@ -180,8 +179,12 @@ class DirSearchOption(Enum):
     """
 
 
-class ProcessSearchOption(Enum):
+class ProcessSearchOption(FuzzyEnum):
     CaseInsensitive = "case-insensitive"
+    """
+    Perform a case-insensitive search for filenames/paths/arguments on all
+    platforms
+    """
 
 
 class SearchConfig(ConfigBase):

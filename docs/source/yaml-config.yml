@@ -1,0 +1,131 @@
+agents_as_systems: true
+api:
+  enabled: false
+  password: null
+  url: null
+  username: null
+  verify_tls: true
+app_url: https://wazuh.example.org/
+author_name: Wazuh
+bundle_abort_limit: 500
+connector:
+  auto: true
+  id: foo
+  log_level: warning
+  name: Wazuh
+  scope:
+    - Email-Addr
+    - Mac-Addr
+    - Vulnerability
+    - Software
+    - WindowsRegistryValueType
+    - Url
+    - User-Agent
+    - User-Account
+    - Domain-Name
+    - Artifact
+    - StixFile
+    - IPv4-Addr
+    - WindowsRegistryKey
+    - Indicator
+    - Process
+    - IPv6-Addr
+    - Hostname
+    - Network-Traffic
+    - Directory
+  type: internal_enrichment
+create_agent_hostname_observable: true
+create_agent_ip_observable: true
+create_incident: per-sighting
+create_incident_response: true
+create_incident_summary: true
+create_incident_threshold: 1
+create_obs_sightings: true
+create_sighting_summary: true
+enrich:
+  filename_behaviour:
+    - remove-path
+    - create-dir
+  types:
+    - email-addr
+    - tool
+    - windows-registry-key
+    - process
+    - url
+    - ipv6-addr
+    - user-account
+    - ipv4-addr
+    - mac-addr
+    - user-agent
+    - software
+    - domain-name
+    - file
+    - vulnerability
+    - attack-pattern
+    - network-traffic
+    - directory
+enrich_agent: true
+enrich_labels:
+  - wazuh_ignore
+hits_abort_limit: 1000
+ignore_own_entities: false
+ignore_revoked_indicators: true
+indicator_score_threshold: null
+label_ignore_list:
+  - hygiene
+  - wazuh_ignore
+max_extrefs: 10
+max_extrefs_per_alert_rule: 2
+max_notes: 10
+max_notes_per_alert_rule: 2
+max_tlp: TLP:RED
+opencti:
+  ssl_verify: false
+  token: token
+  url: https://openti.example.org/
+opensearch:
+  exclude_match:
+    - field: data.integration
+      query: opencti
+  filter: []
+  include_match: []
+  index: wazuh-alerts-*
+  limit: 50
+  order_by:
+    - field: timestamp
+      order: desc
+  password: opensearchpass
+  search_after: null
+  url: https://wazuh.example.org:9200/
+  username: opensearchname
+  verify_tls: true
+require_indicator_detection: false
+require_indicator_for_incidents: true
+search:
+  dirsearch_options:
+    - allow-regexp
+    - match-subdirs
+    - case-insensitive
+    - ignore-trailing-slash
+    - search-filenames
+  filesearch_options:
+    - allow-regexp
+    - case-insensitive
+    - search-size
+    - search-filename-only
+    - search-additional-filenames
+    - include-parent-dir-ref
+    - include-reg-values
+  ignore_private_addrs: true
+  lookup_agent_ip: false
+  lookup_agent_name: false
+  lookup_hostnames_in_cmd_line: false
+  lookup_mac_variants: true
+  lookup_url_ignore_trailing_slash: false
+  lookup_url_without_host: false
+  procsearch_options:
+    - case-insensitive
+system_name: Wazuh SIEM
+tlps:
+  - marking-definition--826578e1-40ad-459f-bc73-ede076f81f37
+vulnerability_incident_cvss3_score_threshold: null

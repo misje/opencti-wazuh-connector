@@ -7,6 +7,12 @@ The following is an extract from a docker-compose.yml with only the connector
 service. See :ref:`the OpenCTI docker-compose example <opencti-compose>` for a
 more complete example.
 
+.. note::
+   
+   You cannot run any of the docker-compose examples ase they are without
+   replacing URLs, usernames and passwords. See :ref:`required settings
+   <required-settings>`.
+
 .. include:: alpha_warning.rst
 
 .. literalinclude:: connector-compose-simple.yml

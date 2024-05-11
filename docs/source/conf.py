@@ -87,6 +87,10 @@ extlinks = {
         "https://github.com/misje/opencti-wazuh-connector/%s",
         "Project's GitHub page",
     ),
+    "dcompose": (
+        "https://docs.docker.com/compose/compose-file/05-services/#%s",
+        "docker-compose reference",
+    ),
 }
 
 sys.path.insert(0, os.path.abspath("../../src"))

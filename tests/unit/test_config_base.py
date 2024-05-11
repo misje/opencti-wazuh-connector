@@ -8,7 +8,7 @@ from enum import Enum
 # from unittest import mock
 
 sys.path.insert(0, os.path.abspath("../../src"))
-from wazuh.config_base import ConfigBase
+from wazuh.config_base import ConfigBase, FuzzyEnum
 from wazuh.opensearch_dsl import (
     OrderBy,
     Match,
@@ -63,12 +63,6 @@ def test_baseconf_inherit_enum_set_comma_string(monkeypatch):
 
 def test_baseconf_inherit_enum_set_all(monkeypatch):
     monkeypatch.setenv("WAZUH_FOO_SET_ENUM", "all")
-    conf = FooSettings.from_env()
-    assert conf.foo_set_enum == {FooEnum.Foo, FooEnum.Bar, FooEnum.Baz}
-
-
-def test_baseconf_inherrit_enum_set_case(monkeypatch):
-    monkeypatch.setenv("WAZUH_FOO_SET_ENUM", "foo,BAR,   bAZ")
     conf = FooSettings.from_env()
     assert conf.foo_set_enum == {FooEnum.Foo, FooEnum.Bar, FooEnum.Baz}
 
@@ -141,3 +135,21 @@ def test_baseconf_http_url(monkeypatch):
     monkeypatch.setenv("WAZUH_FOO_HTTP_URL", "http://bar.baz")
     conf = FooSettings.from_env()
     assert conf.foo_http_url == AnyHttpUrl("http://bar.baz")
+
+
+class BarEnum(FuzzyEnum):
+    Foo = "F-o-o"
+    Bar = "Bar"
+    Baz = "baz"
+    Qux = "QUX"
+    Quux = 42
+
+
+class BarSettings(ConfigBase):
+    enum: set[BarEnum]
+
+
+def test_fuzzyenum_set(monkeypatch):
+    monkeypatch.setenv("WAZUH_ENUM", "foo, bar, BAR, qUX,b-az")
+    conf = BarSettings.from_env()
+    assert conf.enum == {BarEnum.Foo, BarEnum.Bar, BarEnum.Baz, BarEnum.Qux}

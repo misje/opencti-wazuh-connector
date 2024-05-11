@@ -4,8 +4,7 @@ from pydantic import (
 )
 from pydantic_settings import SettingsConfigDict
 from .utils import comma_string_to_set
-from .config_base import ConfigBase
-from enum import Enum
+from .config_base import ConfigBase, FuzzyEnum
 
 # TODO: test if a member has a union (e.g. TLPLiteral|str), and doesn't have a
 # validator that changes the type, that the resulting object has the most
@@ -13,7 +12,7 @@ from enum import Enum
 # test code
 
 
-class FilenameBehaviour(Enum):
+class FilenameBehaviour(FuzzyEnum):
     CreateDir = "create-dir"
     """
     Create a :stix:`Directory SCO <#_lyvpga5hlw52>` *parent_directory_ref* when
@@ -40,7 +39,7 @@ class EnrichmentConfig(ConfigBase):
         env_prefix="WAZUH_ENRICH_", validate_assignment=True
     )
 
-    class EntityType(Enum):
+    class EntityType(FuzzyEnum):
         """
         Entity types to enrich
 

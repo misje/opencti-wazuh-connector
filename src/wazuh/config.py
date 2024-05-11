@@ -9,13 +9,15 @@ from pydantic import (
 from pydantic_settings import SettingsConfigDict
 from typing import Iterable
 
+from .opencti_config import OpenCTIConfig
+from .connector_config import ConnectorConfig
 from .search_config import SearchConfig
 from .wazuh_api_config import WazuhAPIConfig
 from .opensearch_config import OpenSearchConfig
 from .enrich_config import EnrichmentConfig
 from .stix_helper import TLPLiteral, tlp_marking_from_string, validate_stix_id
 from .utils import comma_string_to_set, verify_url
-from .config_base import ConfigBase
+from .config_base import ConfigBase, FuzzyEnum
 from enum import Enum
 
 
@@ -30,13 +32,20 @@ from enum import Enum
 # format of description into docstrings
 class Config(ConfigBase):
     """
-    FIXME
+    Complete connector configuration
+
+    Settings are grouped together in relevant objects, like :attr:`search`,
+    :attr:`enrich` and :attr:`opencti`. Every setting may also be loaded from
+    environment variables, where the setting name is capitalised and prefixed
+    by *WAZUH\\_* or a prefixed specified by its group (WAZUH_SEARCH\\_,
+    WAZUH_ENRICH\\_, OPENCTI\\_ etc.).
     """
 
-    model_config = SettingsConfigDict(env_prefix="WAZUH_", validate_assignment=True)
+    model_config = SettingsConfigDict(
+        env_prefix="WAZUH_", validate_assignment=True, env_file=".env"
+    )
 
-    # TODO: add helper function for parsing without dashes too
-    class IncidentCreateMode(Enum):
+    class IncidentCreateMode(FuzzyEnum):
         """
         How and when incidents should be created
 
@@ -103,6 +112,14 @@ class Config(ConfigBase):
         Critical severity
         """
 
+    opencti: OpenCTIConfig = Field(default_factory=OpenCTIConfig.from_env)
+    """
+    OpenCTI-specific configuration
+    """
+    connector: ConnectorConfig = Field(default_factory=ConnectorConfig.from_env)
+    """
+    OpenCTI connector-specific configuration
+    """
     search: SearchConfig = Field(default_factory=SearchConfig)
     """
     Settings for how searching should be performed

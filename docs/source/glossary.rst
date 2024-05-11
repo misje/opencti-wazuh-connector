@@ -14,6 +14,11 @@ Glossary
    CTI
       Cyber threat intelligence
 
+   docker
+      Docker is a tool that simplifies the process of creating, deploying, and
+      managing applications by packaging them with their dependencies into
+      standardized units called containers.
+
    DSL
       Domain-specific language, or more specifically :term:`OpenSearch`'s
       :dsl:`query DSL <>` in the context of this connector.

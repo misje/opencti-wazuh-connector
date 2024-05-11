@@ -1,18 +1,36 @@
 import typing
 import json
 import re
+from typing import Any
+from enum import Enum
+from json import JSONDecodeError
 from pydantic_settings import (
     BaseSettings,
     EnvSettingsSource,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
-from typing import Any
 from pydantic.fields import FieldInfo
-from enum import Enum
-from json import JSONDecodeError
 from .utils import comma_string_to_set
 from .opensearch_dsl import OrderBy, Match, Term, Regexp, Wildcard
+
+
+class FuzzyEnum(Enum):
+    """
+    An enumation type that ignores case and hyphens for str members
+    """
+
+    @classmethod
+    def _missing_(cls, value: str):
+        value = value.replace("-", "").lower()
+        return next(
+            (
+                member
+                for member in cls
+                if member.value.replace("-", "").lower() == value
+            ),
+            None,
+        )
 
 
 class EnvSource(EnvSettingsSource):
@@ -24,8 +42,6 @@ class EnvSource(EnvSettingsSource):
     to configure opencti-wazuh-connector. This works just fine for simple field
     types, but it can be tricky for more complex field types.
     """
-
-    # TODO: possible to stringify enum names (not values) and match? If not, accept without hyphen?
 
     def prepare_field_value(
         self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
@@ -51,9 +67,7 @@ class EnvSource(EnvSettingsSource):
                     # If the type is an enum, pass it as an argument so that the
                     # special value 'all' can be treated especially (see
                     # comma_string_to_set()):
-                    return comma_string_to_set(
-                        value.lower(), args[0] if is_enum else None
-                    )
+                    return comma_string_to_set(value, args[0] if is_enum else None)
         # Otherwise, provide a special parsing strategy for a set of classes
         # that can be converted into a list of key–value pairs:
         elif (
