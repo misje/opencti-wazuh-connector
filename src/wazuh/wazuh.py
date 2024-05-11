@@ -1150,21 +1150,21 @@ class WazuhConnector:
             if int(agent["id"]) > 0
         }
         if self.wazuh and self.conf.enrich_agent:
-            for id, agent in agents.copy().items():
-                if id in self.wazuh.state.agents:
-                    api_agent = self.wazuh.state.agents[id].model_dump(
+            for agent_id, agent in agents.copy().items():
+                if agent_id in self.wazuh.state.agents:
+                    api_agent = self.wazuh.state.agents[agent_id].model_dump(
                         include={"name", "scan_time"}
                     )
                     # The agent has changed hostname at some point in time. Add
                     # the new hostname as well:
                     if api_agent["name"] != agent["name"]:
                         # Createa new key to be able to add the new agent metadata:
-                        agents[id + api_agent["name"]] = api_agent | {
+                        agents[agent_id + api_agent["name"]] = api_agent | {
                             "standard_id": agent["standard_id"]
                         }
                     else:
                         # Add new metadata:
-                        agents[id] |= api_agent
+                        agents[agent_id] |= api_agent
 
         bundle = []
         earliest = min(alert["_source"]["@timestamp"] for alert in alerts)
