@@ -29,7 +29,7 @@ jobs:
       - name: Install doc. dependencies
         run: pip install -r docs/requirements.txt
       - name: Build sphinx HTML
-        run: sphinx-build -M html docs/source docs/build
+        run: sphinx-build -W -b html docs/source docs/build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

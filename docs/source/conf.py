@@ -50,6 +50,7 @@ autodoc_member_order = "bysource"
 autodoc_pydantic_settings_show_validator_members = False
 autodoc_pydantic_settings_show_validator_summary = False
 autodoc_pydantic_settings_show_json = False
+autodoc_pydantic_model_show_json_error_strategy = "coerce"
 
 # -- extlinks options --------------------------------------------------------
 extlinks = {
