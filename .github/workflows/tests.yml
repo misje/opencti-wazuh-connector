@@ -25,11 +25,8 @@ jobs:
         run: pip install -r src/requirements.txt
       - name: Install test dependencies
         run: pip install -r tests/requirements.txt
-      - name: Run doctests
-        working-directory: tests
-        # TODO: Failure doesn't make job fail:
-        run: python3 run_doctests.py
-      - name: Run unit tests
-        working-directory: tests/unit
+      - name: Run unit tests and doctests
+        env:
+          PYTHONPATH: src
         # TODO: Coverage reports:
-        run: pytest
+        run: pytest --doctest-glob '*.py' --doctest-glob '*.rst' --doctest-modules
