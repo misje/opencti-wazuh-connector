@@ -1,0 +1,36 @@
+# Build Sphinx docs as HTML (for "Deploy docs" to deploy if running on master
+# branch)
+
+name: Build docs
+on:
+  push:
+    paths:
+      - .github/workflows/docs.yml
+      - docs/source/**
+      - src/**/*.py
+  pull_request:
+    paths:
+      - .github/workflows/docs.yml
+      - docs/source/**
+      - src/**/*.py
+  workflow_dispatch:
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10.12"
+          cache: pip
+      - name: Install connector dependencies
+        run: pip install -r src/requirements.txt
+      - name: Install doc. dependencies
+        run: pip install -r docs/requirements.txt
+      - name: Build sphinx HTML
+        run: sphinx-build -M html docs/source docs/build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build/html

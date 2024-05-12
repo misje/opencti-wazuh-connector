@@ -1,12 +1,15 @@
-name: Build and publish docs
+# Deploy HTML docs to github-pages when "Build docs" has completed on the
+# master branch
+
+name: Deploy docs
 on:
-  push:
+  workflow_run:
+    workflows:
+      - "Build docs"
     branches:
       - master
-    paths:
-      - .github/workflows/docs.yml
-      - docs/source/**
-      - src/**/*.py
+    types:
+      - completed
   workflow_dispatch:
 
 jobs:
