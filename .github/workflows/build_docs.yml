@@ -5,12 +5,12 @@ name: Build docs
 on:
   push:
     paths:
-      - .github/workflows/docs.yml
+      - .github/workflows/build_docs.yml
       - docs/source/**
       - src/**/*.py
   pull_request:
     paths:
-      - .github/workflows/docs.yml
+      - .github/workflows/build_docs.yml
       - docs/source/**
       - src/**/*.py
   workflow_dispatch:
