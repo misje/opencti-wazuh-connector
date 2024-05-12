@@ -938,9 +938,9 @@ def is_registry_path(path: str) -> bool:
 
     >>> is_registry_path('HKLM')
     True
-    >>> is_registry_path('HKEY_LOCAL_MACHINE\\foo')
+    >>> is_registry_path('HKEY_LOCAL_MACHINE\\\\foo')
     True
-    >>> is_registry_path('\\HKCU')
+    >>> is_registry_path('\\\\HKCU')
     False
     """
     return bool(
@@ -1240,7 +1240,7 @@ def in_str_list(
     True
     >>> in_str_list('baz', 'foo,bar')
     False
-    >>> in_str_list('baz', 'foo bar   baz', sep_regex='\\s+')
+    >>> in_str_list('baz', 'foo bar   baz', sep_regex='\\\\s+')
     True
     >>> in_str_list(('foo', 'bar'), 'qux,bar')
     True
@@ -1307,7 +1307,7 @@ def get_path_sep(path: str) -> str:
     '/'
     >>> get_path_sep('foo/bar')
     '/'
-    >>> get_path_sep('C\\Windows')
+    >>> get_path_sep('C\\\\Windows')
     '\\\\'
     """
     return "\\" if ":\\" in path or path.count("\\") >= 1 else "/"
