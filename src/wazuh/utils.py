@@ -1214,7 +1214,7 @@ def datetime_string(timestamp: datetime | timedelta | None, default="–") -> st
     Examples:
 
     >>> datetime_string(datetime(2024, 1, 2, 3, 4, 5))
-    '2. jan. 2024, 03:04:05'
+    'Jan 2, 2024, 3:04:05\u202fAM'
     >>> datetime_string(timedelta(seconds=42))
     '42 sekunder'
     """
