@@ -174,7 +174,6 @@ def test_config_from_env(monkeypatch):
             "procsearch_options": {ProcessSearchOption.CaseInsensitive},
             "regkeysearch_options": {
                 RegKeySearchOption.MatchSubdirs,
-                RegKeySearchOption.RequireAbsPath,
                 RegKeySearchOption.IgnoreTrailingSlash,
                 RegKeySearchOption.IgnoreSID,
                 RegKeySearchOption.CaseInsensitive,

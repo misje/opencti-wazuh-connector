@@ -236,7 +236,7 @@ class RegKeySearchOption(FuzzyEnum):
 
     This allows regexp queries when searching. Regexp is used to search for
     paths that are not absolute, search for any number of backslash
-    escapes in paths, ignoring :ref:`SIDs <SID>` and searching for alternative
+    escapes in paths, ignoring :term:`SIDs <SID>` and searching for alternative
     hive names.
 
     .. note::
