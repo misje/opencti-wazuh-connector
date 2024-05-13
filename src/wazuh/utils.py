@@ -976,11 +976,11 @@ def reg_key_regexp(
     Examples:
 
     >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\VolatileUserMgrKey\\\\1\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=True, sid_ignore=True, case_insensitive=True)
-    'HKEY_(LOCAL_MACHINE|LM)\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3}'
+    '(HKEY_LOCAL_MACHINE|HKLM)\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3,9}'
     >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\VolatileUserMgrKey\\\\1\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=False, sid_ignore=True, case_insensitive=True)
-    'HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3}'
+    'HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3,9}'
     >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\VolatileUserMgrKey\\\\1\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=True, sid_ignore=False, case_insensitive=True)
-    'HKEY_(LOCAL_MACHINE|LM)\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013'
+    '(HKEY_LOCAL_MACHINE|HKLM)\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013'
     """
     transforms: dict[str, str] = {
         "^(?:HKEY_LOCAL_MACHINE|HKLM)": "(HKEY_LOCAL_MACHINE|HKLM)",
