@@ -9,7 +9,12 @@ sys.path.insert(0, os.path.abspath("../../src"))
 from wazuh.enrich_config import EnrichmentConfig, FilenameBehaviour
 from wazuh.opensearch_dsl import SortOrder
 from wazuh.config import Config
-from wazuh.search_config import DirSearchOption, FileSearchOption, ProcessSearchOption
+from wazuh.search_config import (
+    DirSearchOption,
+    FileSearchOption,
+    ProcessSearchOption,
+    RegKeySearchOption,
+)
 from wazuh.connector_config import ConnectorType, LogLevel, SupportedEntity
 
 
@@ -167,6 +172,15 @@ def test_config_from_env(monkeypatch):
                 DirSearchOption.CaseInsensitive,
             },
             "procsearch_options": {ProcessSearchOption.CaseInsensitive},
+            "regkeysearch_options": {
+                RegKeySearchOption.MatchSubdirs,
+                RegKeySearchOption.RequireAbsPath,
+                RegKeySearchOption.IgnoreTrailingSlash,
+                RegKeySearchOption.IgnoreSID,
+                RegKeySearchOption.CaseInsensitive,
+                RegKeySearchOption.SearchHiveAliases,
+                RegKeySearchOption.AllowRegexp,
+            },
         },
         "hits_abort_limit": 1000,
         "ignore_own_entities": False,
