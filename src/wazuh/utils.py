@@ -650,6 +650,13 @@ def escape_path(path: str, *, count: int = 2):
     """
     Escape a path with backslashes, replacing every section of backslashes with
     more than two with the specified count.
+
+    Examples:
+
+    >>> escape_path('foo\\\\bar\\\\\\\\baz\\\\\\\\\\\\\\\\qux')
+    'foo\\\\bar\\\\baz\\\\qux'
+    >>> escape_path('bar\\\\\\\\baz\\\\\\\\\\\\\\\\qux', count=4)
+    'bar\\\\\\\\baz\\\\\\\\qux'
     """
     return re.sub(r"\\{2,}", "\\" * count, path)
 
@@ -975,11 +982,11 @@ def reg_key_regexp(
 
     Examples:
 
-    >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\VolatileUserMgrKey\\\\1\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=True, sid_ignore=True, case_insensitive=True)
+    >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=True, sid_ignore=True, case_insensitive=True)
     '(HKEY_LOCAL_MACHINE|HKLM)\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3,9}'
-    >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\VolatileUserMgrKey\\\\1\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=False, sid_ignore=True, case_insensitive=True)
+    >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=False, sid_ignore=True, case_insensitive=True)
     'HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3,9}'
-    >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon\\VolatileUserMgrKey\\\\1\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=True, sid_ignore=False, case_insensitive=True)
+    >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=True, sid_ignore=False, case_insensitive=True)
     '(HKEY_LOCAL_MACHINE|HKLM)\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013'
     """
     transforms: dict[str, str] = {

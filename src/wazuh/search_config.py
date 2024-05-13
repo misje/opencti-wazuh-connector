@@ -399,3 +399,22 @@ class SearchConfig(ConfigBase):
                 pass
 
         return opts
+
+    @field_validator("regkeysearch_options", mode="after")
+    @classmethod
+    def check_regopt_regexp_dep(cls, opts: Any) -> Any:
+        ROpt = RegKeySearchOption
+        match opts:
+            case (
+                ROpt.MatchSubdirs
+                | ROpt.IgnoreTrailingSlash
+                | ROpt.IgnoreSID
+                | ROpt.CaseInsensitive
+                | ROpt.SearchHiveAliases
+            ):
+                if ROpt.AllowRegexp not in opts:
+                    raise ValueError(f"{opts} requires AllowRegexp")
+            case _:
+                pass
+
+        return opts

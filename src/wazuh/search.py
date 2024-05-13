@@ -789,6 +789,7 @@ class AlertSearcher(BaseModel):
         if DOpt.AllowRegexp not in dopts:
             path_variants = [path]
             if DOpt.NormaliseBackslashes in dopts:
+                # FIXME: replace {1,} backslashes, not {2,}, if string from opencti isn't double-backslashed:
                 path_variants = [escape_path(path, count=i) for i in (2, 4)]
 
             return self.opensearch.search(
@@ -863,35 +864,41 @@ class AlertSearcher(BaseModel):
         """
         ROpt = RegKeySearchOption
         ropts = self.config.regkeysearch_options
-        path = re.sub(r"\\+$", "", escape_path(stix_entity["key"]))
+        ignore_slash = ROpt.IgnoreTrailingSlash in ropts
+        path = (
+            re.sub(r"\\+$", "", escape_path(stix_entity["key"]))
+            if ignore_slash
+            else stix_entity["key"]
+        )
         # is_registry_path acts as isabs() for reg.keys:
         is_absolute = is_registry_path(path)
         log.debug(f"Reg. key is absolute: {is_absolute}")
-        if ROpt.RequireAbsPath and not is_absolute:
+        if ROpt.RequireAbsPath in ropts and not is_absolute:
             log.info("Key is not absolute and RequireAbsPath is enabled")
             return None
         if ROpt.AllowRegexp not in ropts and not is_absolute:
-            log.info("Key is not absolute and RequireAbsPath is enabled")
+            log.info("Key is not absolute and AllowRegexp is not enabled")
             return None
 
         key_fields = ["data.win.eventdata.targetObject", "syscheck.path"]
 
         if ROpt.AllowRegexp not in ropts:
+            # FIXME: replace {1,} backslashes, not {2,}, if string from opencti isn't double-backslashed:
             path_variants = [escape_path(path, count=i) for i in (2, 4)]
             return self.opensearch.search(
-                must=[
+                should=[
                     MultiMatch(query=path_variant, fields=key_fields)
                     for path_variant in path_variants
                 ]
             )
 
         # Accept any number of backslashes:
+        # FIXME: replace with {1,}?
         path = re.sub(r"\\{2,}", r"\\\\+", escape_lucene_regex(path))
         hive_aliases = ROpt.SearchHiveAliases in ropts
         sid_ignore = ROpt.IgnoreSID in ropts
         case_insensitive = ROpt.CaseInsensitive in ropts
         match_subdirs = ROpt.MatchSubdirs in ropts
-        ignore_slash = ROpt.IgnoreTrailingSlash in ropts
 
         path = reg_key_regexp(
             path,
