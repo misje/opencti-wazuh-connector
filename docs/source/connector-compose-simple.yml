@@ -8,8 +8,8 @@ services:
       - TZ=UTC
       - USE_TZ=true
       - OPENCTI_URL=https://mycti.example.org
-      - OPENCTI_TOKEN=84387577-27ac-4751-b268-6893045aa73c
-      - CONNECTOR_ID=81f9d582-2b4e-45f1-98b6-f33492d66b6e # Replace this witha unique ID
+      - OPENCTI_TOKEN=84387577-27ac-4751-b268-6893045aa73c # Replace with a token from the user you created
+      - CONNECTOR_ID=81f9d582-2b4e-45f1-98b6-f33492d66b6e # Replace this with a unique ID
       - CONNECTOR_NAME=Wazuh
       - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator
       - CONNECTOR_AUTO=true

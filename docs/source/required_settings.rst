@@ -22,7 +22,7 @@ reference <config-reference>`.
      - OpenCTI URL
    * - OPENCTI_TOKEN
      - :attr:`opencti.token <wazuh.opencti_config.OpenCTIConfig.token>`
-     - See `create OpenCTI user <create-opencti-user>`
+     - See :ref:`create OpenCTI user <create-opencti-user>`
    * - CONNECTOR_ID
      - :attr:`connector.id <wazuh.connector_config.ConnectorConfig.id>`
      - Any unique identifier, like a UUID
