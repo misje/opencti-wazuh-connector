@@ -68,8 +68,8 @@ Some settings contain complex data types. Sets or lists of strings or enum
 values may be specified as a comma-separated list, e.g.:
 
 - WAZUH_ENRICH_TYPES=Account,Directory,Domain
-- "WAZUH_ENRICH_TYPES=Account, Directory, Domain
-- "WAZUH_ENRICH_TYPES=account,directory, domain
+- "WAZUH_ENRICH_TYPES=Account, Directory, Domain"
+- "WAZUH_ENRICH_TYPES=account,directory, domain"
 
 .. note::
   

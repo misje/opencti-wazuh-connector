@@ -18,7 +18,7 @@ Searching
 
 :attr:`search.limit <wazuh.opensearch_config.OpenSearchConfig.limit>`
 
-   Maximum number of alerts to return from a search
+   Maximum number of alerts to return from a search.
 
 :attr:`~wazuh.config.Config.hits_abort_limit`
 

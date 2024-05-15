@@ -131,5 +131,8 @@ Glossary
       Tactis, techniques and procedures, usually referring to `MITRE ATT&CK
       <https://attack.mitre.org/>`_
 
+   UUID
+      Universally Unique Identifier
+
    Wazuh
       An open-source :term:`SIEM`

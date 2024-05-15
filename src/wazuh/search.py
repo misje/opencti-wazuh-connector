@@ -772,7 +772,7 @@ class AlertSearcher(BaseModel):
         """
         DOpt = DirSearchOption
         dopts = self.config.dirsearch_options
-        path = re.sub(r"(?:/|\\)+$", "", escape_path(stix_entity["path"]))
+        path = re.sub(r"(?:/|\\)+$", "", stix_entity["path"])
         if DOpt.RequireAbsPath in dopts and not isabs(path):
             log.info("Path is not absolute and RequireAbsPath is enabled")
             return None
@@ -789,7 +789,6 @@ class AlertSearcher(BaseModel):
         if DOpt.AllowRegexp not in dopts:
             path_variants = [path]
             if DOpt.NormaliseBackslashes in dopts:
-                # FIXME: replace {1,} backslashes, not {2,}, if string from opencti isn't double-backslashed:
                 path_variants = [escape_path(path, count=i) for i in (2, 4)]
 
             return self.opensearch.search(
@@ -866,7 +865,7 @@ class AlertSearcher(BaseModel):
         ropts = self.config.regkeysearch_options
         ignore_slash = ROpt.IgnoreTrailingSlash in ropts
         path = (
-            re.sub(r"\\+$", "", escape_path(stix_entity["key"]))
+            re.sub(r"\\+$", "", stix_entity["key"])
             if ignore_slash
             else stix_entity["key"]
         )
@@ -883,7 +882,6 @@ class AlertSearcher(BaseModel):
         key_fields = ["data.win.eventdata.targetObject", "syscheck.path"]
 
         if ROpt.AllowRegexp not in ropts:
-            # FIXME: replace {1,} backslashes, not {2,}, if string from opencti isn't double-backslashed:
             path_variants = [escape_path(path, count=i) for i in (2, 4)]
             return self.opensearch.search(
                 should=[
@@ -893,7 +891,6 @@ class AlertSearcher(BaseModel):
             )
 
         # Accept any number of backslashes:
-        # FIXME: replace with {1,}?
         path = re.sub(r"\\{2,}", r"\\\\+", escape_lucene_regex(path))
         hive_aliases = ROpt.SearchHiveAliases in ropts
         sid_ignore = ROpt.IgnoreSID in ropts

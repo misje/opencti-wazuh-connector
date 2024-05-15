@@ -20,7 +20,7 @@ OpenCTI docker-compose file:
    This is a bare-minimum example with several placeholder values. Look at the
    :ref:`Configuration <config>` chapter for how to configure the connector.
 
-After starting OpenCTI, look for any errors (get a continuous log wit ha
+After starting OpenCTI, look for any errors (get a continuous log with a
 little bit of history by running ``docker-compose logs -f --tail=100
 connector-wazuh``).
 
@@ -38,17 +38,18 @@ The following tags are published to the docker registry:
 
    * - Tag
      - Description
-   * - 0.1.0
+   * - x.y.z
      - A connector (stable) release
    * - dev
      - Latest development version (branch *dev*) of the connector
    * - latest
      - The lastest release (à la tag 0.1.0) of the connector
 
-Use a version like *0.1.0* to references a stable version of the connector, or
+Use a version like *0.1.0* to reference a stable version of the connector, or
 *latest* if you want the latest stable version. There are no tags that
-reference the OpenCTI version. See :ref:`versions and compatibility <versions>`
-for a connector–OpenCTI version compatibility list.
+reference the OpenCTI version, like connectors published by OpenCTI. See
+:ref:`versions and compatibility <versions>` for a connector–OpenCTI version
+compatibility list.
 
 Creating users
 ~~~~~~~~~~~~~~

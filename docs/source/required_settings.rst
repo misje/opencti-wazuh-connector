@@ -3,10 +3,9 @@
 Required settings
 ~~~~~~~~~~~~~~~~~
 
-The following settings **must** be set, as they have no
-default values. If you have followed the :ref:`installation
-instructions <installation>`, you should already have the
-necessary users, passwords and tokens ready.
+The following settings **must** be set, as they have *no default values*. If
+you have followed the :ref:`installation instructions <installation>`, you
+should already have the necessary users, passwords and tokens ready.
 
 All required settings are marked *[Required]* in the :ref:`configuration
 reference <config-reference>`.
@@ -25,7 +24,7 @@ reference <config-reference>`.
      - See :ref:`create OpenCTI user <create-opencti-user>`
    * - CONNECTOR_ID
      - :attr:`connector.id <wazuh.connector_config.ConnectorConfig.id>`
-     - Any unique identifier, like a UUID
+     - Any unique identifier, like a :term:`UUID`
    * - CONNECTOR_SCOPE
      - :attr:`connector.scope <wazuh.connector_config.ConnectorConfig.scope>`
      - Which :ref:`entities the connector should accept <supported-entities>`.
