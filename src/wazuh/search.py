@@ -841,7 +841,7 @@ class AlertSearcher(BaseModel):
             )
 
         if match_subdirs:
-            path = f"{path}([/\\\\]+.*)?"
+            path = f"(.*[/\\\\])?{path}([/\\\\]+.*)?"
         elif ignore_slash:
             path = f"{path}(/|\\\\)*"
 
