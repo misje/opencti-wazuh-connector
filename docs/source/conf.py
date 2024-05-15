@@ -33,7 +33,6 @@ pygments_style = "sphinx"
 
 # -- Options for HTML output -------------------------------------------------
 html_theme = "sphinx_rtd_theme"
-html_static_path = ["_static"]
 
 # GitHub integration
 html_context = {
@@ -50,16 +49,17 @@ autodoc_member_order = "bysource"
 autodoc_pydantic_settings_show_validator_members = False
 autodoc_pydantic_settings_show_validator_summary = False
 autodoc_pydantic_settings_show_json = False
+autodoc_pydantic_model_show_json_error_strategy = "coerce"
 
 # -- extlinks options --------------------------------------------------------
 extlinks = {
-    "octiu": ("https://docs.opencti.io/6.0.X/usage/%s", "OpenCTI usage documentation"),
+    "octiu": ("https://docs.opencti.io/6.1.X/usage/%s", "OpenCTI usage documentation"),
     "octia": (
-        "https://docs.opencti.io/6.0.X/administration/%s",
+        "https://docs.opencti.io/6.1.X/administration/%s",
         "OpenCTI administration documentation",
     ),
     "octid": (
-        "https://docs.opencti.io/6.0.X/deployment/%s",
+        "https://docs.opencti.io/6.1.X/deployment/%s",
         "OpenCTI deployment documentation",
     ),
     "octigh": (

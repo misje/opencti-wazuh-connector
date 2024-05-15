@@ -11,13 +11,13 @@ usernames and passwords), and there are some settings you :ref:`should
 the behaviour of the connector.
 
 Main configuration
-~~~~~~~~~~~~~~~~~~
+------------------
 
 .. automodule:: wazuh.config
    :members:
 
 OpenCTI configuration
-------------------------
+---------------------
 
 OPENCTI settings
 ^^^^^^^^^^^^^^^^

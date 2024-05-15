@@ -8,6 +8,7 @@ from pycti import OpenCTIConnectorHelper
 from .search_config import (
     DirSearchOption,
     ProcessSearchOption,
+    RegKeySearchOption,
     SearchConfig,
     FileSearchOption,
 )
@@ -16,11 +17,13 @@ from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Wildcard
 from .utils import (
     field_as_list,
     get_path_sep,
+    is_registry_path,
     oneof_nonempty,
     list_or_empty,
     mac_permutations,
     escape_lucene_regex,
     escape_path,
+    reg_key_regexp,
     regex_transform_keys,
     remove_host_from_uri,
     search_fields,
@@ -769,7 +772,7 @@ class AlertSearcher(BaseModel):
         """
         DOpt = DirSearchOption
         dopts = self.config.dirsearch_options
-        path = re.sub(r"(?:/|\\)+$", "", escape_path(stix_entity["path"]))
+        path = re.sub(r"(?:/|\\)+$", "", stix_entity["path"])
         if DOpt.RequireAbsPath in dopts and not isabs(path):
             log.info("Path is not absolute and RequireAbsPath is enabled")
             return None
@@ -834,11 +837,12 @@ class AlertSearcher(BaseModel):
                         "data.win.eventdata.sourceImage",
                         "data.win.eventdata.targetImage",
                     ]
+                    # TODO: search data.office365.SourceFileName (or ObjectId for path as well)
                 ]
             )
 
         if match_subdirs:
-            path = f"{path}([/\\\\]+.*)?"
+            path = f"(.*[/\\\\])?{path}([/\\\\]+.*)?"
         elif ignore_slash:
             path = f"{path}(/|\\\\)*"
 
@@ -858,9 +862,66 @@ class AlertSearcher(BaseModel):
         """
         Search for :stix:`Windows registry keys <#_luvw8wjlfo3y>`
         """
-        return self.opensearch.search_multi(
-            fields=["data.win.eventdata.targetObject", "syscheck.path"],
-            value=stix_entity["key"],
+        ROpt = RegKeySearchOption
+        ropts = self.config.regkeysearch_options
+        ignore_slash = ROpt.IgnoreTrailingSlash in ropts
+        path = (
+            re.sub(r"\\+$", "", stix_entity["key"])
+            if ignore_slash
+            else stix_entity["key"]
+        )
+        # is_registry_path acts as isabs() for reg.keys:
+        is_absolute = is_registry_path(path)
+        log.debug(f"Reg. key is absolute: {is_absolute}")
+        if ROpt.RequireAbsPath in ropts and not is_absolute:
+            log.info("Key is not absolute and RequireAbsPath is enabled")
+            return None
+        if ROpt.AllowRegexp not in ropts and not is_absolute:
+            log.info("Key is not absolute and AllowRegexp is not enabled")
+            return None
+
+        key_fields = ["data.win.eventdata.targetObject", "syscheck.path"]
+
+        if ROpt.AllowRegexp not in ropts:
+            path_variants = [escape_path(path, count=i) for i in (2, 4)]
+            return self.opensearch.search(
+                should=[
+                    MultiMatch(query=path_variant, fields=key_fields)
+                    for path_variant in path_variants
+                ]
+            )
+
+        # Accept any number of backslashes:
+        path = re.sub(r"\\{2,}", r"\\\\+", escape_lucene_regex(path))
+        hive_aliases = ROpt.SearchHiveAliases in ropts
+        sid_ignore = ROpt.IgnoreSID in ropts
+        case_insensitive = ROpt.CaseInsensitive in ropts
+        match_subdirs = ROpt.MatchSubdirs in ropts
+
+        path = reg_key_regexp(
+            path,
+            hive_aliases=hive_aliases,
+            sid_ignore=sid_ignore,
+            case_insensitive=case_insensitive,
+        )
+
+        if not is_absolute:
+            path = f".+\\\\+{path}"
+
+        if match_subdirs:
+            path = f"{path}(\\\\+.*)?"
+        elif ignore_slash:
+            path = f"{path}\\\\*"
+
+        return self.opensearch.search(
+            should=[
+                Regexp(
+                    field=field,
+                    query=path,
+                    case_insensitive=case_insensitive,
+                )
+                for field in key_fields
+            ]
         )
 
     def query_reg_value(self, *, stix_entity: dict) -> dict | None:
@@ -1070,6 +1131,7 @@ class AlertSearcher(BaseModel):
         # TODO: display name? Otherwise remove from entity_value*(?)
         # TODO: limit fields depending on type of ID (SID?)
         # TODO: ignore 0, 1000, admin SID and other common IDs. Customiseable ignore list?
+        # TODO: search SID in path like in enrich_accounts
         uid = oneof_nonempty("user_id", within=stix_entity)
         username = oneof_nonempty("account_login", within=stix_entity)
         # Some logs provide a username that also consists of a UID in parenthesis:

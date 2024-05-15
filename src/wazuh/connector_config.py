@@ -88,7 +88,7 @@ class ConnectorConfig(ConfigBase):
     """
     Connector ID
 
-    This string should be a UUID
+    This string should be a :term:`UUID`
     """
     # TODO: test any case:
     type: ConnectorType = ConnectorType.InternalEnrichment

@@ -34,7 +34,8 @@ Workflows
 
 Although OpenCTI provides default status templates, there are no default
 :octia:`workflows <entities/?h=workflow#workflow>` for most relevant entities.
-Workflows are needed to set statuses on reports, tasks, incidents and cases.
+Workflows are needed to set statuses on **reports**, **tasks**, **incidents**
+and **cases**.
 
 Workflows are configured under Settings → Customization → <entity type> →
 Workflow:
@@ -62,7 +63,8 @@ the state following *TO_BE_QUALIFIED* can be either *IN_PROGRESS* or *HUNTING*:
 Case templates
 --------------
 
-Case templates lets you conveniently assign a set of default tasks on a case. They are configured under Settings → Taxonomies → Case templates.
+Case templates lets you conveniently assign a set of default tasks on a case.
+They are configured under Settings → Taxonomies → Case templates.
 
 .. figure:: images/case_templates_1.png
 

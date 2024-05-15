@@ -20,6 +20,7 @@ from .stix_helper import (
 )
 from .utils import (
     REGISTRY_PATH_REGEX,
+    SID_REGEX,
     SafeProxy,
     create_if,
     dict_member_list_first_or_remove,
@@ -45,6 +46,7 @@ from .utils import (
     simplify_field_names,
     parse_sha256,
     oneof,
+    remove_empties,
 )
 from .enrich_config import EnrichmentConfig
 
@@ -265,7 +267,8 @@ class Enricher(BaseModel):
         See :attr:`~wazuh.enrich_config.EnrichmentConfig.EntityType.Account`
         """
         # TODO: Optionally guess (setting) user_id–account_name by looking for alerts where both are present (for the same agent)
-        return self.create_enrichment_obs_from_search_context(
+        # TODO: extract SID using regex in utils on reg.key.paths
+        linux_accounts = self.create_enrichment_obs_from_search_context(
             incident=incident,
             alerts=alerts,
             sco_type="User-Account",
@@ -298,6 +301,25 @@ class Enricher(BaseModel):
             # Require at least one of account_login/user_id:
             properties_validator=lambda x: len(x) >= 1,
         )
+        win_accounts = self.create_enrichment_obs_from_search(
+            incident=incident,
+            alerts=alerts,
+            sco_type="User-Account",
+            fields=["data.win.eventdata.targetObject", "syscheck.path"],
+            validator=lambda x: bool(re.search(SID_REGEX, x)),
+            transform=lambda x: [
+                (
+                    None,
+                    # Remove key instead of leaving it None, otherwise creating
+                    # the SCO will fail:
+                    remove_empties(
+                        {"user_id": SafeProxy(re.search(f"({SID_REGEX})", x)).group(1)}
+                    ),
+                )
+            ],
+        )
+
+        return linux_accounts + win_accounts
 
     def enrich_urls(self, *, incident: stix2.Incident, alerts: list[dict]):
         return self.create_enrichment_obs_from_search(
@@ -471,9 +493,11 @@ class Enricher(BaseModel):
             ]
         ]
 
+    # TODO: normalise path (backspace escape count)
+    # Do this for every path produced in module (optional setting)
     def enrich_reg_keys(self, *, incident: stix2.Incident, alerts: list[dict]):
         results = {
-            "/".join([path, value]) if value else path: {
+            "\\\\".join([path, value]) if value else path: {
                 "field": field,
                 "sco": self.stix.create_sco(
                     "Windows-Registry-Key",
@@ -495,7 +519,9 @@ class Enricher(BaseModel):
                 "data.win.eventdata.targetObject",
             )
             for path in (
-                search_field(alert["_source"], field, regex=REGISTRY_PATH_REGEX),
+                search_field(
+                    alert["_source"], field, regex=f"{REGISTRY_PATH_REGEX}\\\\+.*"
+                ),
             )
             if path is not None
             for value_type in (search_field(alert["_source"], "syscheck.value_type"),)
@@ -1049,6 +1075,8 @@ class Enricher(BaseModel):
                     value: self.stix.create_sco(sco_type, value, **properties)
                     for transformed in transform(match)
                     for value, properties in (transformed,)
+                    # There has to be at least one property:
+                    if value is not None or properties
                 }
             else:
                 return {match: self.stix.create_sco(sco_type, match)}
