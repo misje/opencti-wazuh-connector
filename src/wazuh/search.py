@@ -837,6 +837,7 @@ class AlertSearcher(BaseModel):
                         "data.win.eventdata.sourceImage",
                         "data.win.eventdata.targetImage",
                     ]
+                    # TODO: search data.office365.SourceFileName (or ObjectId for path as well)
                 ]
             )
 
