@@ -17,7 +17,7 @@ Maximum confidence
 What is confidence, what is maximum confidence, and why is it important? Please
 visit the :octiu:`OpenCTI docs on the topic <reliability-confidence>` for
 detailed information, especially the section about :octiu:`max confidence
-<reliability-confidence/?h=confidence>`.
+<reliability-confidence/?h=max+confi#max-confidence-level>`.
 
 The confidence level you set for the user/group that the connector will run as,
 determine the trustworthiness of the data it produces, and consequently,
@@ -99,7 +99,8 @@ Click on the user after it has been created and copy the token:
 
    User overview
 
-Put the token in the OPENCTI_TOKEN variable.
+Put the token in the :attr:`OPENCTI_TOKEN
+<wazuh.opencti_config.OpenCTIConfig.token>` variable.
 
 Also have a look at :octid:`OpenCTI documentation
 <connectors/?h=connector+toke#connector-token>` for possibly more up-to-date

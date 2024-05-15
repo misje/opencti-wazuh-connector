@@ -53,13 +53,13 @@ autodoc_pydantic_model_show_json_error_strategy = "coerce"
 
 # -- extlinks options --------------------------------------------------------
 extlinks = {
-    "octiu": ("https://docs.opencti.io/6.0.X/usage/%s", "OpenCTI usage documentation"),
+    "octiu": ("https://docs.opencti.io/6.1.X/usage/%s", "OpenCTI usage documentation"),
     "octia": (
-        "https://docs.opencti.io/6.0.X/administration/%s",
+        "https://docs.opencti.io/6.1.X/administration/%s",
         "OpenCTI administration documentation",
     ),
     "octid": (
-        "https://docs.opencti.io/6.0.X/deployment/%s",
+        "https://docs.opencti.io/6.1.X/deployment/%s",
         "OpenCTI deployment documentation",
     ),
     "octigh": (

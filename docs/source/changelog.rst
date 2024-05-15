@@ -6,6 +6,9 @@ Changelog and roadmap
 Changelog
 ~~~~~~~~~
 
+See `changelog on GitHub
+<https://github.com/misje/opencti-wazuh-connector/blob/master/CHANGELOG.md>`_.
+
 .. _roadmap:
 
 Roadmap

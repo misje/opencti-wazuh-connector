@@ -187,6 +187,65 @@ class ProcessSearchOption(FuzzyEnum):
     """
 
 
+class RegKeySearchOption(FuzzyEnum):
+    MatchSubdirs = "match-subdirs"
+    """
+    TODO: rephrase:
+    Match subdirectories where the observable is a parent
+
+    If enabled, the observable 'HKLM\\foo\\bar' will match the path
+    'HKLM\\foobar\\baz'. However, it will not match 'HHLM\\foo\\barbaz'.
+
+    .. note:: Requires :attr:`AllowRegexp` if enabled
+    """
+    RequireAbsPath = "require-abs-path"
+    """
+    Require an absolute path
+
+    The path must start with "HKCU", "HKEY_CURRENT_USER", "HKEY_LOCAL_MACHINE"
+    etc. The exact format of the hive (i.e. "HKLM"/"HKEY_LOCAL_MACHINE") is not
+    important if :attr:`SearchHiveAliases` is enabled.
+    """
+    IgnoreTrailingSlash = "ignore-trailing-slash"
+    """
+    Disregard trailing slashes in the registry key path
+
+    .. note:: Requires :attr:`AllowRegexp` if enabled
+    """
+    IgnoreSID = "ignore-sid"
+    """
+    Match key regardless of :term:`SID` in path
+
+    TODO
+    """
+    CaseInsensitive = "case-insensitive"
+    """
+    Perform a case-insensitive search for key paths
+    """
+    SearchHiveAliases = "search-hive-aliases"
+    """
+    Search abbreviated as well as full hive names
+
+    The following alternatives are searched:
+
+    TODO
+    """
+    AllowRegexp = "allow-regexp"
+    """
+    Allow :dsl:`regexp <term/regexp>` queries
+
+    This allows regexp queries when searching. Regexp is used to search for
+    paths that are not absolute, search for any number of backslash
+    escapes in paths, ignoring :term:`SIDs <SID>` and searching for alternative
+    hive names.
+
+    .. note::
+
+        Disable this setting if *search.allow_expensive_queries* is set to
+        false in your OpenSearch installation, or if regexp queries fail.
+    """
+
+
 class SearchConfig(ConfigBase):
     """
     FIXME
@@ -215,7 +274,6 @@ class SearchConfig(ConfigBase):
 
     - "search-size,allow-regexp, case-insensitive"
     """
-
     dirsearch_options: set[DirSearchOption] = {
         DirSearchOption.MatchSubdirs,
         DirSearchOption.SearchFilenames,
@@ -232,8 +290,20 @@ class SearchConfig(ConfigBase):
 
     - "match-subdirs,require-abs-path, allow-regexp"
     """
-
     procsearch_options: set[ProcessSearchOption] = {ProcessSearchOption.CaseInsensitive}
+    """
+    Process searching options
+
+    See :attr:`ProcessSearchOption` for details.
+    """
+    regkeysearch_options: set[RegKeySearchOption] = {
+        RegKeySearchOption.MatchSubdirs,
+        RegKeySearchOption.IgnoreTrailingSlash,
+        RegKeySearchOption.IgnoreSID,
+        RegKeySearchOption.CaseInsensitive,
+        RegKeySearchOption.SearchHiveAliases,
+        RegKeySearchOption.AllowRegexp,
+    }
 
     #  TODO: add include_fields/exclude_fields
 
@@ -324,6 +394,25 @@ class SearchConfig(ConfigBase):
                 | D.IgnoreTrailingSlash
             ):
                 if D.AllowRegexp not in opts:
+                    raise ValueError(f"{opts} requires AllowRegexp")
+            case _:
+                pass
+
+        return opts
+
+    @field_validator("regkeysearch_options", mode="after")
+    @classmethod
+    def check_regopt_regexp_dep(cls, opts: Any) -> Any:
+        ROpt = RegKeySearchOption
+        match opts:
+            case (
+                ROpt.MatchSubdirs
+                | ROpt.IgnoreTrailingSlash
+                | ROpt.IgnoreSID
+                | ROpt.CaseInsensitive
+                | ROpt.SearchHiveAliases
+            ):
+                if ROpt.AllowRegexp not in opts:
                     raise ValueError(f"{opts} requires AllowRegexp")
             case _:
                 pass

@@ -17,6 +17,7 @@ SimpleTypeType = TypeVar("SimpleTypeType", type(int), type(str), type(dict), typ
 Obj = TypeVar("Obj", bound=Mapping)
 
 REGISTRY_PATH_REGEX = r"^(?:HKEY_(?:LOCAL_MACHINE|CURRENT_USER|CLASSES_ROOT|USERS|CURRENT_CONFIG)|HK(?:LM|CU|CR|U|CC))"
+SID_REGEX = r"S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3,9}"
 
 
 class SafeProxy:
@@ -621,6 +622,10 @@ def escape_lucene_regex(string: str):
 
     >>> escape_lucene_regex('Benign string? Possibly. (*Perhaps not*)')
     'Benign string\\\\? Possibly\\\\. \\\\(\\\\*Perhaps not\\\\*\\\\)'
+    >>> escape_lucene_regex(r'foo\\bar\\\\baz')
+    'foo\\\\\\\\bar\\\\\\\\baz'
+    >>> escape_lucene_regex('\\\\foo\\\\\\\\bar')
+    '\\\\\\\\foo\\\\\\\\bar'
     """
     reg_chars = [
         ".",
@@ -635,13 +640,14 @@ def escape_lucene_regex(string: str):
         "(",
         ")",
         '"',
-        "\\",
         "~",
         "<",
         ">",
         "&",
         "@",
     ]
+    # Replace any unescaped single backslashes:
+    string = re.sub(r"(?<!\\)\\(?!\\)", r"\\\\", string)
     return "".join("\\" + ch if ch in reg_chars else ch for ch in string)
 
 
@@ -649,8 +655,15 @@ def escape_path(path: str, *, count: int = 2):
     """
     Escape a path with backslashes, replacing every section of backslashes with
     more than two with the specified count.
+
+    Examples:
+
+    >>> escape_path('foo\\\\bar\\\\\\\\baz\\\\\\\\\\\\\\\\qux')
+    'foo\\\\bar\\\\baz\\\\qux'
+    >>> escape_path('foo\\\\bar\\\\\\\\baz\\\\\\\\\\\\\\\\qux', count=4)
+    'foo\\\\\\\\bar\\\\\\\\baz\\\\\\\\qux'
     """
-    return re.sub(r"\\{2,}", "\\" * count, path)
+    return re.sub(r"\\+", "\\" * count, path)
 
 
 def search_in_object(obj: dict, search_term: str) -> dict[str, str]:
@@ -964,6 +977,37 @@ def remove_reg_paths(obj: dict[T, str]) -> dict[T, str]:
     {'a': '/foo/bar'}
     """
     return {k: v for k, v in obj.items() if not is_registry_path(v)}
+
+
+def reg_key_regexp(
+    key: str, *, hive_aliases: bool, sid_ignore: bool, case_insensitive: bool
+) -> str:
+    """
+    Return a regular expression string that matches varieties of the given key
+
+    Examples:
+
+    >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=True, sid_ignore=True, case_insensitive=True)
+    '(HKEY_LOCAL_MACHINE|HKLM)\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3,9}'
+    >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=False, sid_ignore=True, case_insensitive=True)
+    'HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3,9}'
+    >>> reg_key_regexp('HKEY_LOCAL_MACHINE\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013', hive_aliases=True, sid_ignore=False, case_insensitive=True)
+    '(HKEY_LOCAL_MACHINE|HKLM)\\\\Software\\\\Microsoft\\\\Windows NT\\\\CurrentVersion\\\\Winlogon\\\\VolatileUserMgrKey\\\\1\\\\S-1-5-21-3623811015-3361044348-30300820-1013'
+    """
+    transforms: dict[str, str] = {
+        "^(?:HKEY_LOCAL_MACHINE|HKLM)": "(HKEY_LOCAL_MACHINE|HKLM)",
+        "^(?:HKEY_CURRENT_USER|HKCU)": "(HKEY_CURRENT_USER|CU)",
+        "^(?:HKEY_CLASSES_ROOT|HKCR)": "(HKEY_CLASSES_ROOT|CR)",
+        "^(?:HKEY_USERS|HKU)": "(HKEY_USERS|HKU)",
+        "^(?:HKEY_CURRENT_CONFIG|HKCC)": "(HKEY_CURRENT_CONFIG|HKCC)",
+    }
+    if hive_aliases:
+        for search, replace in transforms.items():
+            key = re.sub(search, replace, key, re.IGNORECASE if case_insensitive else 0)
+    if sid_ignore:
+        key = re.sub(SID_REGEX, SID_REGEX, key)
+
+    return key
 
 
 def comma_string_to_set(

@@ -54,6 +54,10 @@ Glossary
       General Data Protection Regulation, an European Union regulation on
       information privacy in the EU and EEA (European Economic Area)
 
+   hive
+      A hive i a logical group of keys, subkeys and values in the Windows
+      registry.
+
    IoC
       Indicator of compromise
 
@@ -91,6 +95,10 @@ Glossary
    SDO
       :term:`STIX` domain object
 
+   SID
+      Security Identifier, a unique identifier assigned to each security
+      principal, such as a user, group or computer, in a Windows environment.
+
    SIEM
       Security information and event management
 
@@ -122,6 +130,9 @@ Glossary
    TTP
       Tactis, techniques and procedures, usually referring to `MITRE ATT&CK
       <https://attack.mitre.org/>`_
+
+   UUID
+      Universally Unique Identifier
 
    Wazuh
       An open-source :term:`SIEM`
