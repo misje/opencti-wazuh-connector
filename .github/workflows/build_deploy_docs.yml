@@ -34,7 +34,7 @@ jobs:
   deploy:
     needs: [build-docs]
     runs-on: ubuntu-22.04
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' or github.event_name == 'dispatch'
     permissions:
       pages: write
       id-token: write
