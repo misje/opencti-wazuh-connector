@@ -180,7 +180,7 @@ services:
       - WAZUH_OPENSEARCH_URL=https://mywazuh.example.org:9200
       - WAZUH_OPENSEARCH_USERNAME=cti_connector
       - WAZUH_OPENSEARCH_VERIFY_TLS=true
-      - TLPS=TLP:AMBER+STRICT
+      - WAZUH_TLPS=TLP:AMBER+STRICT
     volumes:
       - /var/cache/wazuh
     links:
