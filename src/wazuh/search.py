@@ -1130,6 +1130,7 @@ class AlertSearcher(BaseModel):
         # TODO: display name? Otherwise remove from entity_value*(?)
         # TODO: limit fields depending on type of ID (SID?)
         # TODO: ignore 0, 1000, admin SID and other common IDs. Customiseable ignore list?
+        # TODO: search SID in path like in enrich_accounts
         uid = oneof_nonempty("user_id", within=stix_entity)
         username = oneof_nonempty("account_login", within=stix_entity)
         # Some logs provide a username that also consists of a UID in parenthesis:

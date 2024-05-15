@@ -622,6 +622,10 @@ def escape_lucene_regex(string: str):
 
     >>> escape_lucene_regex('Benign string? Possibly. (*Perhaps not*)')
     'Benign string\\\\? Possibly\\\\. \\\\(\\\\*Perhaps not\\\\*\\\\)'
+    >>> escape_lucene_regex(r'foo\\bar\\\\baz')
+    'foo\\\\\\\\bar\\\\\\\\baz'
+    >>> escape_lucene_regex('\\\\foo\\\\\\\\bar')
+    '\\\\\\\\foo\\\\\\\\bar'
     """
     reg_chars = [
         ".",
@@ -636,13 +640,14 @@ def escape_lucene_regex(string: str):
         "(",
         ")",
         '"',
-        "\\",
         "~",
         "<",
         ">",
         "&",
         "@",
     ]
+    # Replace any unescaped single backslashes:
+    string = re.sub(r"(?<!\\)\\(?!\\)", r"\\\\", string)
     return "".join("\\" + ch if ch in reg_chars else ch for ch in string)
 
 
@@ -655,10 +660,10 @@ def escape_path(path: str, *, count: int = 2):
 
     >>> escape_path('foo\\\\bar\\\\\\\\baz\\\\\\\\\\\\\\\\qux')
     'foo\\\\bar\\\\baz\\\\qux'
-    >>> escape_path('bar\\\\\\\\baz\\\\\\\\\\\\\\\\qux', count=4)
-    'bar\\\\\\\\baz\\\\\\\\qux'
+    >>> escape_path('foo\\\\bar\\\\\\\\baz\\\\\\\\\\\\\\\\qux', count=4)
+    'foo\\\\\\\\bar\\\\\\\\baz\\\\\\\\qux'
     """
-    return re.sub(r"\\{2,}", "\\" * count, path)
+    return re.sub(r"\\+", "\\" * count, path)
 
 
 def search_in_object(obj: dict, search_term: str) -> dict[str, str]:

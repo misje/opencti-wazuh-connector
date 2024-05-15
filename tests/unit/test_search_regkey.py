@@ -80,7 +80,7 @@ def test_regkey_search_no_regexp(monkeypatch, mock_search):
                 fields=["data.win.eventdata.targetObject", "syscheck.path"],
             ),
             MultiMatch(
-                query="HKLM\\Security\\SAM\\Domains\\Builtin\\Aliases\\Members\\S-1-5-80-12345678-901234567-12345689-23456789\\foo\\bar",
+                query="HKLM\\\\Security\\\\SAM\\\\Domains\\\\Builtin\\\\Aliases\\\\Members\\\\S-1-5-80-12345678-901234567-12345689-23456789\\\\foo\\\\bar",
                 fields=["data.win.eventdata.targetObject", "syscheck.path"],
             ),
         ]
