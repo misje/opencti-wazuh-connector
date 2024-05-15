@@ -1,16 +1,13 @@
-# Build Sphinx docs as HTML (for "Deploy docs" to deploy if running on master
-# branch)
-
-name: Build docs
+name: Build and deploy docs
 on:
   push:
     paths:
-      - .github/workflows/build_docs.yml
+      - .github/workflows/build_deploy_docs.yml
       - docs/source/**
       - src/**/*.py
   pull_request:
     paths:
-      - .github/workflows/build_docs.yml
+      - .github/workflows/build_deploy_docs.yml
       - docs/source/**
       - src/**/*.py
   workflow_dispatch:
@@ -34,3 +31,16 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/build
+  deploy:
+    needs: [build-docs]
+    runs-on: ubuntu-22.04
+    if: github.ref == 'refs/heads/master'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
