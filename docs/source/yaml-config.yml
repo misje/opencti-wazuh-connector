@@ -127,5 +127,5 @@ search:
     - case-insensitive
 system_name: Wazuh SIEM
 tlps:
-  - marking-definition--826578e1-40ad-459f-bc73-ede076f81f37
+  - TLP:AMBER+STRICT
 vulnerability_incident_cvss3_score_threshold: null
