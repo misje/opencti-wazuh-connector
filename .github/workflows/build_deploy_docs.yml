@@ -34,18 +34,13 @@ jobs:
   deploy:
     needs: [build-docs]
     runs-on: ubuntu-22.04
+    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: dump context
-        env:
-          CTX: ${{ toJson(github) }}
-        run: echo "$CTX"
-    #if: github.ref == 'refs/heads/master' || github.event_name == 'dispatch'
-    #permissions:
-    #  pages: write
-    #  id-token: write
-    #environment:
-    #  name: github-pages
-    #  url: ${{ steps.deployment.outputs.page_url }}
-    #steps:
-    #  - id: deployment
-    #    uses: actions/deploy-pages@v4
+      - id: deployment
+        uses: actions/deploy-pages@v4
