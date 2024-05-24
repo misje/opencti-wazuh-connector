@@ -3,7 +3,7 @@ name: Create and publish connector docker image
 on:
   push:
     branches:
-      - master
+      - dev
     tags:
       - "*.*.*"
   pull_request:
