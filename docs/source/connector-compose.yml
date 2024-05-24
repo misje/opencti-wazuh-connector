@@ -1,9 +1,7 @@
-version: "3.7"
 services:
   connector-wazuh:
+    image: ghcr.io/misje/opencti-wazuh-connector:0.2.1
     restart: always
-    build:
-      context: .
     environment:
       # A timezone is needed for datetime tools to work as expected:
       - TZ=UTC

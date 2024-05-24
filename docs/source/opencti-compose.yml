@@ -1,4 +1,3 @@
-version: "3.7"
 services:
   redis:
     image: redis:7.2.4
@@ -7,7 +6,7 @@ services:
       - redisdata:/data
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.1
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
     volumes:
       - esdata:/usr/share/elasticsearch/data
     environment:
@@ -64,7 +63,7 @@ services:
         max-size: 50m
 
   opencti:
-    image: opencti/platform:6.1.1
+    image: opencti/platform:6.1.4
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
       - APP__PORT=8080
@@ -161,7 +160,7 @@ services:
         max-size: 50m
 
   connector-wazuh:
-    image: ghcr.io/misje/opencti-connector-wazuh:0.1.0
+    image: ghcr.io/misje/opencti-wazuh-connector:0.2.1
     restart: always
     environment:
       # A timezone is needed for datetime tools to work as expected:
@@ -183,8 +182,6 @@ services:
       - WAZUH_TLPS=TLP:AMBER+STRICT
     volumes:
       - /var/cache/wazuh
-    links:
-      - opencti:opencti
     # Set a limit on logs:
     logging:
       options:
