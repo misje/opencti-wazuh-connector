@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.2.1 - 2024-05-24
+
+### Changed
+
+- OpenCTI 6.1.4 is used
+
+### Fixed
+
+- References to docker image in documentation has been corrected (#38)
+
 ## 0.2.0 - 2024-05-15
 
 ### Added
