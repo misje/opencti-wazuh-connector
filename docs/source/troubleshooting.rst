@@ -146,8 +146,14 @@ Search the logs
 ~~~~~~~~~~~~~~~
 
 If you're using docker-compose, you can get a continuous log by running
-``docker-compose logs -f --tail=0 connector-wazuh``, and adjust the *tail*
+``docker compose logs -f --tail=0 connector-wazuh``, and adjust the *tail*
 argument to retrieve more historical log data.
+
+"docker: 'compose' is not a docker command."
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Install the package **docker-compose-v2**. Alternatively, use `docker-compose`
+instead of `docker compose`.
 
 Known bugs
 ~~~~~~~~~~~~

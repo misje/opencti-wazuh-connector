@@ -29,11 +29,24 @@ Versions and compatibility
      - ?
    * - 0.2.0
      - 6.1.1
-     - –
+     - ?
+   * - 0.2.1
+     - 6.1.4
+     - ?
 
-Some minor OpenCTI versions prior to 6.0.10 should also work. See
-:ref:`versioning <versioning>` for an overview of how version numbers and
+See :ref:`versioning <versioning>` for an overview of how version numbers and
 docker tags are used.
+
+The connector may work just fine on an older or newer OpenCTI instance. You may
+try to replace the pycti version in *src/requirements.txt* and build the image
+yourself, while waiting for a new release or if you want to keep a connector
+release version, but use an old pycti version.
+
+However, since the OpenCTI API and SDK does not follow semantic versioning for
+compatibilty, the connector may break at any time when even just the patch
+version does not match. This is why the compatibilty table above does not
+explicitly set a final supported OpenCTI version number unless an
+incompatibility is known.
 
 .. _issue:
 
@@ -49,8 +62,8 @@ If you still have an issue with the connector, :github:`file an issue
 many of the following steps as possible (this assumes a docker setup):
 
 #. :ref:`Enable debug logs <enable-debug-logs>`
-#. Restart the connector and print the log output: ``docker-compose up -d
-   --build && docker-compose logs -f --tail=0 connector-wazuh worker``
+#. Restart the connector and print the log output: ``docker compose up -d
+   --build && docker compose logs -f --tail=0 connector-wazuh worker``
 #. Reproduce the issue, typically be re-enriching the entity
 
    - Remember to remove the *wazuh_ignore* label if the connector ignores your
