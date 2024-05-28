@@ -5,7 +5,7 @@ import sys
 project = "opencti-wazuh-connector"
 copyright = "2024, Andreas Misje"  # pylint: disable=redefined-builtin
 author = "Andreas Misje"
-release = "0.1.0"
+release = "0.2.1"
 ## The full version, including alpha/beta/rc tags
 # with open("../../../version.txt", "r") as f:
 #    release = f.readline().rstrip()
