@@ -80,6 +80,9 @@ class OpenSearchConfig(ConfigBase):
     Maximum number of results to return from the OpenSearch alert query (after
     ordering by timestamp (or your custom order, if :attr:`order_by` is
     overridden).
+
+    Any results exceeding this limit will simply be dropped (after being
+    ordered by :attr:`order_by`).
     """
     order_by: list[OrderBy] = [OrderBy(field="timestamp", order="desc")]
     """

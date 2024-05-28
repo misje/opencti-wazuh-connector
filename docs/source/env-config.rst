@@ -45,9 +45,10 @@ whitespace or special characters, it must be quoted like this:
 Special characters
 ^^^^^^^^^^^^^^^^^^
 
-Dollar signs, **$**, but be escaped by an additional dollar sign, **$$**. This
+Dollar signs, **$**, must be escaped by an additional dollar sign, **$$**. This
 may be necessary in passphrases that contain these characters, e.g.:
 
+   "WAZUH_PASSWORD=MyPa$word" → "WAZUH_PASSWORD=MyPa$$word"
    "WAZUH_PASSWORD=MyPa$$word" → "WAZUH_PASSWORD=MyPa$$$$word"
 
 Enumerators
@@ -74,7 +75,7 @@ values may be specified as a comma-separated list, e.g.:
 .. note::
   
    All sets of enums accept the special string "all", which will include every
-   defined enumerator.
+   defined enumerator, if the data type is a *set*.
 
 Other complex data types have their own environment variable-friendly syntax,
 documented in the settings reference.

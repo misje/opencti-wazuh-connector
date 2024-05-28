@@ -214,7 +214,7 @@ Investigation
 
 An :octiu:`investigation <pivoting/?h=investigation>` is an interactive
 interface where you can manipulate a knowledge graph. Investigations can be
-created from scratch or by copying the knowledge graph from an case:
+created from scratch or by copying the knowledge graph from a case:
 
 .. figure:: images/investigation_1.png
 

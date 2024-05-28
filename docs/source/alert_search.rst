@@ -25,9 +25,10 @@ create incidents depending your configuration.
 Configuration
 ~~~~~~~~~~~~~
 
-Use CONNECTOR_SCOPE to select which entities to search for. Use the various
-settings in :attr:`~wazuh.search_config.SearchConfig` to determine how searches
-are performed.
+Use :ref:`CONNECTOR_SCOPE <wazuh.connector_config.ConnectorConfig.scope>` to
+select which entities to search for. Use the various settings in
+:attr:`~wazuh.search_config.SearchConfig` to determine how searches are
+performed.
 
 Observables that have been created by the connector through :ref:`enrichment
 <enrichment>` are not looked up by default (determined by
