@@ -16,6 +16,7 @@ from .opensearch import OpenSearchClient
 from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Wildcard
 from .utils import (
     field_as_list,
+    field_or_default,
     get_path_sep,
     is_registry_path,
     oneof_nonempty,
@@ -234,6 +235,14 @@ class AlertSearcher(BaseModel):
             return None
         if not has_hash and not filenames:
             log.info("Observable has no hashes and no file names")
+            return None
+
+        if (
+            has_hash
+            and field_or_default(stix_entity, "hashes.SHA-256", "")
+            == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ):
+            log.info("Ignoring SHA-256 hash of an empty file")
             return None
 
         paths = list(
