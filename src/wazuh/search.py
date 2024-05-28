@@ -694,12 +694,13 @@ class AlertSearcher(BaseModel):
         """
         url = entity["observable_value"]
         fields = [
-            "data.url",
-            "data.uri",
             "data.URL",
-            "data.office365.MessageURLs",
+            "data.docker.Actor.Attributes.org.opencontainers.image.source",
             "data.github.config.url",
+            "data.office365.MessageURLs",
             "data.office365.SiteUrl",
+            "data.uri",
+            "data.url",
         ]
         if (
             not self.config.lookup_url_without_host

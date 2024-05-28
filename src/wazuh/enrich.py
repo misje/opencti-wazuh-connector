@@ -327,11 +327,12 @@ class Enricher(BaseModel):
             alerts=alerts,
             sco_type="Url",
             fields=[
-                "data.url",
-                "data.osquery.columns.update_url",
+                "data.docker.Actor.Attributes.org.opencontainers.image.source",
                 "data.office365.MeetingURL",
                 "data.office365.MessageURLs",
                 "data.office365.RemoteItemWebUrl",
+                "data.osquery.columns.update_url",
+                "data.url",
             ],
             # MessageURLs is a list, so create a SCO for each entry:
             transform=(
