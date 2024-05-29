@@ -399,6 +399,7 @@ class Enricher(BaseModel):
                             "data.audit.file.name",
                             "data.audit.file.name",
                             "data.file",
+                            "data.office365.SourceFileName",
                             "data.osquery.columns.path",
                             "data.sca.check.file",
                             "data.smbd.filename",
