@@ -161,15 +161,13 @@ class WazuhConnector:
         log.info(f"DUMP: {config.model_dump(mode='json')['opencti']}")
         log.info(f"OPENCTI URL: {self.helper.opencti_url}")
 
-        # FIXME: deprecated: remove and don't set confidence:
-        self.confidence = (
-            int(self.helper.connect_confidence_level)
-            if isinstance(self.helper.connect_confidence_level, int)
-            else None
-        )
         self.stix_common_attrs = {
             "object_marking_refs": self.conf.tlps,
-            "confidence": self.confidence,
+            # The connector should not need to set the confidence explicltly,
+            # but due to #6835(?), this doesn't seem to work for sightings.
+            # This confidence will be lowered to that of the connector's user
+            # or group memberships:
+            "confidence": 100,
         }
         # Add moe useful meta to author?
         # TODO: a different type than an org.?
