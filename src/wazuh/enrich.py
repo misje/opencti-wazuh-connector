@@ -359,9 +359,12 @@ class Enricher(BaseModel):
             incident=incident,
             alerts=alerts,
             sco_type="Directory",
+            # TODO: Tie to file in data.office365.SourceFileName as parent-dir
+            # (data.office365.SourceRelativeUrl):
             fields=[
                 "data.audit.directory.name",
                 "data.home",
+                "data.office365.SourceRelativeUrl",
                 "data.osquery.columns.directory",
                 "data.pwd",
             ],
