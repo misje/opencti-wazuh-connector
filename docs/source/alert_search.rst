@@ -25,7 +25,7 @@ create incidents depending your configuration.
 Configuration
 ~~~~~~~~~~~~~
 
-Use :ref:`CONNECTOR_SCOPE <wazuh.connector_config.ConnectorConfig.scope>` to
+Use :attr:`CONNECTOR_SCOPE <wazuh.connector_config.ConnectorConfig.scope>` to
 select which entities to search for. Use the various settings in
 :attr:`~wazuh.search_config.SearchConfig` to determine how searches are
 performed.
