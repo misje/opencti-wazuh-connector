@@ -436,7 +436,7 @@ class Config(ConfigBase):
     *revoked* property set to true.
 
     In recent OpenCTI versions, :octiu:`indicator lifecycle management
-    <indicators-lifecycle>` will automatically adjut the score according to
+    <indicators-lifecycle>` will automatically adjust the score according to
     :octia:`decay rules <decay-rules>`.
     """
 
