@@ -303,6 +303,19 @@ def extract_fields(
     return {k: v for k, v in results.items() if v is not None}
 
 
+def extract_field(obj: Mapping, field: str, default: Any = None) -> Any:
+    """
+    Extract a value from a dict recursively using a key path
+
+    Examples:
+
+    >>> extract_field({'a': {'b': 1}}, 'a.b')
+    1
+    >>> extract_field({'a': {'b': 1}}, 'a.b.c')
+    """
+    return extract_fields(obj, [field], raise_if_missing=False).get(field, default)
+
+
 def search_fields(obj: Mapping, fields: list[str], *, regex: str = "") -> dict:
     """
     Search a dict for fields using key paths
@@ -1203,6 +1216,20 @@ def remove_empties(
         }
     else:
         return value
+
+
+def remove_nones(obj: Mapping) -> dict:
+    """
+    Remove all Nones from a dict
+
+    Nulls are not removed recursively. See also :attr:`remove_empties`.
+
+    Example:
+
+    >>> remove_nones({'a': 1, 'b': None})
+    {'a': 1}
+    """
+    return {key: value for key, value in obj.items() if value is not None}
 
 
 def parse_human_datetime(timestamp: str) -> datetime | timedelta | None:
