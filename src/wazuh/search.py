@@ -788,10 +788,11 @@ class AlertSearcher(BaseModel):
             return None
 
         dir_fields = [
-            "data.audit.directory.name",
             "data.SourceFilePath",
             "data.TargetPath",
+            "data.audit.directory.name",
             "data.home",
+            "data.office365.SourceRelativeUrl",
             "data.pwd",
             "syscheck.path",
         ]
