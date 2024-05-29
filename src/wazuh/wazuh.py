@@ -21,6 +21,7 @@ from datetime import datetime
 from urllib.parse import urljoin
 from functools import reduce
 from .utils import (
+    cvss3_severity_to_score,
     datetime_string,
     field_or_default,
     has,
@@ -409,7 +410,14 @@ class WazuhConnector:
         elif entity_type == "vulnerability" and not (
             (score_threshold := self.conf.vulnerability_incident_cvss3_score_threshold)
             is not None
-            and field_or_default(stix_entity, "x_openti_cvss_base_score", 11)
+            and field_or_default(
+                stix_entity,
+                "x_openti_cvss_base_score",
+                cvss3_severity_to_score(
+                    field_or_default(stix_entity, "x_opencti_cvss_base_severity", ""),
+                    default=11.0,
+                ),
+            )
             > score_threshold
         ):
             log.info(
@@ -725,7 +733,7 @@ class WazuhConnector:
             len(result["hits"]["hits"]) < result["hits"]["total"]["value"]
         )
         # TODO:
-        # severity = cvss3_to_severity(alert entity['entity_type'] == 'Vulnerability'
+        # severity = cvss3_score_to_severity(alert entity['entity_type'] == 'Vulnerability'
         match self.conf.create_incident:
             case Config.IncidentCreateMode.PerQuery:
                 if (
