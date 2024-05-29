@@ -1043,7 +1043,9 @@ class Enricher(BaseModel):
                         description=fields["title"],
                         source_ref=sw_ref,
                         target_ref=vuln.id,
-                        start_time=dateparser.parse(fields["published"]),
+                        start_time=dateparser.parse(fields["published"])
+                        if "published" in fields
+                        else None,
                     ),
                 )
 
