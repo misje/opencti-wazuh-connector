@@ -82,7 +82,7 @@ a definite source of truth, especially because search results may be capped by
 :attr:`search.limit <wazuh.opensearch_config.OpenSearchConfig.limit>`. More on
 this later.
 
-Clicking on a sighting (which is relationship) will bring you to the
+Clicking on a sighting (which is a relationship) will bring you to the
 relationship view. If you click on the system, you'll navigate to the system
 view, where you can find other sightings in that system, as well as other
 related entities and relationships, like incidents, incident response cases and
