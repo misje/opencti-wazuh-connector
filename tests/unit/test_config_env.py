@@ -25,7 +25,7 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("CONNECTOR_NAME", "Wazuh")
     monkeypatch.setenv(
         "CONNECTOR_SCOPE",
-        "Artifact, Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability, Indicator",
+        "Artifact, Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability, Indicator",
     )
     monkeypatch.setenv("CONNECTOR_AUTO", "true")
     monkeypatch.setenv("CONNECTOR_CONFIDENCE_LEVEL", "100")
@@ -38,10 +38,6 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("WAZUH_OPENSEARCH_INDEX", "wazuh-alerts-*")
     monkeypatch.setenv("WAZUH_OPENSEARCH_VERIFY_TLS", "false")
     monkeypatch.setenv("WAZUH_OPENSEARCH_SEARCH_AFTER", "3 months ago")
-    monkeypatch.setenv("WAZUH_API_ENABLED", "false")
-    monkeypatch.setenv("WAZUH_API_URL", "https://wazuh.example.org:55000")
-    monkeypatch.setenv("WAZUH_API_USERNAME", "api_ro")
-    monkeypatch.setenv("WAZUH_API_PASSWORD", "w_password")
     monkeypatch.setenv("WAZUH_MAX_HITS", "50")
     monkeypatch.setenv("WAZUH_SYSTEM_NAME", "Wazuh SIEM")
     monkeypatch.setenv("WAZUH_AUTHOR_NAME", "Wazuh")
@@ -72,13 +68,6 @@ def test_config_from_env(monkeypatch):
     config = Config.model_validate({})
     expected = {
         "agents_as_systems": True,
-        "api": {
-            "enabled": False,
-            "password": "w_password",
-            "url": AnyHttpUrl("https://wazuh.example.org:55000/"),
-            "username": "api_ro",
-            "verify_tls": True,
-        },
         "app_url": AnyHttpUrl("https://wazuh.example.org/"),
         "author_name": "Wazuh",
         "bundle_abort_limit": 500,
@@ -98,7 +87,6 @@ def test_config_from_env(monkeypatch):
                 SupportedEntity.MAC,
                 SupportedEntity.NetworkTraffic,
                 SupportedEntity.Process,
-                SupportedEntity.Software,
                 SupportedEntity.StixFile,
                 SupportedEntity.URL,
                 SupportedEntity.UserAccount,

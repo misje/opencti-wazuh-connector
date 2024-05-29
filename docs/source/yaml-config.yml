@@ -1,10 +1,4 @@
 agents_as_systems: true
-api:
-  enabled: false
-  password: null
-  url: null
-  username: null
-  verify_tls: true
 app_url: https://wazuh.example.org/
 author_name: Wazuh
 bundle_abort_limit: 500

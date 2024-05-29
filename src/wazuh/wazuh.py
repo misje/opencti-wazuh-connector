@@ -4,7 +4,6 @@ import ipaddress
 import logging
 from .config import Config
 from .opensearch import OpenSearchClient
-from .wazuh_api import WazuhAPIClient
 from pycti import (
     CaseIncident,
     CustomObjectCaseIncident,
@@ -204,20 +203,8 @@ class WazuhConnector:
             opensearch=OpenSearchClient(config=self.conf.opensearch),
             config=self.conf.search,
         )
-        if self.conf.api.enabled:
-            self.wazuh = WazuhAPIClient(
-                config=self.conf.api,
-                cache_filename="/var/cache/wazuh/state.json",
-            )
-        else:
-            self.wazuh = None
 
     def start(self):
-        if self.wazuh:
-            self.wazuh.load_cache()
-            self.wazuh.query_packages()
-            self.wazuh.save_cache()
-
         self.enricher.fetch_tools()
         self.helper.metric.state("idle")
         self.helper.listen(self.process_message)
@@ -301,14 +288,6 @@ class WazuhConnector:
                 "Observable has no indicators and WAZUH_CREATE_OBSERVABLE_SIGHTINGS is false"
             )
             return "Observable has no indicators"
-
-        if api_searchable_entity_type(entity["entity_type"]):
-            if not self.wazuh:
-                log.info(
-                    f'Cannot search for {entity["entity_type"]} because WAZUH_API_USE is false'
-                )
-            else:
-                self._query_api(entity, stix_entity)
 
         # TODO: If StixFile, extract path from parent_directory_ref:
         result = self.alert_searcher.search(entity=entity, stix_entity=stix_entity)
@@ -516,23 +495,6 @@ class WazuhConnector:
 
         return True
 
-    def _query_api(self, entity: dict, stix_entity: dict):
-        # TODO: handle results. Refactor this file first
-        # TODO: Ideally log a message that WAZUH_API_USE is false if a
-        # supported, and raise ValueError if non-supported entity is passed
-        if not self.wazuh:
-            return None
-        match entity["entity_type"]:
-            case "Software":
-                results = self.wazuh.find_package(
-                    stix_entity["name"], stix_entity.get("version")
-                )
-                log.debug(results)
-                # for (agent, package) in results:
-
-            case _:
-                return None
-
     def create_agent_stix(self, alert):
         s = alert["_source"]
         agent_id = s["agent"]["id"]
@@ -560,25 +522,7 @@ class WazuhConnector:
         ]
 
     def generate_agent_md_tables(self, agent_id: str):
-        if (
-            self.wazuh
-            and agent_id in self.wazuh.state.agents
-            and self.conf.enrich_agent
-        ):
-            agent = self.wazuh.state.agents[agent_id]
-            return (
-                "|Key|Value|\n"
-                "|---|-----|\n"
-                f"|ID|{agent.id}|\n"
-                f"|Name|{agent.name}|\n"
-                f"|Status|{agent.status if agent.status is not None else ''}|\n"
-                f"|OS name|{agent.os.name if agent.os is not None else ''}|\n"
-                f"|OS version|{agent.os.version if agent.os is not None else ''}|\n"
-                f"|Agent version|{agent.version}|\n"
-                f"|IP address|{agent.ip}|\n"
-            )
-        else:
-            return "|Key|Value|\n" "|---|-----|\n" f"|ID|{agent_id}|\n"
+        return "|Key|Value|\n" "|---|-----|\n" f"|ID|{agent_id}|\n"
 
     def create_sighting_stix(
         self, *, sighter_id: str, metadata: SightingsCollector.Meta
@@ -1076,23 +1020,6 @@ class WazuhConnector:
             for agent in (alert["_source"]["agent"],)
             if int(agent["id"]) > 0 and "ip" in agent
         }
-        if self.wazuh and self.conf.enrich_agent:
-            for agent_id, agent in agents.copy().items():
-                if agent_id in self.wazuh.state.agents:
-                    api_agent = self.wazuh.state.agents[agent_id].model_dump(
-                        include={"name", "ip", "scan_time"}
-                    )
-                    # The agent has changed its address at some point in time.
-                    # Add the new address as well:
-                    if api_agent["ip"] != agent["ip"]:
-                        # Createa new key to be able to add the new agent metadata:
-                        agents[agent_id + str(api_agent["ip"])] = api_agent | {
-                            "standard_id": agent["standard_id"],
-                            "is_new": True,
-                        }
-                    else:
-                        # Add new metadata:
-                        agents[agent_id] |= api_agent
 
         bundle = []
         earliest = min(alert["_source"]["@timestamp"] for alert in alerts)
@@ -1149,22 +1076,6 @@ class WazuhConnector:
             for agent in (alert["_source"]["agent"],)
             if int(agent["id"]) > 0
         }
-        if self.wazuh and self.conf.enrich_agent:
-            for agent_id, agent in agents.copy().items():
-                if agent_id in self.wazuh.state.agents:
-                    api_agent = self.wazuh.state.agents[agent_id].model_dump(
-                        include={"name", "scan_time"}
-                    )
-                    # The agent has changed hostname at some point in time. Add
-                    # the new hostname as well:
-                    if api_agent["name"] != agent["name"]:
-                        # Createa new key to be able to add the new agent metadata:
-                        agents[agent_id + api_agent["name"]] = api_agent | {
-                            "standard_id": agent["standard_id"]
-                        }
-                    else:
-                        # Add new metadata:
-                        agents[agent_id] |= api_agent
 
         bundle = []
         earliest = min(alert["_source"]["@timestamp"] for alert in alerts)

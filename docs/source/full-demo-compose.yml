@@ -180,8 +180,6 @@ services:
       - WAZUH_OPENSEARCH_USERNAME=cti_connector
       - WAZUH_OPENSEARCH_VERIFY_TLS=true
       - WAZUH_TLPS=TLP:AMBER+STRICT
-    volumes:
-      - /var/cache/wazuh
     # Set a limit on logs:
     logging:
       options:

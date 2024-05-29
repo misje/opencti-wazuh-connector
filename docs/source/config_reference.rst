@@ -52,11 +52,3 @@ Look at :ref:`the enrichment topic <enrichment>` for details.
 
 .. autopydantic_settings:: wazuh.enrich_config.EnrichmentConfig
    :settings-show-json-error-strategy: coerce
-
-Wazuh API configuration
------------------------
-
-Wazuh API is only partially supported.
-
-.. automodule:: wazuh.wazuh_api_config
-   :members:

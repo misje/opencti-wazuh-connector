@@ -10,12 +10,11 @@ services:
       - OPENCTI_TOKEN=84387577-27ac-4751-b268-6893045aa73c
       - CONNECTOR_ID=81f9d582-2b4e-45f1-98b6-f33492d66b6e
       - CONNECTOR_NAME=Wazuh
-      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator
+      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator # You may also just use "all" if you want to search available entities
       - CONNECTOR_AUTO=true
       - CONNECTOR_LOG_LEVEL=warning
       - CONNECTOR_EXPOSE_METRICS=true
       - AGENTS_AS_SYSTEMS=true
-      - WAZUH_API_ENABLED=false # This API is still in development
       - WAZUH_APP_URL=https://mywazuh.example.org
       - WAZUH_AUTHOR_NAME=Wazuh
       - WAZUH_BUNDLE_ABORT_LIMIT=500
@@ -68,8 +67,6 @@ services:
       - WAZUH_SYSTEM_NAME="Wazuh SIEM"
       - WAZUH_TLPS=TLP:AMBER+STRICT
       - WAZUH_VULNERABILITY_INCIDENT_CVSS3_SCORE_THRESHOLD=
-    volumes:
-      - /var/cache/wazuh
     links:
       - opencti:opencti
     # Set a limit on logs:

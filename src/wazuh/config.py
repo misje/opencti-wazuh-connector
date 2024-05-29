@@ -12,7 +12,6 @@ from typing import Iterable
 from .opencti_config import OpenCTIConfig
 from .connector_config import ConnectorConfig
 from .search_config import SearchConfig
-from .wazuh_api_config import WazuhAPIConfig
 from .opensearch_config import OpenSearchConfig
 from .enrich_config import EnrichmentConfig
 from .stix_helper import TLPLiteral, tlp_marking_from_string, validate_stix_id
@@ -131,7 +130,6 @@ class Config(ConfigBase):
     opensearch: OpenSearchConfig = Field(
         default_factory=lambda: OpenSearchConfig.model_validate({})
     )
-    api: WazuhAPIConfig = Field(default_factory=WazuhAPIConfig)
 
     max_tlp: TLPLiteral
     """
