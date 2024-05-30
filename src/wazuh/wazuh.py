@@ -412,21 +412,21 @@ class WazuhConnector:
             log.info(
                 "Not creating incident because entity is an observable, an indicator is required and no indicators are found"
             )
-        elif entity_type == "vulnerability" and not (
+        elif entity_type == "vulnerability" and (
             (score_threshold := self.conf.vulnerability_incident_cvss3_score_threshold)
-            is not None
-            and field_or_default(
+            is None
+            or field_or_default(
                 stix_entity,
-                "x_openti_cvss_base_score",
+                "x_opencti_cvss_base_score",
                 cvss3_severity_to_score(
                     field_or_default(stix_entity, "x_opencti_cvss_base_severity", ""),
                     default=11.0,
                 ),
             )
-            > score_threshold
+            < score_threshold
         ):
             log.info(
-                "Not creating incident because entity is an indicator, and CVSS3 score is not present, threshold is not set, or threshold is no met"
+                "Not creating incident because entity is an indicator, and CVSS3 score is not present, threshold is not set, or threshold is not met"
             )
         else:
             bundle += self.create_incidents(
