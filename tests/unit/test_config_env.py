@@ -37,7 +37,7 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("WAZUH_OPENSEARCH_PASSWORD", "os_password")
     monkeypatch.setenv("WAZUH_OPENSEARCH_INDEX", "wazuh-alerts-*")
     monkeypatch.setenv("WAZUH_OPENSEARCH_VERIFY_TLS", "false")
-    monkeypatch.setenv("WAZUH_OPENSEARCH_SEARCH_AFTER", "3 months ago")
+    monkeypatch.setenv("WAZUH_OPENSEARCH_SEARCH_AFTER", "15 weeks")
     monkeypatch.setenv("WAZUH_MAX_HITS", "50")
     monkeypatch.setenv("WAZUH_SYSTEM_NAME", "Wazuh SIEM")
     monkeypatch.setenv("WAZUH_AUTHOR_NAME", "Wazuh")
@@ -207,7 +207,7 @@ def test_config_from_env(monkeypatch):
                 },
             ],
             "password": "os_password",
-            "search_after": datetime.timedelta(days=90),
+            "search_after": datetime.timedelta(days=105),
             "url": AnyHttpUrl("https://wazuh.example.org:9200/"),
             "username": "cti_connector",
             "verify_tls": False,
