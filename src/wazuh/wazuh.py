@@ -1010,7 +1010,7 @@ class WazuhConnector:
                 id=CaseIncident.generate_id(name, timestamp),
                 name=name,
                 # TODO: include info from Notes (not included in bundle?):
-                description=f"Observable {entity_name_value(entity)} {ind_info} has been sighted {f'at least {sightings_count}' if hits_dropped else f'{sightings_count}'} times(s)",
+                description=f"{entity_name_value(entity)} {ind_info} has been sighted {f'at least {sightings_count}' if hits_dropped else f'{sightings_count}'} times(s)",
                 # TODO: this may break if user changes case_severity_ov. Make customisable from setting
                 severity=severity,
                 priority=priority_from_severity(severity),
