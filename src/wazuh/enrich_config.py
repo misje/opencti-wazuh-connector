@@ -317,6 +317,15 @@ class EnrichmentConfig(ConfigBase):
     See attr:`FilenameBehaviour`.
     """
 
+    enrich_urls_without_host: bool = False
+    """
+    Enrich URLs without scheme and host
+
+    If true, URL observables like '/foo' and '/foo/bar?baz=qux' will be
+    created. If false, URLs must include scheme (like 'http://') and host
+    ('mylocalhost', 'example.org') etc.
+    """
+
     @field_validator("types", mode="before")
     @classmethod
     def parse_types_string(cls, types):

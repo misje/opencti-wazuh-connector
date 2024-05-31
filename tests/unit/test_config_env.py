@@ -107,6 +107,7 @@ def test_config_from_env(monkeypatch):
         "create_obs_sightings": True,
         "create_sighting_summary": True,
         "enrich": {
+            "enrich_urls_without_host": False,
             "filename_behaviour": {
                 FilenameBehaviour.RemovePath,
                 FilenameBehaviour.CreateDir,

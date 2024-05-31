@@ -3,7 +3,7 @@ import stix2
 import re
 import dateparser
 import logging
-from pydantic import BaseModel, ConfigDict
+from pydantic import AnyUrl, BaseModel, ConfigDict
 from ntpath import basename
 from typing import Annotated, Any, Callable, Literal, Mapping
 from pycti import (
@@ -46,6 +46,7 @@ from .utils import (
     simplify_field_names,
     parse_sha256,
     oneof,
+    raises,
     remove_empties,
 )
 from .enrich_config import EnrichmentConfig
@@ -338,6 +339,8 @@ class Enricher(BaseModel):
             transform=(
                 lambda x: [(i, {}) for i in x] if isinstance(x, list) else [(x, {})]
             ),
+            validator=lambda x: self.config.enrich_urls_without_host
+            or not raises(lambda: AnyUrl(x)),
         )
 
     def enrich_email_addrs(self, *, incident: stix2.Incident, alerts: list[dict]):

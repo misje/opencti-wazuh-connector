@@ -1434,3 +1434,21 @@ def remove_host_from_uri(uri: str) -> str:
     '/baz'
     """
     return re.sub(r"^(?:.+://)?[^/]+(?=/)", "", uri)
+
+
+def raises(func: Callable[[], Any]) -> bool:
+    """
+    Return true if the callback raises an exception
+
+    Examples:
+
+    >>> raises(lambda: 1/0)
+    True
+    >>> raises(lambda: 'foo')
+    False
+    """
+    try:
+        func()
+        return False
+    except Exception:
+        return True
