@@ -56,7 +56,6 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("WAZUH_INCIDENT_REQUIRE_INDICATOR", "false")
     monkeypatch.setenv("WAZUH_INCIDENT_CREATE_MODE", "per_sighting")
     monkeypatch.setenv("WAZUH_ENRICH_TYPES", "all")
-    monkeypatch.setenv("WAZUH_ENRICH_AGENT", "true")
     monkeypatch.setenv("WAZUH_ENRICH_LABEL_ADD_LIST", "wazuh_ignore")
     monkeypatch.setenv("WAZUH_CREATE_AGENT_IP_OBSERVABLE", "true")
     monkeypatch.setenv("WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE", "false")
@@ -132,7 +131,6 @@ def test_config_from_env(monkeypatch):
                 EnrichmentConfig.EntityType.Vulnerability,
             },
         },
-        "enrich_agent": True,
         "enrich_labels": {
             "wazuh_ignore",
         },

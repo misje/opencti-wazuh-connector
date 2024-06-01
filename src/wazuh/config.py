@@ -339,34 +339,6 @@ class Config(ConfigBase):
     All entities with this author will be ignored. See FIXREF: recusion. See
     also :attr:`label_ignore_list`, which may be a better solution.
     """
-    # FIXME: Update doc.: wazuh API removed:
-    enrich_agent: bool = True
-    """
-    Enrich agent system identities with information from the Wazuh API (if
-    enabled). The following information is provided as a Markdown table in the
-    identity description:
-
-    .. list-table:: Agent information
-       :stub-columns: 1
-
-       * - ID
-         - Three-digit agent ID
-       * - Name
-         - (typically hostname)
-       * - Status
-         -   * active
-             * pending
-             * never_connected
-             * disconnected
-       * - OS name
-         - e.g. Ubuntu, Microsoft Windows 10 Pro
-       * - OS version
-         - e.g. 20.0.4.6 LTS, 10.0.19045.4170
-       * - Agent version
-         - e.g. Wazuh v4.7.3
-       * - IP address
-         - (current public-facing IP address)
-    """
     label_ignore_list: set[str] = Field(
         default={"hygiene", "wazuh_ignore"},
     )
