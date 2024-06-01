@@ -210,6 +210,7 @@ def test_config_from_env(monkeypatch):
             ],
             "password": "os_password",
             "search_after": datetime.timedelta(days=105),
+            "timeout": datetime.timedelta(seconds=20),
             "url": AnyHttpUrl("https://wazuh.example.org:9200/"),
             "username": "cti_connector",
             "verify_tls": False,
