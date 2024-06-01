@@ -31,11 +31,15 @@ CONNECTOR settings
 .. automodule:: wazuh.connector_config
    :members:
 
+.. _opensearch-config:
+
 OpenSearch configuration
 ------------------------
 
 .. automodule:: wazuh.opensearch_config
    :members:
+
+.. _search-config:
 
 Search configuration
 --------------------

@@ -14,6 +14,12 @@ Glossary
    CTI
       Cyber threat intelligence
 
+   CVSS3
+      Common vulnerability scoring system (version 3), an industry standard for
+      assessing the severity of computer system security vulnerabilities. See
+      the `specification document
+      <https://www.first.org/cvss/v3.0/specification-document>`_ for details.
+
    docker
       Docker is a tool that simplifies the process of creating, deploying, and
       managing applications by packaging them with their dependencies into

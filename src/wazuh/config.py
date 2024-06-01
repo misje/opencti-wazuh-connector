@@ -282,8 +282,11 @@ class Config(ConfigBase):
     Creating incidents for every vulnerability (or several incidents, depending
     on :attr:`create_incident`) can quickly become very noisy. This setting
     ensures that incidents are only created for vulenerability sightings if a
-    CVSS3 score is present in the vulnerability, and if that score is high
-    enough. If this setting is None, incidents will never be created.
+    :term:`CVSS3` score is present in the vulnerability, and if that score is
+    high enough. If this setting is None, incidents will never be created.
+
+    If the CVSS3 score is unavailable, but the CVSS3 severity is preent, the
+    severity's corresponding score (the median) is used.
 
     Sightings will always be created, regardless of whether the CVSS3 score is
     present and above the threshold.
@@ -306,6 +309,8 @@ class Config(ConfigBase):
        system is not a high-severity alert, but it could be the alert that
        results in an :term:`IoC` match against a file hash.
     """
+    # TODO: apply this as a filter in OpenSearch instead of filtering the
+    # results:
     rule_exclude_list: set[str] = set()
     """
     Ignore all alerts with this rule ID
