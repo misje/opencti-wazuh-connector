@@ -339,7 +339,7 @@ class AlertSearcher(BaseModel):
                                 # prepend a regex that ignores everything up to
                                 # and including a path separator before the
                                 # filename:
-                                p if isabs(path) else f".*[/\\\\]*{p}"
+                                p if isabs(path) else f"(.*[/\\\\])?{p}"
                                 for path in paths
                                 # Support any number of backslash escapes in
                                 # paths (many variants are seen in the wild):
