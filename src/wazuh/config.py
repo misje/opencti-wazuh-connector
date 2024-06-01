@@ -315,7 +315,7 @@ class Config(ConfigBase):
     """
     Ignore all alerts with this rule ID
     """
-    incident_rule_exclude_list: set[str] = {"5503", "5710", "5718", "31101"}
+    incident_rule_exclude_list: set[str] = {"5503", "5710", "5718", "5762", "31101"}
     """
     Do not create incidents for alerts with these rule IDs
 
