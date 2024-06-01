@@ -223,9 +223,9 @@ class WazuhConnector:
         # Support looking up observables based on indicatorss:
         elif data["entity_id"].startswith("indicator--"):
             log.info(
-                "Waiting 3 seconds for indicator based-on relationships to be ingested before processing"
+                "Waiting a little while for indicator 'based-on' relationships to be ingested before processing"
             )
-            time.sleep(3)
+            time.sleep(0.1)
             ind = self.helper.api.indicator.read(id=data["entity_id"])
             ind_obs = ind["observables"] if ind and "observables" in ind else []
             # TODO: In some distant feature, with a STIX shifter implementation
