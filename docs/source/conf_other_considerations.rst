@@ -50,6 +50,8 @@ settings determines when to create incidents:
 - :attr:`~wazuh.config.Config.require_indicator_detection`
 - :attr:`~wazuh.config.Config.ignore_revoked_indicators`
 - :attr:`~wazuh.config.Config.indicator_score_threshold`
+- :attr:`~wazuh.config.Config.vulnerability_incident_cvss3_score_threshold`
+- :attr:`~wazuh.config.Config.incident_rule_exclude_list`
 
 Playbooks
 ~~~~~~~~~
