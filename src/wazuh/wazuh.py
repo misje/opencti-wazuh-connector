@@ -331,6 +331,11 @@ class WazuhConnector:
         for hit in hits:
             try:
                 s = hit["_source"]
+                if rule_id := s["rule"]["id"] in self.conf.rule_exclude_list:
+                    log.info(
+                        f"Ignoring alert rule id {rule_id} because it is in rule_exclude_list"
+                    )
+                    continue
                 if (
                     has(s, ["agent", "id"])
                     and self.conf.agents_as_systems
@@ -723,9 +728,15 @@ class WazuhConnector:
         result: dict,
         sightings_meta: SightingsCollector,
     ):
-        def log_skipped_incident_creation(level: int):
+        def log_skipped_due_to_rule_level(level: int):
             log.info(
                 f"Not creating incident because rule level below threshold: {level} < {self.conf.create_incident_threshold}"
+            )
+            return True
+
+        def log_skipped_due_to_rule():
+            log.info(
+                "Not creating incident because rule ID is in incident_rule_exclude_list"
             )
             return True
 
@@ -744,7 +755,16 @@ class WazuhConnector:
                 if (
                     level := sightings_meta.max_rule_level()
                 ) < self.conf.create_incident_threshold:
-                    log_skipped_incident_creation(level)
+                    log_skipped_due_to_rule_level(level)
+                    return []
+                if self.conf.incident_rule_exclude_list and all(
+                    (
+                        alert["_source"]["rule"]["id"]
+                        in self.conf.incident_rule_exclude_list
+                        for alert in sightings_meta.alerts()
+                    )
+                ):
+                    log_skipped_due_to_rule()
                     return []
 
                 incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
@@ -783,7 +803,15 @@ class WazuhConnector:
                     if (
                         level := meta.max_rule_level
                     ) < self.conf.create_incident_threshold:
-                        log_skipped_incident_creation(level)
+                        log_skipped_due_to_rule_level(level)
+                        continue
+                    if self.conf.incident_rule_exclude_list and all(
+                        (
+                            rule_id in self.conf.incident_rule_exclude_list
+                            for rule_id in meta.alerts.keys()
+                        )
+                    ):
+                        log_skipped_due_to_rule()
                         continue
 
                     incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted in {meta.sighter_name}"
@@ -818,10 +846,17 @@ class WazuhConnector:
 
             case Config.IncidentCreateMode.PerAlertRule:
                 for rule_id, meta in sightings_meta.alerts_by_rule_id_meta().items():
+                    if (
+                        self.conf.incident_rule_exclude_list
+                        and rule_id in self.conf.incident_rule_exclude_list
+                    ):
+                        log_skipped_due_to_rule()
+                        continue
+
                     # Alerts are grouped by ID and all have the same level, so just pick one:
                     alerts_level = meta["alerts"][0]["_source"]["rule"]["level"]
                     if alerts_level < self.conf.create_incident_threshold:
-                        log_skipped_incident_creation(alerts_level)
+                        log_skipped_due_to_rule_level(alerts_level)
                         continue
 
                     incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted"
@@ -885,7 +920,12 @@ class WazuhConnector:
                         if (
                             rule_level >= self.conf.create_incident_threshold
                             # Just a hack to log some info:
-                            or not log_skipped_incident_creation(rule_level)
+                            or not log_skipped_due_to_rule_level(rule_level)
+                        )
+                        and not (
+                            self.conf.incident_rule_exclude_list
+                            and rule_id in self.conf.incident_rule_exclude_list
+                            and log_skipped_due_to_rule()
                         )
                     ]
 

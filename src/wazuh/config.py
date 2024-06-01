@@ -306,6 +306,19 @@ class Config(ConfigBase):
        system is not a high-severity alert, but it could be the alert that
        results in an :term:`IoC` match against a file hash.
     """
+    rule_exclude_list: set[str] = set()
+    """
+    Ignore all alerts with this rule ID
+    """
+    incident_rule_exclude_list: set[str] = {"5503", "5710", "5718", "31101"}
+    """
+    Do not create incidents for alerts with these rule IDs
+
+    This setting may be useful to limit noise from alerts caused by login
+    attempts and web server accceses on public-facing servers. Sightings are
+    still created. Use :attr:`rule_exclude_list` instead if you want to ignore
+    these alerts altogether.
+    """
     create_agent_ip_observable: bool = True
     """
     Whether to create an IP address observable and relate it to agent systems
@@ -321,6 +334,7 @@ class Config(ConfigBase):
     All entities with this author will be ignored. See FIXREF: recusion. See
     also :attr:`label_ignore_list`, which may be a better solution.
     """
+    # FIXME: Update doc.: wazuh API removed:
     enrich_agent: bool = True
     """
     Enrich agent system identities with information from the Wazuh API (if

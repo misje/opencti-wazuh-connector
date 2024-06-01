@@ -173,6 +173,7 @@ def test_config_from_env(monkeypatch):
         "hits_abort_limit": 1000,
         "ignore_own_entities": False,
         "ignore_revoked_indicators": True,
+        "incident_rule_exclude_list": {"5503", "5710", "5718", "31101"},
         "label_ignore_list": {
             "foobar",
             "hygiene",
@@ -215,6 +216,7 @@ def test_config_from_env(monkeypatch):
         },
         "require_indicator_detection": False,
         "require_indicator_for_incidents": True,
+        "rule_exclude_list": set(),
         "system_name": "Wazuh SIEM",
         "tlps": {
             "marking-definition--826578e1-40ad-459f-bc73-ede076f81f37",
