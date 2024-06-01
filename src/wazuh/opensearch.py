@@ -73,6 +73,7 @@ class OpenSearchClient:
             response = self.http.get(
                 urljoin(str(self.config.url), endpoint),
                 json=query,
+                timeout=self.config.timeout.total_seconds(),
             )
             response.raise_for_status()
 
