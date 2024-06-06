@@ -291,6 +291,19 @@ class Config(ConfigBase):
     Sightings will always be created, regardless of whether the CVSS3 score is
     present and above the threshold.
     """
+    vulnerability_incident_active_only: bool = True
+    """
+    Only create incidents when a vulnerability is still active in a system
+
+    If this setting is enabled, incidents will not be created for
+    vulernabilities spotted in a system, if the vulnerability has since been
+    removed or fixed (by patching the vulnerable software or removing it). If
+    the vulnerability is active somehow again after having been fixed, an
+    innident will be created.
+
+    Note that if a search is limited due to too many hits, incidents may be
+    created due to lack of information.
+    """
     create_incident_threshold: int = Field(
         ge=1,
         le=15,

@@ -66,6 +66,11 @@ Event creation
    threshold is unset, meaning **no incidents are created for sightings of
    vulnerabilities**.
 
+:attr:`~wazuh.config.Config.vulnerability_incident_active_only`
+
+   Only create incidents for vulnerabilities that are still active (i.e.
+   software has since been patched or removed).
+
 :attr:`enrich.types <wazuh.enrich_config.EnrichmentConfig.types>`
 
    Which entites to create as alert context for incidents. By default, all

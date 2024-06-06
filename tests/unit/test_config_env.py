@@ -220,6 +220,7 @@ def test_config_from_env(monkeypatch):
         "tlps": {
             "marking-definition--826578e1-40ad-459f-bc73-ede076f81f37",
         },
+        "vulnerability_incident_active_only": True,
     }
 
     assert config.model_dump(exclude_none=True) == expected

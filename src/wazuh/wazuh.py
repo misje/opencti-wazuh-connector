@@ -132,6 +132,44 @@ def api_searchable_entity_type(entity_type: str):
             return False
 
 
+def vulnerability_active(vulnerability: str, sightings: SightingsCollector) -> bool:
+    """
+    Whether the vulnerability is no longer present in the systems it was sighted
+    """
+    # Create a dict with sighter (system ID) as keys, and a dict with alert
+    # rule ID and "last seen" timestamps:
+    last_seen = {
+        sighter: {
+            rule_id: max((a["_source"]["@timestamp"] for a in alerts))
+            for rule_id, alerts in meta.alerts.items()
+            if alerts
+        }
+        for sighter, meta in sightings.collated().items()
+    }
+    # Create a map of when vulnerabilities were last seen per system:
+    active = {
+        sighter: timestamp
+        for sighter, rs in last_seen.items()
+        for rule_id, timestamp in rs.items()
+        if rule_id in ("23503", "23504", "23505", "23506")
+    }
+    # Create a map of when vulnerabilities were last resolved (a patch was
+    # installed, the program was removed etc.) per system:
+    resolved = {
+        sighter: timestamp
+        for sighter, rs in last_seen.items()
+        for rule_id, timestamp in rs.items()
+        if rule_id == "23502"
+    }
+    # List systems with vulnerabilities still installed:
+    sighters_with_unresolved = {
+        sighter
+        for sighter in active.keys()
+        if sighter not in resolved or resolved[sighter] < active[sighter]
+    }
+    return bool(sighters_with_unresolved)
+
+
 class WazuhConnector:
     class MetricHelper:
         def __init__(self, metric: OpenCTIMetricHandler):
@@ -405,10 +443,6 @@ class WazuhConnector:
         # Look through wazuh rules to find occurances of usernames, addresses etc.
         ###############
 
-        alerts_by_rule_id = sightings_collector.alerts_by_rule_id()
-        counts = {rule_id: len(alerts) for rule_id, alerts in alerts_by_rule_id.items()}
-        log.debug(f"COUNTS: {counts}")
-
         if (
             self.conf.require_indicator_for_incidents
             and entity_type == "observable"
@@ -431,7 +465,15 @@ class WazuhConnector:
             < score_threshold
         ):
             log.info(
-                "Not creating incident because entity is vulnerability, and CVSS3 score is not present, threshold is not set, or threshold is not met"
+                "Not creating incident because entity is a vulnerability, and CVSS3 score is not present, threshold is not set, or threshold is not met"
+            )
+        elif (
+            entity_type == "vulnerability"
+            and self.conf.vulnerability_incident_active_only
+            and not vulnerability_active(stix_entity["name"], sightings_collector)
+        ):
+            log.info(
+                "Not creating incident because entity is a vulnerability, vulnerability_incident_active_only is enabled, and the vulnerability is no longer present"
             )
         else:
             bundle += self.create_incidents(
