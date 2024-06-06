@@ -425,13 +425,13 @@ class WazuhConnector:
                 "x_opencti_cvss_base_score",
                 cvss3_severity_to_score(
                     field_or_default(stix_entity, "x_opencti_cvss_base_severity", ""),
-                    default=11.0,
+                    default=0.0,
                 ),
             )
             < score_threshold
         ):
             log.info(
-                "Not creating incident because entity is an indicator, and CVSS3 score is not present, threshold is not set, or threshold is not met"
+                "Not creating incident because entity is vulnerability, and CVSS3 score is not present, threshold is not set, or threshold is not met"
             )
         else:
             bundle += self.create_incidents(
