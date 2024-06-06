@@ -31,6 +31,8 @@ from .utils import (
     priority_from_severity,
     max_severity,
     common_prefix_string,
+    search_field,
+    search_fields,
     search_in_object_multi,
 )
 from .stix_helper import (
@@ -168,6 +170,38 @@ def vulnerability_active(vulnerability: str, sightings: SightingsCollector) -> b
         if sighter not in resolved or resolved[sighter] < active[sighter]
     }
     return bool(sighters_with_unresolved)
+
+
+def cvss3_from_alert(alerts: list[dict], cve: str) -> dict[str, str | float]:
+    """
+    Extract CVSS3 metadata from vulnerability alerts
+
+    Examples:
+
+    >>> cvss3_from_alert([{'data': {'vulnerability': {'cve': 'CVE-2020-1234', 'severity': 'high'}}}, {'data': {'vulnerability': {'cve': 'CVE-2020-1234', 'severity': '', 'cvss': {'cvss3': {'base_score': 9.9}}}}}], 'CVE-2020-1234')
+    {'data.vulnerability.severity': 'high', 'data.vulnerability.cvss.cvss3.base_score': 9.9}
+    """
+    return {
+        field: value
+        for alert in alerts
+        if search_field(alert["_source"], "data.vulnerability.cve", regex=cve)
+        for field, value in search_fields(
+            alert["_source"],
+            [
+                "data.vulnerability.cvss.cvss3.base_score",
+                "data.vulnerability.severity",
+            ],
+        ).items()
+        if value
+    }
+
+
+def cvss3_score_from_alert(alerts: list[dict], cve: str, default: float) -> float:
+    result = cvss3_from_alert(alerts, cve).get(
+        "data.vulnerability.cvss.cvss3.base_score"
+    )
+    log.debug(f"Looking up CVSS3 base score from alerts: {result}")
+    return float(result) if result is not None else default
 
 
 class WazuhConnector:
@@ -454,12 +488,17 @@ class WazuhConnector:
         elif entity_type == "vulnerability" and (
             (score_threshold := self.conf.vulnerability_incident_cvss3_score_threshold)
             is None
+            # First match against the actual CVSS3 score:
             or field_or_default(
                 stix_entity,
                 "x_opencti_cvss_base_score",
+                # If not present, translate the severity to score:
                 cvss3_severity_to_score(
                     field_or_default(stix_entity, "x_opencti_cvss_base_severity", ""),
-                    default=0.0,
+                    # As a last resort, try to get the score from searching alerts:
+                    default=cvss3_score_from_alert(
+                        alerts=hits, cve=stix_entity["name"], default=0.0
+                    ),
                 ),
             )
             < score_threshold
