@@ -179,7 +179,7 @@ def cvss3_from_alert(alerts: list[dict], cve: str) -> dict[str, str | float]:
 
     Examples:
 
-    >>> cvss3_from_alert([{'data': {'vulnerability': {'cve': 'CVE-2020-1234', 'severity': 'high'}}}, {'data': {'vulnerability': {'cve': 'CVE-2020-1234', 'severity': '', 'cvss': {'cvss3': {'base_score': 9.9}}}}}], 'CVE-2020-1234')
+    >>> cvss3_from_alert([{'_source': {'data': {'vulnerability': {'cve': 'CVE-2020-1234', 'severity': 'high'}}}}, {'_source': {'data': {'vulnerability': {'cve': 'CVE-2020-1234', 'severity': '', 'cvss': {'cvss3': {'base_score': 9.9}}}}}}], 'CVE-2020-1234')
     {'data.vulnerability.severity': 'high', 'data.vulnerability.cvss.cvss3.base_score': 9.9}
     """
     return {
