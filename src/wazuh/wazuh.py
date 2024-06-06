@@ -134,9 +134,10 @@ def api_searchable_entity_type(entity_type: str):
             return False
 
 
-def vulnerability_active(vulnerability: str, sightings: SightingsCollector) -> bool:
+def vulnerability_active(sightings: SightingsCollector) -> bool:
     """
-    Whether the vulnerability is no longer present in the systems it was sighted
+    Whether the vulnerability found is no longer present in the systems it was
+    sighted
     """
     # Create a dict with sighter (system ID) as keys, and a dict with alert
     # rule ID and "last seen" timestamps:
@@ -509,7 +510,7 @@ class WazuhConnector:
         elif (
             entity_type == "vulnerability"
             and self.conf.vulnerability_incident_active_only
-            and not vulnerability_active(stix_entity["name"], sightings_collector)
+            and not vulnerability_active(sightings_collector)
         ):
             log.info(
                 "Not creating incident because entity is a vulnerability, vulnerability_incident_active_only is enabled, and the vulnerability is no longer present"
