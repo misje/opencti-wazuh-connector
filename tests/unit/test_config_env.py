@@ -171,7 +171,7 @@ def test_config_from_env(monkeypatch):
         "hits_abort_limit": 1000,
         "ignore_own_entities": False,
         "ignore_revoked_indicators": True,
-        "incident_rule_exclude_list": {"5503", "5710", "5718", "5762", "31101"},
+        "incident_rule_exclude_list": set(),
         "label_ignore_list": {
             "foobar",
             "hygiene",
