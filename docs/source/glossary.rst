@@ -5,6 +5,33 @@ Glossary
 
 .. glossary::
 
+   Alert
+
+      An alert is an event produced by Wazuh when its analyser finds something
+      of interest. Alerts do not necessarily indicate that something is wrong;
+      the alert's :term:`rule level <Alert rule level>` indicate the severity
+      of the alert.
+
+   Alert rule level
+
+      The Wazuh :wazuh:`alert rule level <ruleset/rules-classification.html>`
+      determines the severity of the alert.
+
+   Alert rule ID
+      This identifies alerts from one another. For instance, `rule ID 5710
+      <https://github.com/wazuh/wazuh/blob/master/ruleset/rules/0095-sshd_rules.xml#L89>`_
+      detects an SSH login attempt using a non-existing user. In order to
+      navigate the rules in use on your Wazuh instance, go the management
+      section:
+
+      .. figure:: images/wazuh_rules_nav.png
+
+      Rules under the Wazuh app navigator
+
+      .. figure:: images/wazuh_rule_overview.png
+
+      Overview of rule 5710
+
    API
       Application programming interface
 

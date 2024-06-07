@@ -326,16 +326,36 @@ class Config(ConfigBase):
     # results:
     rule_exclude_list: set[str] = set()
     """
-    Ignore all alerts with this rule ID
+    Ignore all alerts with this :term:`rule ID <Alert rule ID>`
     """
     incident_rule_exclude_list: set[str] = set()
     """
-    Do not create incidents for alerts with these rule IDs
+    Do not create incidents for alerts with these :term:`rule IDs <Alert rule ID>`
 
     This setting may be useful to limit noise from alerts caused by login
     attempts and web server accceses on public-facing servers. Sightings are
     still created. Use :attr:`rule_exclude_list` instead if you want to ignore
     these alerts altogether.
+
+    Here are some notable rules that may produce a lot of noise if your
+    :term:`IoCs <IoC>` include a lot of IP addresses from spam and abuse
+    sources:
+
+    .. list-table:: Noisy :term:`alert rules <Alert rule ID>`
+       :header-rows: 1
+
+       * - Rule ID
+         - Description
+       * - 5503
+         - PAM: User login failed
+       * - 5710
+         - sshd: Attempt to login using a non-existent user
+       * - 5718
+         - sshd: Attempt to login using a denied user
+       * - 5762
+         - sshd: connection reset
+       * - 31101
+         - Web server 400 error code
     """
     create_agent_ip_observable: bool = True
     """

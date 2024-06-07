@@ -52,12 +52,13 @@ Event creation
 
 :attr:`~wazuh.config.Config.incident_rule_exclude_list`
 
-   A list of alert rule IDs that should not create incidents. Depending on your
-   use of OpenCTI, your connectors and the type and quality of IoCs in your
-   database, you may need to exclude some events from your searches. For
-   instance, in order to reduce a lot of noise, excluding SSH login attempts and
-   web server access attempts may be necessary. The default list excludes a
-   number of these kinds of alerts. Sightingis will still be created.
+   A list of alert :term:`rule IDs <Alert rule ID>` that should not create
+   incidents. Depending on your use of OpenCTI, your connectors and the type
+   and quality of IoCs in your database, you may need to exclude some events
+   from your searches. For instance, in order to reduce a lot of noise,
+   excluding SSH login attempts and web server access attempts may be
+   necessary. The default list excludes a number of these kinds of alerts.
+   Sightingis will still be created.
 
 :attr:`~wazuh.config.Config.vulnerability_incident_cvss3_score_threshold`
 
