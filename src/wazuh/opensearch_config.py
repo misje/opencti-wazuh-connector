@@ -180,7 +180,7 @@ class OpenSearchConfig(ConfigBase):
         verify_url(url, throw=True)
         return url
 
-    @field_validator("search_after", mode="before")
+    @field_validator("search_after", "timeout", mode="before")
     @classmethod
     def parse_lax_datetime(
         cls, timestamp_str: datetime | timedelta | str | None
