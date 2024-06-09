@@ -62,6 +62,18 @@ any of the following values are accepted:
 - ipv4-addr
 - Ipv4addr
 
+Date and time
+^^^^^^^^^^^^^
+
+Dates/times and relative times can be represented in almost any conceivable
+format (and in any langauge if locales are set up correctly), thanks to the
+Python library *dateparser*. Examples:
+
+- 2024-01-02 03:04:05
+- January 24, 2029 10:00 PM EST
+- In two months
+- Three weeks ago
+
 Complex data types
 ^^^^^^^^^^^^^^^^^^
 

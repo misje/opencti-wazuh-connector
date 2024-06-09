@@ -18,6 +18,11 @@ are in need of a help, :ref:`file an issue <issue>`.
 Versions and compatibility
 --------------------------
 
+The table below lists for what version of OpenCTI a connector version is
+built/tested against in a release, and when a known incompatibility is
+reported. Little effort is made testing older versions of the connector against
+newer version of OpenCTI or vice versa.
+
 .. list-table:: OpenCTI compatibility overview
    :header-rows: 1
 
@@ -32,6 +37,9 @@ Versions and compatibility
      - ?
    * - 0.2.1
      - 6.1.4
+     - ?
+   * - 0.3.0
+     - 6.1.10
      - ?
 
 See :ref:`versioning <versioning>` for an overview of how version numbers and

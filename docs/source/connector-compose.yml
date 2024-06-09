@@ -1,6 +1,6 @@
 services:
   connector-wazuh:
-    image: ghcr.io/misje/opencti-wazuh-connector:0.2.1
+    image: ghcr.io/misje/opencti-wazuh-connector:0.3.0
     restart: always
     environment:
       # A timezone is needed for datetime tools to work as expected:
