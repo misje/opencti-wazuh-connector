@@ -2,5 +2,5 @@ babel==2.15.0
 dateparser==1.2.0
 markdownify==0.12.1
 pycti==6.1.10
-pydantic==2.7.1
+pydantic==2.7.3
 pydantic_settings==2.2.1
