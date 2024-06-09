@@ -327,6 +327,11 @@ class Config(ConfigBase):
     rule_exclude_list: set[str] = set()
     """
     Ignore all alerts with this :term:`rule ID <Alert rule ID>`
+
+    .. seealso::
+
+        If you want to keep sightings from alerts, but avoid getting incidents,
+        configure :attr:`incident_rule_exclude_list` instead.
     """
     incident_rule_exclude_list: set[str] = set()
     """
