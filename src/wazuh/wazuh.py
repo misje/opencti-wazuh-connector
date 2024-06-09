@@ -123,17 +123,6 @@ def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] | None = 
     ) + "".join(f"|{key}|{value}|\n" for key, value in additional_rows)
 
 
-def api_searchable_entity_type(entity_type: str):
-    match entity_type:
-        # case "IPv4-Addr" | "IPv6-Addr":
-        # case "Network-Traffic":
-        # case "Process":
-        case "Software":
-            return True
-        case _:
-            return False
-
-
 def vulnerability_active(sightings: SightingsCollector) -> bool:
     """
     Whether the vulnerability found is no longer present in the systems it was
