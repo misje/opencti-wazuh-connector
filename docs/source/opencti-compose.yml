@@ -1,6 +1,6 @@
 services:
   redis:
-    image: redis:7.2.4
+    image: redis:7.2.5
     restart: always
     volumes:
       - redisdata:/data
@@ -33,7 +33,7 @@ services:
         max-size: 50m
 
   minio:
-    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
     volumes:
       - s3data:/data
     ports:
@@ -63,7 +63,7 @@ services:
         max-size: 50m
 
   opencti:
-    image: opencti/platform:6.1.4
+    image: opencti/platform:6.1.10
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
       - APP__PORT=8080
@@ -103,7 +103,7 @@ services:
         max-size: 50m
 
   worker:
-    image: opencti/worker:6.1.1
+    image: opencti/worker:6.1.10
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
@@ -120,7 +120,7 @@ services:
         max-size: 50m
 
   connector-export-file-stix:
-    image: opencti/connector-export-file-stix:6.1.1
+    image: opencti/connector-export-file-stix:6.1.10
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
@@ -139,7 +139,7 @@ services:
         max-size: 50m
 
   connector-import-file-stix:
-    image: opencti/connector-import-file-stix:6.1.1
+    image: opencti/connector-import-file-stix:6.1.10
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
@@ -180,8 +180,6 @@ services:
       - WAZUH_OPENSEARCH_USERNAME=cti_connector
       - WAZUH_OPENSEARCH_VERIFY_TLS=true
       - WAZUH_TLPS=TLP:AMBER+STRICT
-    volumes:
-      - /var/cache/wazuh
     # Set a limit on logs:
     logging:
       options:

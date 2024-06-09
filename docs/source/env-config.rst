@@ -45,9 +45,10 @@ whitespace or special characters, it must be quoted like this:
 Special characters
 ^^^^^^^^^^^^^^^^^^
 
-Dollar signs, **$**, but be escaped by an additional dollar sign, **$$**. This
+Dollar signs, **$**, must be escaped by an additional dollar sign, **$$**. This
 may be necessary in passphrases that contain these characters, e.g.:
 
+   "WAZUH_PASSWORD=MyPa$word" → "WAZUH_PASSWORD=MyPa$$word"
    "WAZUH_PASSWORD=MyPa$$word" → "WAZUH_PASSWORD=MyPa$$$$word"
 
 Enumerators
@@ -60,6 +61,18 @@ any of the following values are accepted:
 - IPv4-Addr
 - ipv4-addr
 - Ipv4addr
+
+Date and time
+^^^^^^^^^^^^^
+
+Dates/times and relative times can be represented in almost any conceivable
+format (and in any langauge if locales are set up correctly), thanks to the
+Python library *dateparser*. Examples:
+
+- 2024-01-02 03:04:05
+- January 24, 2029 10:00 PM EST
+- In two months
+- Three weeks ago
 
 Complex data types
 ^^^^^^^^^^^^^^^^^^
@@ -74,7 +87,7 @@ values may be specified as a comma-separated list, e.g.:
 .. note::
   
    All sets of enums accept the special string "all", which will include every
-   defined enumerator.
+   defined enumerator, if the data type is a *set*.
 
 Other complex data types have their own environment variable-friendly syntax,
 documented in the settings reference.

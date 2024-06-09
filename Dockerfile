@@ -14,6 +14,5 @@ RUN apk --no-cache add build-base libmagic && \
 RUN pip3 install --no-cache-dir -r requirements.txt
 COPY src /opt/opencti-connector-wazuh
 COPY entrypoint.sh /
-RUN chmod +x /entrypoint.sh && \
-   mkdir -p /var/cache/wazuh
+RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]

@@ -27,6 +27,10 @@ Searching
    flooding OpenCTI with events from bad searches. See also
    :attr:`~wazuh.config.Config.bundle_abort_limit`.
 
+There are many more settings that affect searches. See the configuration
+reference on :ref:`alert searching <search-config>` and :ref:`OpenSearch
+<opensearch-config>`.
+
 Event creation
 --------------
 
@@ -46,11 +50,36 @@ Event creation
    - :attr:`~wazuh.config.Config.ignore_revoked_indicators`
    - :attr:`~wazuh.config.Config.indicator_score_threshold`
 
+:attr:`~wazuh.config.Config.incident_rule_exclude_list`
+
+   A list of alert :term:`rule IDs <Alert rule ID>` that should not create
+   incidents. Depending on your use of OpenCTI, your connectors and the type
+   and quality of IoCs in your database, you may need to exclude some events
+   from your searches. For instance, in order to reduce a lot of noise,
+   excluding SSH login attempts and web server access attempts may be
+   necessary. The default list excludes a number of these kinds of alerts.
+   Sightingis will still be created.
+
+:attr:`~wazuh.config.Config.vulnerability_incident_cvss3_score_threshold`
+
+   Only create incidents for sightings of vulnerabilities if the vulnerability
+   :term:`CVSS3` score is above or equals this threshold. By default, this
+   threshold is unset, meaning **no incidents are created for sightings of
+   vulnerabilities**.
+
+:attr:`~wazuh.config.Config.vulnerability_incident_active_only`
+
+   Only create incidents for vulnerabilities that are still active (i.e.
+   software has since been patched or removed).
+
 :attr:`enrich.types <wazuh.enrich_config.EnrichmentConfig.types>`
 
    Which entites to create as alert context for incidents. By default, all
    supported entities are enabled, which may be noisy (depending on the alerts
    matched).
+
+There are more settings that affect sighting and incident creation. See the
+:ref:`configuration reference <config-reference>` for details.
 
 .. _when-to-run:
 

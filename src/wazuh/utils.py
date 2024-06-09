@@ -303,6 +303,19 @@ def extract_fields(
     return {k: v for k, v in results.items() if v is not None}
 
 
+def extract_field(obj: Mapping, field: str, default: Any = None) -> Any:
+    """
+    Extract a value from a dict recursively using a key path
+
+    Examples:
+
+    >>> extract_field({'a': {'b': 1}}, 'a.b')
+    1
+    >>> extract_field({'a': {'b': 1}}, 'a.b.c')
+    """
+    return extract_fields(obj, [field], raise_if_missing=False).get(field, default)
+
+
 def search_fields(obj: Mapping, fields: list[str], *, regex: str = "") -> dict:
     """
     Search a dict for fields using key paths
@@ -500,9 +513,9 @@ def rule_level_to_severity(level: int):
             return "low"
 
 
-def cvss3_to_severity(score: float):
+def cvss3_score_to_severity(score: float) -> str:
     """
-    Convert vulnerability CVSS3 score to incident severity
+    Convert vulnerability CVSS3 score to severity
     """
     match score:
         case score if score > 9.0:
@@ -513,6 +526,25 @@ def cvss3_to_severity(score: float):
             return "medium"
         case _:
             return "low"
+
+
+def cvss3_severity_to_score(severity: str, *, default=0.0) -> float:
+    """
+    Convert vulnerability CVSS3 severity to score
+
+    The middle value of the score range is used
+    """
+    match severity.lower():
+        case "critical":
+            return 9.5
+        case "high":
+            return 7.95
+        case "medium":
+            return 5.45
+        case "low":
+            return 2.0
+        case _:
+            return default
 
 
 # TODO: This will break if case_priority_ov is customised by user. Make configurable in setting
@@ -1205,6 +1237,20 @@ def remove_empties(
         return value
 
 
+def remove_nones(obj: Mapping) -> dict:
+    """
+    Remove all Nones from a dict
+
+    Nulls are not removed recursively. See also :attr:`remove_empties`.
+
+    Example:
+
+    >>> remove_nones({'a': 1, 'b': None})
+    {'a': 1}
+    """
+    return {key: value for key, value in obj.items() if value is not None}
+
+
 def parse_human_datetime(timestamp: str) -> datetime | timedelta | None:
     """
     Parse a string containing a date, time or interval into a
@@ -1388,3 +1434,21 @@ def remove_host_from_uri(uri: str) -> str:
     '/baz'
     """
     return re.sub(r"^(?:.+://)?[^/]+(?=/)", "", uri)
+
+
+def raises(func: Callable[[], Any]) -> bool:
+    """
+    Return true if the callback raises an exception
+
+    Examples:
+
+    >>> raises(lambda: 1/0)
+    True
+    >>> raises(lambda: 'foo')
+    False
+    """
+    try:
+        func()
+        return False
+    except Exception:
+        return True

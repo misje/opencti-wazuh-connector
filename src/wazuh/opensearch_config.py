@@ -80,6 +80,9 @@ class OpenSearchConfig(ConfigBase):
     Maximum number of results to return from the OpenSearch alert query (after
     ordering by timestamp (or your custom order, if :attr:`order_by` is
     overridden).
+
+    Any results exceeding this limit will simply be dropped (after being
+    ordered by :attr:`order_by`).
     """
     order_by: list[OrderBy] = [OrderBy(field="timestamp", order="desc")]
     """
@@ -132,6 +135,22 @@ class OpenSearchConfig(ConfigBase):
             }
         ]
     """
+    timeout: timedelta = timedelta(seconds=20)
+    """
+    Time to wait before aborting the OpenSearch request
+
+    In the event OpenSearch fails to return results from a query in timely
+    manner, this setting ensures that the connection is closed instead of
+    waiting forever. Typical causes are network issues.
+
+    Be sure to set the timeout high enough so that your OpenSearch instances
+    has time to finish all your queries. If you are using regular expressions
+    on a large database, queries may take up to several seconds in some cases.
+    Do not use this setting as a way to time out complicated queries. Configure
+    `OpenSearch itself
+    <https://opensearch.org/docs/latest/install-and-configure/configuring-opensearch/search-settings/>`_
+    for that.
+    """
 
     @field_validator("url", mode="before")
     @classmethod
@@ -161,7 +180,7 @@ class OpenSearchConfig(ConfigBase):
         verify_url(url, throw=True)
         return url
 
-    @field_validator("search_after", mode="before")
+    @field_validator("search_after", "timeout", mode="before")
     @classmethod
     def parse_lax_datetime(
         cls, timestamp_str: datetime | timedelta | str | None

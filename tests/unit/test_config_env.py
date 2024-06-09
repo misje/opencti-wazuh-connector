@@ -25,7 +25,7 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("CONNECTOR_NAME", "Wazuh")
     monkeypatch.setenv(
         "CONNECTOR_SCOPE",
-        "Artifact, Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability, Indicator",
+        "Artifact, Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability, Indicator",
     )
     monkeypatch.setenv("CONNECTOR_AUTO", "true")
     monkeypatch.setenv("CONNECTOR_CONFIDENCE_LEVEL", "100")
@@ -37,11 +37,7 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("WAZUH_OPENSEARCH_PASSWORD", "os_password")
     monkeypatch.setenv("WAZUH_OPENSEARCH_INDEX", "wazuh-alerts-*")
     monkeypatch.setenv("WAZUH_OPENSEARCH_VERIFY_TLS", "false")
-    monkeypatch.setenv("WAZUH_OPENSEARCH_SEARCH_AFTER", "3 months ago")
-    monkeypatch.setenv("WAZUH_API_ENABLED", "false")
-    monkeypatch.setenv("WAZUH_API_URL", "https://wazuh.example.org:55000")
-    monkeypatch.setenv("WAZUH_API_USERNAME", "api_ro")
-    monkeypatch.setenv("WAZUH_API_PASSWORD", "w_password")
+    monkeypatch.setenv("WAZUH_OPENSEARCH_SEARCH_AFTER", "15 weeks")
     monkeypatch.setenv("WAZUH_MAX_HITS", "50")
     monkeypatch.setenv("WAZUH_SYSTEM_NAME", "Wazuh SIEM")
     monkeypatch.setenv("WAZUH_AUTHOR_NAME", "Wazuh")
@@ -60,7 +56,6 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("WAZUH_INCIDENT_REQUIRE_INDICATOR", "false")
     monkeypatch.setenv("WAZUH_INCIDENT_CREATE_MODE", "per_sighting")
     monkeypatch.setenv("WAZUH_ENRICH_TYPES", "all")
-    monkeypatch.setenv("WAZUH_ENRICH_AGENT", "true")
     monkeypatch.setenv("WAZUH_ENRICH_LABEL_ADD_LIST", "wazuh_ignore")
     monkeypatch.setenv("WAZUH_CREATE_AGENT_IP_OBSERVABLE", "true")
     monkeypatch.setenv("WAZUH_CREATE_AGENT_HOSTNAME_OBSERVABLE", "false")
@@ -72,13 +67,6 @@ def test_config_from_env(monkeypatch):
     config = Config.model_validate({})
     expected = {
         "agents_as_systems": True,
-        "api": {
-            "enabled": False,
-            "password": "w_password",
-            "url": AnyHttpUrl("https://wazuh.example.org:55000/"),
-            "username": "api_ro",
-            "verify_tls": True,
-        },
         "app_url": AnyHttpUrl("https://wazuh.example.org/"),
         "author_name": "Wazuh",
         "bundle_abort_limit": 500,
@@ -98,7 +86,6 @@ def test_config_from_env(monkeypatch):
                 SupportedEntity.MAC,
                 SupportedEntity.NetworkTraffic,
                 SupportedEntity.Process,
-                SupportedEntity.Software,
                 SupportedEntity.StixFile,
                 SupportedEntity.URL,
                 SupportedEntity.UserAccount,
@@ -119,6 +106,7 @@ def test_config_from_env(monkeypatch):
         "create_obs_sightings": True,
         "create_sighting_summary": True,
         "enrich": {
+            "enrich_urls_without_host": False,
             "filename_behaviour": {
                 FilenameBehaviour.RemovePath,
                 FilenameBehaviour.CreateDir,
@@ -143,7 +131,6 @@ def test_config_from_env(monkeypatch):
                 EnrichmentConfig.EntityType.Vulnerability,
             },
         },
-        "enrich_agent": True,
         "enrich_labels": {
             "wazuh_ignore",
         },
@@ -184,6 +171,7 @@ def test_config_from_env(monkeypatch):
         "hits_abort_limit": 1000,
         "ignore_own_entities": False,
         "ignore_revoked_indicators": True,
+        "incident_rule_exclude_list": set(),
         "label_ignore_list": {
             "foobar",
             "hygiene",
@@ -219,17 +207,20 @@ def test_config_from_env(monkeypatch):
                 },
             ],
             "password": "os_password",
-            "search_after": datetime.timedelta(days=90),
+            "search_after": datetime.timedelta(days=105),
+            "timeout": datetime.timedelta(seconds=20),
             "url": AnyHttpUrl("https://wazuh.example.org:9200/"),
             "username": "cti_connector",
             "verify_tls": False,
         },
         "require_indicator_detection": False,
         "require_indicator_for_incidents": True,
+        "rule_exclude_list": set(),
         "system_name": "Wazuh SIEM",
         "tlps": {
             "marking-definition--826578e1-40ad-459f-bc73-ede076f81f37",
         },
+        "vulnerability_incident_active_only": True,
     }
 
     assert config.model_dump(exclude_none=True) == expected

@@ -3,7 +3,7 @@ import stix2
 import re
 import dateparser
 import logging
-from pydantic import BaseModel, ConfigDict
+from pydantic import AnyUrl, BaseModel, ConfigDict
 from ntpath import basename
 from typing import Annotated, Any, Callable, Literal, Mapping
 from pycti import (
@@ -46,6 +46,7 @@ from .utils import (
     simplify_field_names,
     parse_sha256,
     oneof,
+    raises,
     remove_empties,
 )
 from .enrich_config import EnrichmentConfig
@@ -327,16 +328,19 @@ class Enricher(BaseModel):
             alerts=alerts,
             sco_type="Url",
             fields=[
-                "data.url",
-                "data.osquery.columns.update_url",
+                "data.docker.Actor.Attributes.org.opencontainers.image.source",
                 "data.office365.MeetingURL",
                 "data.office365.MessageURLs",
                 "data.office365.RemoteItemWebUrl",
+                "data.osquery.columns.update_url",
+                "data.url",
             ],
             # MessageURLs is a list, so create a SCO for each entry:
             transform=(
                 lambda x: [(i, {}) for i in x] if isinstance(x, list) else [(x, {})]
             ),
+            validator=lambda x: self.config.enrich_urls_without_host
+            or not raises(lambda: AnyUrl(x)),
         )
 
     def enrich_email_addrs(self, *, incident: stix2.Incident, alerts: list[dict]):
@@ -358,9 +362,12 @@ class Enricher(BaseModel):
             incident=incident,
             alerts=alerts,
             sco_type="Directory",
+            # TODO: Tie to file in data.office365.SourceFileName as parent-dir
+            # (data.office365.SourceRelativeUrl):
             fields=[
                 "data.audit.directory.name",
                 "data.home",
+                "data.office365.SourceRelativeUrl",
                 "data.osquery.columns.directory",
                 "data.pwd",
             ],
@@ -398,6 +405,7 @@ class Enricher(BaseModel):
                             "data.audit.file.name",
                             "data.audit.file.name",
                             "data.file",
+                            "data.office365.SourceFileName",
                             "data.osquery.columns.path",
                             "data.sca.check.file",
                             "data.smbd.filename",
@@ -1042,7 +1050,9 @@ class Enricher(BaseModel):
                         description=fields["title"],
                         source_ref=sw_ref,
                         target_ref=vuln.id,
-                        start_time=dateparser.parse(fields["published"]),
+                        start_time=dateparser.parse(fields["published"])
+                        if "published" in fields
+                        else None,
                     ),
                 )
 

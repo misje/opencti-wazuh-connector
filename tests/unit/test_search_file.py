@@ -214,7 +214,7 @@ def test_no_hash_filename_size(caplog, monkeypatch, mock_search):
             MultiMatch(query="42", fields=["syscheck.size*"]),
         ],
         "should": [
-            Regexp(field=field, query=".*[/\\\\]*foo", case_insensitive=True)
+            Regexp(field=field, query="(.*[/\\\\])?foo", case_insensitive=True)
             for field in fields
         ],
     }
@@ -237,7 +237,7 @@ def test_no_hash_filename_size_no_case(caplog, monkeypatch, mock_search):
             MultiMatch(query="42", fields=["syscheck.size*"]),
         ],
         "should": [
-            Regexp(field=field, query=".*[/\\\\]*foo", case_insensitive=False)
+            Regexp(field=field, query="(.*[/\\\\])?foo", case_insensitive=False)
             for field in fields
         ],
     }

@@ -31,15 +31,19 @@ The meaning of all the fields in the summary table are as follows:
    * - Total hits
      - The total number of matches
    * - Max hits
-     - Maximum number of results to return, as per :py:attr:`~wazuh.config.Config.hits_limit`
+     - Maximum number of results to return, as per
+       :py:attr:`~wazuh.opensearch_config.OpenSearchConfig.limit`
    * - Dropped
      - Results dropped (Total hits - Max hits)
    * - Search since
-     - Time filter used, as per :py:attr:`~wazuh.config.Config.search_after`
+     - Time filter used, as per
+       :py:attr:`~wazuh.opensearch_config.OpenSearchConfig.search_after`
    * - Include filter
-     - Additional search filters used, as per :py:attr:`~wazuh.config.Config.search_include`
+     - Additional search filters used, as per
+       :py:attr:`~wazuh.config.OpenSearchConfig.include_match`
    * - Exclude filter
-     - Additional search filters used, as per :py:attr:`~wazuh.config.Config.search_exclude`
+     - Additional search filters used, as per
+       :py:attr:`~wazuh.config.OpenSearchConfig.exclude_match`
    * - Connector v.
      - The connector version at enrichment time
 

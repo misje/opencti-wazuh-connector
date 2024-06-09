@@ -31,11 +31,15 @@ CONNECTOR settings
 .. automodule:: wazuh.connector_config
    :members:
 
+.. _opensearch-config:
+
 OpenSearch configuration
 ------------------------
 
 .. automodule:: wazuh.opensearch_config
    :members:
+
+.. _search-config:
 
 Search configuration
 --------------------
@@ -52,11 +56,3 @@ Look at :ref:`the enrichment topic <enrichment>` for details.
 
 .. autopydantic_settings:: wazuh.enrich_config.EnrichmentConfig
    :settings-show-json-error-strategy: coerce
-
-Wazuh API configuration
------------------------
-
-Wazuh API is only partially supported.
-
-.. automodule:: wazuh.wazuh_api_config
-   :members:

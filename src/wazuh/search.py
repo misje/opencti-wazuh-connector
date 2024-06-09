@@ -16,6 +16,7 @@ from .opensearch import OpenSearchClient
 from .opensearch_dsl import Bool, Match, MultiMatch, QueryType, Regexp, Wildcard
 from .utils import (
     field_as_list,
+    field_or_default,
     get_path_sep,
     is_registry_path,
     oneof_nonempty,
@@ -236,6 +237,14 @@ class AlertSearcher(BaseModel):
             log.info("Observable has no hashes and no file names")
             return None
 
+        if (
+            has_hash
+            and field_or_default(stix_entity, "hashes.SHA-256", "")
+            == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        ):
+            log.info("Ignoring SHA-256 hash of an empty file")
+            return None
+
         paths = list(
             {
                 parent_path + sep + filename if parent_path else filename
@@ -330,7 +339,7 @@ class AlertSearcher(BaseModel):
                                 # prepend a regex that ignores everything up to
                                 # and including a path separator before the
                                 # filename:
-                                p if isabs(path) else f".*[/\\\\]*{p}"
+                                p if isabs(path) else f"(.*[/\\\\])?{p}"
                                 for path in paths
                                 # Support any number of backslash escapes in
                                 # paths (many variants are seen in the wild):
@@ -694,12 +703,13 @@ class AlertSearcher(BaseModel):
         """
         url = entity["observable_value"]
         fields = [
-            "data.url",
-            "data.uri",
             "data.URL",
-            "data.office365.MessageURLs",
+            "data.docker.Actor.Attributes.org.opencontainers.image.source",
             "data.github.config.url",
+            "data.office365.MessageURLs",
             "data.office365.SiteUrl",
+            "data.uri",
+            "data.url",
         ]
         if (
             not self.config.lookup_url_without_host
@@ -778,10 +788,11 @@ class AlertSearcher(BaseModel):
             return None
 
         dir_fields = [
-            "data.audit.directory.name",
             "data.SourceFilePath",
             "data.TargetPath",
+            "data.audit.directory.name",
             "data.home",
+            "data.office365.SourceRelativeUrl",
             "data.pwd",
             "syscheck.path",
         ]
@@ -837,7 +848,6 @@ class AlertSearcher(BaseModel):
                         "data.win.eventdata.sourceImage",
                         "data.win.eventdata.targetImage",
                     ]
-                    # TODO: search data.office365.SourceFileName (or ObjectId for path as well)
                 ]
             )
 

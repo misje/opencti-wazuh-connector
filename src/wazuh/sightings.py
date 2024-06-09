@@ -43,7 +43,7 @@ class SightingsCollector:
         """
         Add or update metadata for sightings of an observable in sighter_id
         """
-        rule_id = alert["_source"]["rule"]["id"]
+        rule_id = str(alert["_source"]["rule"]["id"])
         if sighter.id in self._sightings:
             self._sightings[sighter.id].first_seen = min(
                 self._sightings[sighter.id].first_seen, timestamp
@@ -75,7 +75,7 @@ class SightingsCollector:
                 first_seen=timestamp,
                 last_seen=timestamp,
                 count=1,
-                alerts={str(rule_id): [alert]},
+                alerts={rule_id: [alert]},
                 max_rule_level=alert["_source"]["rule"]["level"],
             )
             self._latest = timestamp

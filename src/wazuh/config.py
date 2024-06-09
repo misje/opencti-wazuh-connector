@@ -12,7 +12,6 @@ from typing import Iterable
 from .opencti_config import OpenCTIConfig
 from .connector_config import ConnectorConfig
 from .search_config import SearchConfig
-from .wazuh_api_config import WazuhAPIConfig
 from .opensearch_config import OpenSearchConfig
 from .enrich_config import EnrichmentConfig
 from .stix_helper import TLPLiteral, tlp_marking_from_string, validate_stix_id
@@ -131,7 +130,6 @@ class Config(ConfigBase):
     opensearch: OpenSearchConfig = Field(
         default_factory=lambda: OpenSearchConfig.model_validate({})
     )
-    api: WazuhAPIConfig = Field(default_factory=WazuhAPIConfig)
 
     max_tlp: TLPLiteral
     """
@@ -284,11 +282,27 @@ class Config(ConfigBase):
     Creating incidents for every vulnerability (or several incidents, depending
     on :attr:`create_incident`) can quickly become very noisy. This setting
     ensures that incidents are only created for vulenerability sightings if a
-    CVSS3 score is present in the vulnerability, and if that score is high
-    enough. If this setting is None, incidents will never be created.
+    :term:`CVSS3` score is present in the vulnerability, and if that score is
+    high enough. If this setting is None, incidents will never be created.
+
+    If the CVSS3 score is unavailable, but the CVSS3 severity is preent, the
+    severity's corresponding score (the median) is used.
 
     Sightings will always be created, regardless of whether the CVSS3 score is
     present and above the threshold.
+    """
+    vulnerability_incident_active_only: bool = True
+    """
+    Only create incidents when a vulnerability is still active in a system
+
+    If this setting is enabled, incidents will not be created for
+    vulernabilities spotted in a system, if the vulnerability has since been
+    removed or fixed (by patching the vulnerable software or removing it). If
+    the vulnerability is active somehow again after having been fixed, an
+    innident will be created.
+
+    Note that if a search is limited due to too many hits, incidents may be
+    created due to lack of information.
     """
     create_incident_threshold: int = Field(
         ge=1,
@@ -308,6 +322,46 @@ class Config(ConfigBase):
        system is not a high-severity alert, but it could be the alert that
        results in an :term:`IoC` match against a file hash.
     """
+    # TODO: apply this as a filter in OpenSearch instead of filtering the
+    # results:
+    rule_exclude_list: set[str] = set()
+    """
+    Ignore all alerts with this :term:`rule ID <Alert rule ID>`
+
+    .. seealso::
+
+        If you want to keep sightings from alerts, but avoid getting incidents,
+        configure :attr:`incident_rule_exclude_list` instead.
+    """
+    incident_rule_exclude_list: set[str] = set()
+    """
+    Do not create incidents for alerts with these :term:`rule IDs <Alert rule ID>`
+
+    This setting may be useful to limit noise from alerts caused by login
+    attempts and web server accceses on public-facing servers. Sightings are
+    still created. Use :attr:`rule_exclude_list` instead if you want to ignore
+    these alerts altogether.
+
+    Here are some notable rules that may produce a lot of noise if your
+    :term:`IoCs <IoC>` include a lot of IP addresses from spam and abuse
+    sources:
+
+    .. list-table:: Noisy :term:`alert rules <Alert rule ID>`
+       :header-rows: 1
+
+       * - Rule ID
+         - Description
+       * - 5503
+         - PAM: User login failed
+       * - 5710
+         - sshd: Attempt to login using a non-existent user
+       * - 5718
+         - sshd: Attempt to login using a denied user
+       * - 5762
+         - sshd: connection reset
+       * - 31101
+         - Web server 400 error code
+    """
     create_agent_ip_observable: bool = True
     """
     Whether to create an IP address observable and relate it to agent systems
@@ -322,33 +376,6 @@ class Config(ConfigBase):
 
     All entities with this author will be ignored. See FIXREF: recusion. See
     also :attr:`label_ignore_list`, which may be a better solution.
-    """
-    enrich_agent: bool = True
-    """
-    Enrich agent system identities with information from the Wazuh API (if
-    enabled). The following information is provided as a Markdown table in the
-    identity description:
-
-    .. list-table:: Agent information
-       :stub-columns: 1
-
-       * - ID
-         - Three-digit agent ID
-       * - Name
-         - (typically hostname)
-       * - Status
-         -   * active
-             * pending
-             * never_connected
-             * disconnected
-       * - OS name
-         - e.g. Ubuntu, Microsoft Windows 10 Pro
-       * - OS version
-         - e.g. 20.0.4.6 LTS, 10.0.19045.4170
-       * - Agent version
-         - e.g. Wazuh v4.7.3
-       * - IP address
-         - (current public-facing IP address)
     """
     label_ignore_list: set[str] = Field(
         default={"hygiene", "wazuh_ignore"},
@@ -438,7 +465,7 @@ class Config(ConfigBase):
     *revoked* property set to true.
 
     In recent OpenCTI versions, :octiu:`indicator lifecycle management
-    <indicators-lifecycle>` will automatically adjut the score according to
+    <indicators-lifecycle>` will automatically adjust the score according to
     :octia:`decay rules <decay-rules>`.
     """
 

@@ -24,13 +24,10 @@ def test_type_from_env(monkeypatch):
 
 def test_scope_from_env(monkeypatch):
     E = SupportedEntity
-    monkeypatch.setenv(
-        "CONNECTOR_SCOPE", "IPv4-Addr, ipv6addr, Software,URL, IndicATOR"
-    )
+    monkeypatch.setenv("CONNECTOR_SCOPE", "IPv4-Addr, ipv6addr, URL, IndicATOR")
     assert ConnectorConfig(id="foo").scope == {
         E.IPv4Addr,
         E.IPv6Addr,
-        E.Software,
         E.URL,
         E.Indicator,
     }

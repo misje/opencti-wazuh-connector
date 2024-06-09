@@ -128,7 +128,6 @@ class _Globby(BaseModel):
 
     @model_serializer
     def serialise(self) -> dict[str, Any]:
-        print(f"Calling serialiser for {type(self).__name__}")
         # Due to what seems like a bug in pydantic (no issue yet), Bool calls
         # this serializer for some reason:
         if type(self).__name__ not in ("Wildcard", "Regexp"):
