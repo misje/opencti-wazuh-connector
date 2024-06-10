@@ -8,7 +8,6 @@
 - Mac-Addr
 - Network-Traffic
 - Process
-- Software
 - StixFile
 - Url
 - User-Account
