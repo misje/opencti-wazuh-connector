@@ -14,6 +14,8 @@ Using the following as an example, add a *connector-wazuh* service to your
 OpenCTI docker-compose file:
 
 .. literalinclude:: connector-compose-simple.yml
+   :language: yaml
+   :linenos:
 
 .. warning::
 
@@ -43,10 +45,10 @@ The following tags are published to the docker registry:
    * - dev
      - Latest development version (branch *dev*) of the connector
    * - latest
-     - The lastest release (à la tag 0.3.0) of the connector
+     - The lastest release (à la tag |version|) of the connector
 
-Use a version like *0.3.0* to reference a stable version of the connector, or
-*latest* if you want the latest stable version. There are no tags that
+Use a version like "|version|" to reference a stable version of the connector,
+or *latest* if you want the latest stable version. There are no tags that
 reference the OpenCTI version, like connectors published by OpenCTI. See
 :ref:`versions and compatibility <versions>` for a connector–OpenCTI version
 compatibility list.

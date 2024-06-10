@@ -31,6 +31,10 @@ exclude_patterns = []
 add_module_names = False
 pygments_style = "sphinx"
 
+rst_epilog = f"""
+.. |version| replace:: {release}
+"""
+
 # -- Options for HTML output -------------------------------------------------
 html_theme = "sphinx_rtd_theme"
 
