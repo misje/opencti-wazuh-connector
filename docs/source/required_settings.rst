@@ -31,19 +31,19 @@ reference <config-reference>`.
    * - CONNECTOR_AUTO
      - :attr:`connector.auto <wazuh.connector_config.ConnectorConfig.auto>`
      - Whether to run automatically or manually. See :ref:`when to run <when-to-run>`.
-   * - OPENSEARCH_URL
+   * - WAZUH_OPENSEARCH_URL
      - :attr:`opensearch.url <wazuh.opensearch_config.OpenSearchConfig.url>`
      - Wazuh OpenSearch URL (typically the app URL + *:9200*)
-   * - OPENSEARCH_USERNAME
+   * - WAZUH_OPENSEARCH_USERNAME
      - :attr:`opensearch.username <wazuh.opensearch_config.OpenSearchConfig.username>`
      - See :ref:`create OpenSearch user <create-opensearch-user>`
-   * - OPENSEARCH_PASSWORD
+   * - WAZUH_OPENSEARCH_PASSWORD
      - :attr:`opensearch.password <wazuh.opensearch_config.OpenSearchConfig.password>`
      - See :ref:`create OpenSearch user <create-opensearch-user>`
-   * - APP_URL
+   * - WAZUH_APP_URL
      - :attr:`url <wazuh.config.Config.app_url>`
      - Wazuh URL used to create links
-   * - MAX_TLP
+   * - WAZUH_MAX_TLP
      - :attr:`max_tlp <wazuh.config.Config.max_tlp>`
      - The highest :term:`marking definition` the connector should be
        entrusted
