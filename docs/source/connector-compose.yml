@@ -34,7 +34,6 @@ services:
       - WAZUH_ENRICH_FILENAME_BEHAVIOUR=create-dir,remove-path
       - WAZUH_ENRICH_URLS_WITHOUT_HOST=false
       - WAZUH_ENRICH_TYPES=all
-      - WAZUH_ENRICH_AGENT=true
       - WAZUH_ENRICH_LABELS=wazuh_ignore
       - WAZUH_HITS_ABORT_LIMIT=1000
       - WAZUH_IGNORE_OWN_ENTITIES=false
@@ -72,7 +71,6 @@ services:
       - WAZUH_SEARCH_PROCSEARCH_OPTIONS=case-insensitive
       - WAZUH_SYSTEM_NAME="Wazuh SIEM"
       - WAZUH_TLPS=TLP:AMBER+STRICT
-      - WAZUH_VULNERABILITY_INCIDENT_CVSS3_SCORE_THRESHOLD=
     links:
       - opencti:opencti
     # Set a limit on logs:
