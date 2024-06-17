@@ -11,7 +11,9 @@ files to reproduce the issue, and logs. Please follow the guidelines and spend
 time writing good support requests, and you're more likely to be heard.
 
 The project is currently in no need of a dedicated communication forum. If you
-are in need of a help, :ref:`file an issue <issue>`.
+are in need of a help, :ref:`file an issue <issue>`. If you do not have a
+GitHub user account, feel free to reach out to one of the maintainers on Slack
+in either the Wazuh or OpenCTI communities (search for their names).
 
 .. _versions:
 

@@ -9,7 +9,7 @@ more complete example.
 
 .. note::
    
-   You cannot run any of the docker-compose examples ase they are without
+   You cannot run any of the docker-compose examples as they are without
    replacing URLs, usernames and passwords. See :ref:`required settings
    <required-settings>`.
 

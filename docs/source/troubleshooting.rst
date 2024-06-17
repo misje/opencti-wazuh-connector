@@ -30,7 +30,8 @@ This is a result of enabling the setting
 "Ignoring entity because it has the following label(s) […]"
 -----------------------------------------------------------
 
-This is caused by :attr:`~wazuh.config.Config.label_ignore_list`.
+This is caused by :attr:`~wazuh.config.Config.label_ignore_list`. If you want
+to enrich the entity, simply remove the label and re-enrich.
 
 .. _no-sightings:
 
@@ -95,6 +96,23 @@ entities created during :ref:`enrichment <Enrichment>`. The
 processing. Adjust this limit, or consider adjusting :attr:`which entities to
 enrich <wazuh.enrich_config.EnrichmentConfig.types>`.
 
+"Not creating incident because entity is a vulnerability, […]"
+------------------------------------------------------------------
+
+Typical causes are
+
+- :attr:`~wazuh.config.Config.vulnerability_incident_cvss3_score_threshold` is
+  set too low
+- :attr:`~wazuh.config.Config.vulnerability_incident_active_only` is enabled
+  and the vulnerability is no longer active in any of the systems (within the
+  search constraints, like :attr:`search.limit
+  <wazuh.opensearch_config.OpenSearchConfig.limit>`)
+- The vulnerability does not have a CVSS3 score, nor a severity, defined and a
+  CVSS3 score could not be extracted from the search hits
+- The vulnerability does not have a CVSS3 score defined, but it has a severity,
+  but the score translated from the severity is below
+  :attr:`~wazuh.config.Config.vulnerability_incident_cvss3_score_threshold`
+
 No sightings are created
 ------------------------
 
@@ -105,14 +123,19 @@ No incidents are created
 
 Incidents are only created when observables have indicators based on them,
 unless :attr:`~wazuh.config.Config.require_indicator_for_incidents` is set to
-false. See :ref:`require indicators <require-indicator>` for more information.
+false. For vulnerabilities,
+:attr:`~wazuh.config.Config.vulnerability_incident_cvss3_score_threshold` must
+be set for incidents to be created when a vulnerability is sighted. See
+:ref:`require indicators <require-indicator>` for more information on which
+settings influence incident creation.
 
 Incident response cases are not created
 ---------------------------------------
 
-Enable :attr:`~wazuh.config.Config.create_incident_response`.
+Enable :attr:`~wazuh.config.Config.create_incident_response` (it is enabled by
+default).
 
-Two User Account SCOs are created for the same user
+Two User-Account SCOs are created for the same user
 ---------------------------------------------------
 
 During enrichment, two User-Account :term:`SCOs <SCO>` may be created, possibly

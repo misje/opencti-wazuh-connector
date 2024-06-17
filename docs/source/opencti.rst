@@ -13,7 +13,7 @@ the organisation.
 
 OpenCTI's :octiu:`own documentation <getting-started>` is well worth a read in
 order to get familiar with the platform. This connector documentation will not
-go into detail about how OpenCTI works, how to set it up and how to use it.
+go into detail about how OpenCTI works, how to set it up or how to use it.
 However, it will attempt to introduce new (Wazuh) users to OpenCTI and briefly
 describe important concepts of the platform.
 

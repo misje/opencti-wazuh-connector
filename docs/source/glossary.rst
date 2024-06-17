@@ -56,6 +56,12 @@ Glossary
       Domain-specific language, or more specifically :term:`OpenSearch`'s
       :dsl:`query DSL <>` in the context of this connector.
 
+   ECS
+      Elastic Common Schema is an open-source specification defining a common
+      set of fields to be used when storing event data in Elasticsearch. `More
+      information
+      <https://www.elastic.co/guide/en/ecs/current/ecs-reference.html>`_.
+
    Enrichment
       In the contect of this connector, *enrichment* can mean both of the
       following:

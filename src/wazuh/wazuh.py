@@ -482,6 +482,8 @@ class WazuhConnector:
             or field_or_default(
                 stix_entity,
                 "x_opencti_cvss_base_score",
+                # TODO: Perhaps better the other way around? Look up CVSS3
+                # score, and if that fails, use severity:
                 # If not present, translate the severity to score:
                 cvss3_severity_to_score(
                     field_or_default(stix_entity, "x_opencti_cvss_base_severity", ""),

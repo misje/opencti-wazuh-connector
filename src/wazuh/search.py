@@ -1007,8 +1007,8 @@ class AlertSearcher(BaseModel):
         performed for each individual argument in command line fields on a
         non-whitespace boundary, e.g.:
 
-        - "C:\\foo\\bar baz 'qux quux'" will search for "baz" and match " baz", "
-          baz" and " baz ", but not "bazaar"
+        - "C:\\\\foo\\\\bar baz 'qux quux'" will search for "baz" and match "
+          baz", " baz" and " baz ", but not "bazaar"
 
         For alerts with argument fields, like data.audit.execve, the argument
         are matched as they are.

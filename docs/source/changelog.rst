@@ -30,3 +30,7 @@ Expanding on `wazuh-opencti <https://github.com/misje/wazuh-opencti>`_, and
 filling the obvious missing piece of looking up *new* alerts in OpenCTI,
 opencti-wazuh-connector should in the future implement a stream connector doing
 exactly this.
+
+In the meantime, you may use the `wazuh-opencti
+<https://github.com/misje/wazuh-opencti>`_ Wazuh integration to look up Wazuh
+alerts in OpenCTI in real-time.

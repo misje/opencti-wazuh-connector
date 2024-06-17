@@ -285,8 +285,11 @@ class Config(ConfigBase):
     :term:`CVSS3` score is present in the vulnerability, and if that score is
     high enough. If this setting is None, incidents will never be created.
 
-    If the CVSS3 score is unavailable, but the CVSS3 severity is preent, the
+    If the CVSS3 score is unavailable, but the CVSS3 severity is present, the
     severity's corresponding score (the median) is used.
+
+    If severity is not available, an attempt is made to extract CVSS3 score
+    from the severity metadata in thin the in the search hits.
 
     Sightings will always be created, regardless of whether the CVSS3 score is
     present and above the threshold.
@@ -317,10 +320,13 @@ class Config(ConfigBase):
     will be created. However, a sighting may still be created.
 
 
-    .. note:: Note that an alert rule level is not necessarily a good filter. A
-       :term:`FIM`/syscheck alert informing that a file has been added to a
-       system is not a high-severity alert, but it could be the alert that
-       results in an :term:`IoC` match against a file hash.
+    .. warning::
+        Note that an alert rule level is not really a good filter. For
+        instance, a :term:`FIM`/syscheck alert informing that a file has been
+        added to a system is not a high-severity alert, but it could be the
+        alert that results in an :term:`IoC` match against a file hash. Setting
+        this setting higher than 3 will essentially disabling searching for a
+        number of :term:`SCOs <SCO>`.
     """
     # TODO: apply this as a filter in OpenSearch instead of filtering the
     # results:

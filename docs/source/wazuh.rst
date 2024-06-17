@@ -23,7 +23,7 @@ identifier. Wazuh itself will also be listed as an agent, with ID 000, and will
 not be considered as an agent by the connector, but its own identity
 (:attr:`~wazuh.config.Config.system_name`). If
 :attr:`~wazuh.config.Config.agents_as_systems` is true, each agent will be its
-own identity in OpenCTI.
+own identity in OpenCTI (which is recommended, and also the default setting).
 
 Wazuh and its agents are represented as :octiu:`systems
 <exploring-entities/?h=system#systems>` (a type of identity) in OpenCTI, and
@@ -130,9 +130,11 @@ The following is an example alert:
       }
    }
 
-Alerts do not follow a strict schema/model, but the same fields are reused in
-many decoders. It is also possible to write custom decoders for Wazuh, where
-fields can be customised by the author.
+Alerts do not follow a strict schema/model (like :term:`ECS`), but the same
+fields are reused in many decoders. It is also possible to write custom
+decoders for Wazuh, where fields can be customised by the author. Wazuh has a
+`plan to adopt ECS
+<https://github.com/wazuh/wazuh-dashboard-plugins/issues/3869>`_.
 
 This connector makes an effort trying to search all possible relevant fields,
 but given the lack of a schema/model, **false positives are possible**, as well

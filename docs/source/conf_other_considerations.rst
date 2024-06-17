@@ -52,11 +52,12 @@ settings determines when to create incidents:
 - :attr:`~wazuh.config.Config.indicator_score_threshold`
 - :attr:`~wazuh.config.Config.vulnerability_incident_cvss3_score_threshold`
 - :attr:`~wazuh.config.Config.incident_rule_exclude_list`
+- :attr:`~wazuh.config.Config.vulnerability_incident_active_only`
 
 Playbooks
 ~~~~~~~~~
 
-:octiu:`Automation/playbooks <automation>` is feature only included in the
+:octiu:`Automation/playbooks <automation>` is a feature only included in the
 OpenCTI enterprise licence. It is a very powerful feature that can be used for
 creating complicated rules within OpenCTI. One example is configuring the
 connector to be run only when specific conditions are true (i.e. not just the
