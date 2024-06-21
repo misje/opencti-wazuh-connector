@@ -35,6 +35,7 @@ class SupportedEntity(FuzzyEnum):
     MAC = "Mac-Addr"
     NetworkTraffic = "Network-Traffic"
     Process = "Process"
+    Software = "Software"
     StixFile = "StixFile"
     URL = "Url"
     UserAccount = "User-Account"

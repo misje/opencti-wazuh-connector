@@ -170,7 +170,7 @@ services:
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
       - CONNECTOR_ID=81f9d582-2b4e-45f1-98b6-f33492d66b6e # Replace this witha unique ID
       - CONNECTOR_NAME=Wazuh
-      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator
+      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator
       - CONNECTOR_AUTO=true
       - CONNECTOR_LOG_LEVEL=warning
       - CONNECTOR_EXPOSE_METRICS=true

@@ -73,7 +73,8 @@ class AlertSearcher(BaseModel):
                 return self.query_reg_value(stix_entity=stix_entity)
             case "Process":
                 return self.query_process(stix_entity=stix_entity)
-            # TODO: software
+            case "Software":
+                return self.query_software(stix_entity=stix_entity)
             case "Vulnerability":
                 return self.query_vulnerability(stix_entity=stix_entity)
             case "User-Account":
@@ -1118,6 +1119,30 @@ class AlertSearcher(BaseModel):
                 )
             ]
         )
+
+    def query_software(self, *, stix_entity: dict) -> dict | None:
+        """
+        Search for :stix:`software <#_7rkyhtkdthok>` in vulnerability detector
+        events
+
+        Currently, the only alerts in Wazuh that contain software information,
+        are vulnerability detection alerts.
+        """
+        match_name = Match(
+            field="data.vulnerability.package.name", query=stix_entity["name"]
+        )
+        if "version" in stix_entity:
+            return self.opensearch.search(
+                must=[
+                    match_name,
+                    Match(
+                        field="data.vulnerability.package.version",
+                        query=stix_entity["version"],
+                    ),
+                ]
+            )
+        else:
+            return self.opensearch.search(must=[match_name])
 
     def query_vulnerability(self, *, stix_entity: dict) -> dict | None:
         """
