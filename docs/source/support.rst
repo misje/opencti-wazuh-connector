@@ -43,6 +43,9 @@ newer version of OpenCTI or vice versa.
    * - 0.3.0
      - 6.1.10
      - ?
+   * - 0.3.1
+     - 6.1.12
+     - ?
 
 See :ref:`versioning <versioning>` for an overview of how version numbers and
 docker tags are used.

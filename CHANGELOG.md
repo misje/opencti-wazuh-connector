@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Search vulnerability detector alerts for Software SCOs
 
+### Fixed
+
+- pycti 6.1.12 used, which may resolve TLS verification issues in the OpenCTI
+Python SDK
+  ([client-python#684](https://github.com/OpenCTI-Platform/client-python/pull/684))
+
 ## 0.3.0 - 2024-06-09
 
 ### Added
