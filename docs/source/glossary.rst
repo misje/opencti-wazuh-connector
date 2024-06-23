@@ -175,3 +175,9 @@ Glossary
 
    Wazuh
       An open-source :term:`SIEM`
+
+   YARA
+      YARA is a rule format used by the tool YARA, as well as many other tools,
+      used to search ofr strings or binary data in files. The format is
+      described in the `official documentation
+      <https://yara.readthedocs.io/en/latest/>`_

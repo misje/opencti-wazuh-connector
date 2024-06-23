@@ -124,7 +124,7 @@ ingestion and use.
      - 
    * - malpedia
      - external import
-     - Not open for registrations
+     - Not open for registrations [#f2]_
      - 
    * - maltiverse
      - external import
@@ -419,7 +419,13 @@ ingestion and use.
    OpenCTI's connector development is rapid. This list may be out of date.
    Please help keeping it up to date by :ref:`filing an issue <issue>`.
 
-.. [#f1] This connector must be set up to import from specific feeds. Known useful feeds:
+.. rubric:: Footnotes
+
+.. [#f1] This connector must be set up to import from specific feeds. Known
+   useful feeds:
 
    - threatfox
    - botvrij
+
+.. [#f2] The connector still works in a limited capacity witout a token. For
+   instance, it will still download :term:`YARA` :term:`IoCs <IoC>`
