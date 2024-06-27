@@ -357,16 +357,41 @@ class Config(ConfigBase):
 
        * - Rule ID
          - Description
+       * - 2502
+         - syslog: User missed the password more than one time
+       * - 3398
+         - Postfix: Illegal address from unknown sender # TODO: investigate
        * - 5503
          - PAM: User login failed
        * - 5710
          - sshd: Attempt to login using a non-existent user
+       * - 5712
+         - sshd: brute force trying to get access to the system. Non existent user.
        * - 5718
          - sshd: Attempt to login using a denied user
+       * - 5719
+         - sshd: Multiple access attempts using a denied user
+       * - 5758
+         - Maximum authentication attempts exceeded
        * - 5762
          - sshd: connection reset
+       * - 30305
+         - Apache: Attempt to access forbidden file or directory
        * - 31101
          - Web server 400 error code
+       * - 31104
+         - Common web attack
+       * - 31151
+         - Multiple web server 400 error codes from same source ip
+       * - 31515
+         - PHPMyAdmin scans (looking for setup.php)
+       * - 31516
+         - Suspicious URL access
+       * - 86601
+         - Suricata alerts (no disctinction between Suricata signatures)
+       * - 91545
+         - Office 365: Secure Token Service (STS) logon events in Azure Active
+           Directory
     """
     create_agent_ip_observable: bool = True
     """
