@@ -170,7 +170,7 @@ services:
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
       - CONNECTOR_ID=81f9d582-2b4e-45f1-98b6-f33492d66b6e # Replace this witha unique ID
       - CONNECTOR_NAME=Wazuh
-      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator
+      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator # You may also just use "all" if you want to search all available entities
       - CONNECTOR_AUTO=true
       - CONNECTOR_LOG_LEVEL=warning
       - CONNECTOR_EXPOSE_METRICS=true
@@ -178,8 +178,9 @@ services:
       - "WAZUH_OPENSEARCH_PASSWORD=SecretPassword" # Remember double-$ if password contains $:
       - WAZUH_OPENSEARCH_URL=https://mywazuh.example.org:9200
       - WAZUH_OPENSEARCH_USERNAME=cti_connector
-      - WAZUH_OPENSEARCH_VERIFY_TLS=true
+      - WAZUH_OPENSEARCH_VERIFY_TLS=false # Set this to true if you are using a proper certificate in OpenSearch
       - WAZUH_TLPS=TLP:AMBER+STRICT
+      - WAZUH_MAX_TLP=TLP:RED
     # Set a limit on logs:
     logging:
       options:

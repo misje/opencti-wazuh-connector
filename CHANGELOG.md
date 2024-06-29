@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Search vulnerability detector alerts for Software SCOs
 
+### Changed
+
+- Adjust and correct docker example configuration files. The missing lines
+  either had no effect, either because they were never meant to be there, or
+  because the setting was specified with its default value
+
 ### Fixed
 
 - pycti 6.1.12 used, which may resolve TLS verification issues in the OpenCTI

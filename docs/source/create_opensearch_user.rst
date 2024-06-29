@@ -12,7 +12,13 @@ therefore see two places to configure users and roles. You'll need to create an
 *OpenSearch user*, and not a Wazuh user. Navigate to the OpenSearch
 **Security** section:
 
-.. image:: images/os_user_1.png
+.. figure:: images/os_user_1.png
+
+   OpenSearch security plugin in Wazuh versions prior to 4.8.0
+
+.. figure:: images/os_user_1_48.png
+
+   OpenSearch security plugin in Wazuh versions 4.8.0 and later
 
 Then navigate to **Internal users** and click on the **Create internal user**
 button.

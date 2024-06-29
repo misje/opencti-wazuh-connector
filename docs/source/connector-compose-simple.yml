@@ -9,21 +9,14 @@ services:
       - OPENCTI_URL=https://mycti.example.org
       - OPENCTI_TOKEN=84387577-27ac-4751-b268-6893045aa73c # Replace with a token from the user you created
       - CONNECTOR_ID=81f9d582-2b4e-45f1-98b6-f33492d66b6e # Replace this with a unique ID
-      - CONNECTOR_NAME=Wazuh
-      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator
-      - CONNECTOR_AUTO=true
-      - CONNECTOR_LOG_LEVEL=warning
-      - CONNECTOR_EXPOSE_METRICS=true
+      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,Software,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator # You may also just use "all" if you want to search all available entities
       - WAZUH_APP_URL=https://mywazuh.example.org
       - "WAZUH_OPENSEARCH_PASSWORD=SecretPassword" # Remember double-$ if password contains $:
       - WAZUH_OPENSEARCH_URL=https://mywazuh.example.org:9200
       - WAZUH_OPENSEARCH_USERNAME=cti_connector
-      - WAZUH_OPENSEARCH_VERIFY_TLS=true
+      - WAZUH_OPENSEARCH_VERIFY_TLS=false # Set this to true if you are using a proper certificate in OpenSearch
+      - WAZUH_MAX_TLP=TLP:RED
       - WAZUH_TLPS=TLP:AMBER+STRICT
-    volumes:
-      - /var/cache/wazuh
-    links:
-      - opencti:opencti
     # Set a limit on logs:
     logging:
       options:

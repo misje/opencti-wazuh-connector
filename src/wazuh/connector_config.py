@@ -99,6 +99,7 @@ class ConnectorConfig(ConfigBase):
     """
     Name used to identify the connector in OpenCTI
     """
+    # FIXME: "all" doesn't work (because opencti intercepts this env. variable):
     scope: set[SupportedEntity] = set(SupportedEntity)
     """
     Which entities to enable enrichment for

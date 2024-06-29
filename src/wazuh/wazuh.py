@@ -52,6 +52,7 @@ from .sightings import SightingsCollector
 from .search import AlertSearcher
 from .enrich import Enricher
 
+# TODO: add indicator and observable to IR case?
 # TODO: Replace ValueError with a better named exception if it is no longer a value error
 # TODO: update wazuh api completely in background
 # TODO: escape_md() function (for use in all text going into opencti)
@@ -222,8 +223,6 @@ class WazuhConnector:
             },
             True,
         )
-        log.info(f"DUMP: {config.model_dump(mode='json')['opencti']}")
-        log.info(f"OPENCTI URL: {self.helper.opencti_url}")
 
         self.stix_common_attrs = {
             "object_marking_refs": self.conf.tlps,
@@ -295,6 +294,7 @@ class WazuhConnector:
             # in a search.
             # TODO: alternatively, add OpenSearch DSL as a custom pattern_type_ov and use something like mitre/stix2patterns_translator to convert int o elastic_query
             if not ind_obs:
+                # FIXME: Not an error: just print as message. Throw a custom exception for messages?
                 raise ValueError("Indicator is not based on any observables")
             elif (count := len(ind_obs)) > 1:
                 log.warning(
@@ -627,6 +627,7 @@ class WazuhConnector:
             first_seen=metadata.first_seen,
             last_seen=metadata.last_seen,
             count=metadata.count,
+            # TODO: add description (alert rule IDs?)
             where_sighted_refs=[sighter_id],
             # Use a dummy indicator since this field is required:
             sighting_of_ref=DUMMY_INDICATOR_ID,
@@ -793,6 +794,7 @@ class WazuhConnector:
             note_types=["analysis"],
         )
 
+    # TODO: Refactor – too long and repetitive!
     def create_incidents(
         self,
         *,
