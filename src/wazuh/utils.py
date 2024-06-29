@@ -597,6 +597,29 @@ def common_prefix_string(strings: list[str], elideString: str = "[…]"):
         return common + elideString
 
 
+def truncate_string(string: str, *, limit: int = 80, elideString: str = "[…]") -> str:
+    """
+    Truncate string to desired length and add an elide string
+
+    The elide string's length is taken into consideration when comparing
+    against :paramref:`limit`.
+
+    Examples
+
+    >>> truncate_string('foo bar baz qux', limit=12)
+    'foo bar b[…]'
+    >>> truncate_string('foo bar baz qux', limit=2, elideString='too long')
+    'too long'
+    >>> truncate_string('foo bar baz qux', limit=1, elideString='–')
+    '–'
+    """
+    return (
+        string[: max(0, limit - len(elideString))] + elideString
+        if len(string) > limit
+        else string
+    )
+
+
 def list_or_empty(obj: dict, key: str):
     """
     Return list at the given key or an empty list if it does not exist.

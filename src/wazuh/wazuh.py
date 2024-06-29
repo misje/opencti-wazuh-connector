@@ -34,6 +34,7 @@ from .utils import (
     search_field,
     search_fields,
     search_in_object_multi,
+    truncate_string,
 )
 from .stix_helper import (
     # SCO,
@@ -722,10 +723,11 @@ class WazuhConnector:
                 "|Field|Match|\n"
                 "|-----|-----|\n"
                 + "".join(
-                    f"|{field}|{match}|\n"
+                    f"|{field}|{match_formatted}|\n"
                     for field, match in search_in_object_multi(
                         alert["_source"], *obs_values, exclude_fields=["full_log"]
                     ).items()
+                    for match_formatted in (truncate_string(match.replace("\n", "")),)
                 )
                 + "\n\n"
                 "## Alert\n"
