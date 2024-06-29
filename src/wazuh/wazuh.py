@@ -78,26 +78,6 @@ def parse_incident_create_threshold(threshold: str | int | None) -> int:
             raise ValueError(f"WAZUH_INCIDENT_CREATE_THRESHOLD is invalid: {threshold}")
 
 
-def alert_md_table(alert: dict, additional_rows: list[tuple[str, str]] | None = None):
-    """
-    Create a markdown table with key Wazuh alert information
-
-    Any additional rows can be appended to the table using additional_rows.
-    """
-    s = alert["_source"]
-    if additional_rows is None:
-        additional_rows = []
-
-    return (
-        "|Key|Value|\n"
-        "|---|-----|\n"
-        f"|Rule ID|{s['rule']['id']}|\n"
-        f"|Rule desc.|{s['rule']['description']}|\n"
-        f"|Rule level|{s['rule']['level']}|\n"
-        f"|Alert ID|{alert['_id']}/{s['id']}|\n"
-    ) + "".join(f"|{key}|{value}|\n" for key, value in additional_rows)
-
-
 def vulnerability_active(sightings: SightingsCollector) -> bool:
     """
     Whether the vulnerability found is no longer present in the systems it was
@@ -397,7 +377,9 @@ class WazuhConnector:
 
         sighting_ids = []
         for sighter_id, meta in sightings_collector.collated().items():
-            sighting = self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)
+            sighting = self.create_sighting_stix(
+                entity=entity, sighter_id=sighter_id, metadata=meta
+            )
             sighting_ids.append(sighting.id)
             bundle += [sighting]
 
@@ -558,8 +540,17 @@ class WazuhConnector:
         return "|Key|Value|\n" "|---|-----|\n" f"|ID|{agent_id}|\n"
 
     def create_sighting_stix(
-        self, *, sighter_id: str, metadata: SightingsCollector.Meta
+        self, *, entity: dict, sighter_id: str, metadata: SightingsCollector.Meta
     ):
+        alert_md_list = "\n".join(
+            f"- {self.alert_rule_md_link(rule_id)}: {rule_desc}"
+            for rule_id, alerts in metadata.alerts.items()
+            for rule_desc in (
+                common_prefix_string(
+                    [alert["_source"]["rule"]["description"] for alert in alerts]
+                ),
+            )
+        )
         return stix2.Sighting(
             id=StixSightingRelationship.generate_id(
                 metadata.observable_id,
@@ -571,7 +562,7 @@ class WazuhConnector:
             first_seen=metadata.first_seen,
             last_seen=metadata.last_seen,
             count=metadata.count,
-            # TODO: add description (alert rule IDs?) (#64)
+            description=f"{entity_name_value(entity)} has been sighted in Wazuh in the following alerts:\n\n{alert_md_list}",
             where_sighted_refs=[sighter_id],
             # Use a dummy indicator since this field is required:
             sighting_of_ref=DUMMY_INDICATOR_ID,
@@ -594,11 +585,8 @@ class WazuhConnector:
     def create_alert_ext_ref(self, *, alert):
         return stix2.ExternalReference(
             source_name="Wazuh alert",
-            description=alert_md_table(alert),
-            url=urljoin(
-                self.app_url,
-                f'app/discover#/context/wazuh-alerts-*/{alert["_id"]}?_a=(columns:!(_source),filters:!())',
-            ),
+            description=self.alert_md_table(alert),
+            url=self.alert_context_link(alert),
         )
 
     def create_alert_notes(
@@ -656,7 +644,7 @@ class WazuhConnector:
             **self.stix_common_attrs,
             abstract=f"""Wazuh alert "{s['rule']['description']}" for sighting at {sighted_at}""",
             content="## Summary\n\n"
-            + alert_md_table(alert, capped_info)
+            + self.alert_md_table(alert, capped_info)
             + (
                 "\n\n"
                 # These matches do not reflect how the query matched, but it is still useful:
@@ -716,7 +704,7 @@ class WazuhConnector:
             "|Rule|Level|Count|Earliest|Latest|Description|\n"
             "|----|-----|-----|--------|------|-----------|\n"
         ) + "".join(
-            f"[{rule_id}]({self.alert_rule_link(rule_id)})|{level}|{len(alerts)}{'+' if total_hits > hits_returned else ''}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
+            f"{self.alert_rule_md_link(rule_id)}|{level}|{len(alerts)}{'+' if total_hits > hits_returned else ''}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
             for rule_id, alerts in sightings_meta.alerts_by_rule_id().items()
             for level in (alerts[0]["_source"]["rule"]["level"],)
             for rule_desc in (
@@ -1190,5 +1178,38 @@ class WazuhConnector:
     def alert_rule_link(self, rule_id: str) -> str:
         return urljoin(
             self.app_url,  # type: ignore
-            f"app/wazuh#/manager/?tab=rules&redirectRule={rule_id}",
+            # Wazuh < 4.8.0:
+            # f"app/wazuh#/manager/?tab=rules&redirectRule={rule_id}",
+            # Wazuh >= 4.8.0:
+            f"app/threat-hunting#/manager/?tab=rules&redirectRule={rule_id}",
         )
+
+    def alert_rule_md_link(self, rule_id: str) -> str:
+        return f"[{rule_id}]({self.alert_rule_link(rule_id)})"
+
+    def alert_context_link(self, alert: dict) -> str:
+        return urljoin(
+            self.app_url,
+            f"app/discover#/context/{self.conf.opensearch.index}/{alert['_id']}?_g=(filters:!())&_a=(columns:!(agent.id,agent.name,rule.description,rule.level,rule.id),filters:!())",
+        )
+
+    def alert_md_table(
+        self, alert: dict, additional_rows: list[tuple[str, str]] | None = None
+    ):
+        """
+        Create a markdown table with key Wazuh alert information
+
+        Any additional rows can be appended to the table using additional_rows.
+        """
+        s = alert["_source"]
+        if additional_rows is None:
+            additional_rows = []
+
+        return (
+            "|Key|Value|\n"
+            "|---|-----|\n"
+            f"|Rule ID|{self.alert_rule_md_link(s['rule']['id'])}|\n"
+            f"|Rule desc.|{s['rule']['description']}|\n"
+            f"|Rule level|{s['rule']['level']}|\n"
+            f"|Alert ID|[{alert['_id']}]({self.alert_context_link(alert)})/{s['id']}|\n"
+        ) + "".join(f"|{key}|{value}|\n" for key, value in additional_rows)
