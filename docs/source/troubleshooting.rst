@@ -196,3 +196,18 @@ External references only appear after a second enrichment
 ---------------------------------------------------------
 
 This may be an OpenCTI bug, but it has not been confirmed yet.
+
+Docker compose fails with "Not supported URL scheme http+docker"
+----------------------------------------------------------------
+
+If you get the exception "docker.errors.DockerException: Error while fetching
+server API version: Not supported URL scheme http+docker", then you may have
+installed the python library "requests" using pip, and the installed version is
+incompatible with your system's version of `docker-compose`. Remove the
+package: `pip uninstall requests`.
+
+Connector state is always "null"
+--------------------------------
+
+The connector has a state, which is either running or not, but it is not
+available in the connector web interface for technical reasons.
