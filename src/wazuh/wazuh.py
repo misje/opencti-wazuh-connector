@@ -53,33 +53,6 @@ from .sightings import SightingsCollector
 from .search import AlertSearcher
 from .enrich import Enricher
 
-# TODO: add indicator and observable to IR case?
-# TODO: Replace ValueError with a better named exception if it is no longer a value error
-# TODO: update wazuh api completely in background
-# TODO: escape_md() function (for use in all text going into opencti)
-# TODO: Use TypeAlias (from typing) for things like Bundle, SCO etc.
-# TODO: Alert notes in incidents (already in sighting and case, but not incident)
-# TODO: aws, google and office
-# - user accounts
-# - emails
-# - files
-# - directories
-# TODO: Identities for AWS, GitHub, Office365, etc.(?)
-# TODO: Rule_id ignore list
-
-# Notes:
-# - get_config_variable with required doesn't throw if not set. Resolved by
-#   using Field in the future
-# - Using automation, observables can be created from indicator
-# - for config, consider using pydanic and BaseSettings. Look at
-# https://github.com/OpenCTI-Platform/connectors/blob/abf07fb6bd423c104a10207626520c2836d7e586/internal-enrichment/shodan-internetdb/src/shodan_internetdb/config.py#L26.
-# If not, ensure empty values in required throws
-# - Experiment with custom STIX patterns, like [syscheck.path:value = …] to
-# create opensearch queries? Look into qualifiers in the STIX standard
-
-
-# UUID_RE = r"^a[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$"
-# STIX_ID_REGEX = re.compile(f".+--{UUID_RE}", re.IGNORECASE)
 
 log = logging.getLogger(__name__)
 
@@ -234,7 +207,6 @@ class WazuhConnector:
             "confidence": 100,
         }
         # Add moe useful meta to author?
-        # TODO: a different type than an org.?
         self.author = stix2.Identity(
             id=Identity.generate_id("Wazuh", "system"),
             **self.stix_common_attrs,
@@ -292,7 +264,7 @@ class WazuhConnector:
             ind_obs = ind["observables"] if ind and "observables" in ind else []
             # TODO: In some distant feature, with a STIX shifter implementation
             # for Wazuh, look up the STIX pattern in the indicator and use that
-            # in a search.
+            # in a search (#9).
             # TODO: alternatively, add OpenSearch DSL as a custom pattern_type_ov and use something like mitre/stix2patterns_translator to convert int o elastic_query
             if not ind_obs:
                 # FIXME: Not an error: just print as message. Throw a custom exception for messages?
@@ -320,7 +292,6 @@ class WazuhConnector:
             and has(entity, ["createdBy", "standard_id"])
             and entity["createdBy"]["standard_id"] == self.author.id
         ):
-            # TODO: How to allow manual enrichments? Any way to separate automatic enrichments from manual?
             return f"Ignoring entity because it was created by {self.author.name}"
 
         # Figure out exactly what this does (change id format?);
@@ -356,7 +327,6 @@ class WazuhConnector:
             )
             return "Observable has no indicators"
 
-        # TODO: If StixFile, extract path from parent_directory_ref:
         result = self.alert_searcher.search(entity=entity, stix_entity=stix_entity)
         if result is None:
             # Even though the entity is supported (an exception is throuwn
@@ -367,12 +337,9 @@ class WazuhConnector:
 
         if result["_shards"]["failed"] > 0:
             for failure in result["_shards"]["failures"]:
-                # TODO: raise query failure in opensearch class (make optional
-                # through setting, especially if hits are non-empty):
                 log.error(f"Query failure: {failure}")
 
         hits = result["hits"]["hits"]
-        # TODO: optionally include enrichment summary even if no hits:
         if not hits:
             return "No hits found"
 
@@ -423,7 +390,6 @@ class WazuhConnector:
         bundle += list(agents.values())
         bundle += self.relate_agents_to_siem(list(agents.values()), self.siem_system)
 
-        # TODO: Use in incident and add as targets(?):
         if self.conf.create_agent_ip_observable:
             bundle += self.create_agent_addr_obs(alerts=hits)
         if self.conf.create_agent_hostname_observable:
@@ -433,9 +399,6 @@ class WazuhConnector:
         # as type hint to bundle everywhere before continuing working on this:
         # bundle = add_incidents_to_note_refs(bundle)
 
-        # FIXME: WAZUH_INCIDENT_CREATE_MODE=per_sighting produces missing ref
-        # errors unless dummy indicator exists. Update: might be random and
-        # unrelated.
         sighting_ids = []
         for sighter_id, meta in sightings_collector.collated().items():
             sighting = self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)
@@ -483,9 +446,6 @@ class WazuhConnector:
             or field_or_default(
                 stix_entity,
                 "x_opencti_cvss_base_score",
-                # TODO: Perhaps better the other way around? Look up CVSS3
-                # score, and if that fails, use severity:
-                # If not present, translate the severity to score:
                 cvss3_severity_to_score(
                     field_or_default(stix_entity, "x_opencti_cvss_base_severity", ""),
                     # As a last resort, try to get the score from searching alerts:
@@ -628,12 +588,11 @@ class WazuhConnector:
             first_seen=metadata.first_seen,
             last_seen=metadata.last_seen,
             count=metadata.count,
-            # TODO: add description (alert rule IDs?)
+            # TODO: add description (alert rule IDs?) (#64)
             where_sighted_refs=[sighter_id],
             # Use a dummy indicator since this field is required:
             sighting_of_ref=DUMMY_INDICATOR_ID,
             custom_properties={"x_opencti_sighting_of_ref": metadata.observable_id},
-            # FIXME: External references has stopped working (takes a second enrichment run):
             external_references=self.create_sighting_ext_refs(metadata=metadata),
         )
 
@@ -752,8 +711,7 @@ class WazuhConnector:
         abstract = f"Wazuh enrichment at {run_time_string}"
         hits_returned = len(result["hits"]["hits"])
         total_hits = result["hits"]["total"]["value"]
-        # TODO: link to query if a link to opensearch is possible
-        # TODO: include "filter" and exclude search_after/{include,exclude}_match if so:
+        # TODO: link to query if a link to opensearch is possible (#68)
         content = (
             "## Wazuh enrichment summary\n"
             "\n\n"
@@ -825,7 +783,7 @@ class WazuhConnector:
         query_hits_dropped = (
             len(result["hits"]["hits"]) < result["hits"]["total"]["value"]
         )
-        # TODO:
+        # TODO: (#69(
         # severity = cvss3_score_to_severity(alert entity['entity_type'] == 'Vulnerability'
         match self.conf.create_incident:
             case Config.IncidentCreateMode.PerQuery:
@@ -1016,7 +974,7 @@ class WazuhConnector:
                             sighters=[sighter_id],
                         )
 
-                    # TODO: Implement (this solution doesn't work):
+                    # TODO: Implement (this solution doesn't work) (#73):
                     # bundle += [
                     #    enrichment
                     #    for filtered_alerts in [
@@ -1126,9 +1084,8 @@ class WazuhConnector:
             CustomObjectCaseIncident(
                 id=CaseIncident.generate_id(name, timestamp),
                 name=name,
-                # TODO: include info from Notes (not included in bundle?):
                 description=f"{entity_name_value(entity)} {ind_info} has been sighted {f'at least {sightings_count}' if hits_dropped else f'{sightings_count}'} times(s)",
-                # TODO: this may break if user changes case_severity_ov. Make customisable from setting
+                # NOTE: this may break if user changes case_severity_ov. Make customisable from setting(?)
                 severity=severity,
                 priority=priority_from_severity(severity),
                 **self.stix_common_attrs,

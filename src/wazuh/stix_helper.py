@@ -241,6 +241,8 @@ def add_refs_to_note(note: stix2.Note, objs: STIXList) -> stix2.Note:
     # Don't use new_version(), because that requires a new modified
     # timestamp (which must be newer than created):
     return stix2.Note(
+        # Copy all properties from existing Note except for object_refs, which
+        # will be updated with the new references:
         **{prop: getattr(note, prop) for prop in note if prop != "object_refs"},
         object_refs=list(set(note.object_refs) | {obj.id for obj in objs}),
     )
