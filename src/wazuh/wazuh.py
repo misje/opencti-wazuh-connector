@@ -395,41 +395,11 @@ class WazuhConnector:
         if self.conf.create_agent_hostname_observable:
             bundle += self.create_agent_hostname_obs(alerts=hits)
 
-        # TODO: doesn't seem to work? Or bug in OpenCTI. Anyway, add STIXList
-        # as type hint to bundle everywhere before continuing working on this:
-        # bundle = add_incidents_to_note_refs(bundle)
-
         sighting_ids = []
         for sighter_id, meta in sightings_collector.collated().items():
             sighting = self.create_sighting_stix(sighter_id=sighter_id, metadata=meta)
             sighting_ids.append(sighting.id)
-            bundle += [sighting] + self.create_sighting_alert_notes(
-                entity=entity, sighting_id=sighting.id, metadata=meta
-            )
-
-        ###############
-        # hostname seems to be the target, not a system
-        # relation "uses" on attack pattern (mitre)
-        #
-        # Issues:
-        #   When creating alerts, double alerts is an issue when rule engine is enabled
-        #   The indicator is not available yet when working with the observable (timing issue)
-        # Setting: incident for sightings in obs
-        # Setting: Incident for sightings in obs with indicator
-        # Setting: One incident per alert rule.id
-        # Setting: Include rule ids, exclude rule ids
-        # Setting: Agents as hostnames
-        # Setting: Agent IP as observable
-        # Setting: max_ext_ref per rule_id, per search?. same for note
-        # Setting for limiting notes per sighting (0 disables notes for sightings)
-        # Setting for limiting ext.refs. per sighting (0 disables)
-        # Setting for adhering to detection, valid_until, min score(?)
-        #
-        # Create external reference to wazuh with the query that was ran (discover? custom columns?)
-        # Look into how playbooks can be used
-        # Add mitre connector and import tactics etc.
-        # Look through wazuh rules to find occurances of usernames, addresses etc.
-        ###############
+            bundle += [sighting]
 
         if (
             self.conf.require_indicator_for_incidents
@@ -490,12 +460,25 @@ class WazuhConnector:
         ]
 
         # NOTE: This must be the lastly created bundle, because it references
-        # all other objects in the bundle list:
+        # all other objects in the bundle list (excluding notes, since they
+        # reference entities internally):
         if self.conf.create_incident_response and any(
             isinstance(obj, stix2.Incident) for obj in bundle
         ):
             bundle += self.create_incident_response_case(
                 entity=entity, indicators=obs_indicators, result=result, bundle=bundle
+            )
+
+        for sighter_id, meta in sightings_collector.collated().items():
+            bundle += self.create_alert_notes(
+                entity=entity,
+                refs=[sighter_id]
+                + [
+                    obj.id
+                    for obj in bundle
+                    if isinstance(obj, (stix2.Incident, CustomObjectCaseIncident))
+                ],
+                alerts=meta.alerts,
             )
 
         if (
@@ -618,18 +601,18 @@ class WazuhConnector:
             ),
         )
 
-    def create_sighting_alert_notes(
-        self, *, entity: dict, sighting_id: str, metadata: SightingsCollector.Meta
+    def create_alert_notes(
+        self, *, entity: dict, alerts: dict[str, list[dict]], refs: list[str]
     ):
         note_count = 0
         return [
             self.create_alert_note(
                 entity=entity,
-                sighting_id=sighting_id,
+                refs=refs,
                 alert=alert,
                 limit_info=capped_at,
             )
-            for alerts in metadata.alerts.values()
+            for alerts in alerts.values()
             # In addition to limit the total number of external references,
             # also limit them per alert rule (pick the last N alerts to get
             # the latest alerts):
@@ -646,7 +629,7 @@ class WazuhConnector:
         self,
         *,
         entity: dict,
-        sighting_id,
+        refs: list[str],
         alert,
         limit_info: tuple[int, int, int] | None,
     ):
@@ -693,7 +676,7 @@ class WazuhConnector:
                 "\n\n"
                 f"```json\n{alert_json}\n```"
             ),
-            object_refs=[entity["standard_id"], sighting_id],
+            object_refs=[entity["standard_id"]] + refs,
             external_references=[self.create_alert_ext_ref(alert=alert)],
             allow_custom=True,
             note_types=["analysis"],

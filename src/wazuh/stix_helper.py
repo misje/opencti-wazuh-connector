@@ -236,26 +236,6 @@ def incident_entity_relation_type(entity: dict):
         case _:
             return "related-to"
 
-
-def add_refs_to_note(note: stix2.Note, objs: STIXList) -> stix2.Note:
-    # Don't use new_version(), because that requires a new modified
-    # timestamp (which must be newer than created):
-    return stix2.Note(
-        # Copy all properties from existing Note except for object_refs, which
-        # will be updated with the new references:
-        **{prop: getattr(note, prop) for prop in note if prop != "object_refs"},
-        object_refs=list(set(note.object_refs) | {obj.id for obj in objs}),
-    )
-
-
-def add_incidents_to_note_refs(bundle: STIXList) -> STIXList:
-    return [
-        add_refs_to_note(obj, incidents) if isinstance(obj, stix2.Note) else obj
-        for incidents in ([obj for obj in bundle if isinstance(obj, stix2.Incident)],)
-        for obj in bundle
-    ]
-
-
 def remove_unref_objs(bundle: STIXList) -> STIXList:
     """
     Return a new bundle only with SCOs/SDOs that are referenced in SROs
