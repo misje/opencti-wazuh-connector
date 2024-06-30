@@ -371,6 +371,7 @@ class Enricher(BaseModel):
                 "data.osquery.columns.directory",
                 "data.pwd",
             ],
+            validator=lambda x: x not in (".", ".."),
         )
 
     def enrich_files(self, *, incident: stix2.Incident, alerts: list[dict]):
