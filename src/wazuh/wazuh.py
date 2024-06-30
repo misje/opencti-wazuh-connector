@@ -782,7 +782,7 @@ class WazuhConnector:
                     **self.stix_common_attrs,
                     incident_type="alert",
                     name=incident_name,
-                    description=f"Observable {entity_name_value(entity)} has been sighted a total of {total_sightings}{'+' if query_hits_dropped else ''} time(s) in {total_systems} system(s)",
+                    description=f"{entity_name_value(entity)} has been sighted a total of {total_sightings}{'+' if query_hits_dropped else ''} time(s) in {total_systems} system(s)",
                     allow_custom=True,
                     # The following are extensions:
                     severity=rule_level_to_severity(sightings_meta.max_rule_level()),
@@ -827,7 +827,7 @@ class WazuhConnector:
                         **self.stix_common_attrs,
                         incident_type="alert",
                         name=incident_name,
-                        description=f"Observable {entity_name_value(entity)} has been sighted {meta.count}{'+' if query_hits_dropped else ''} time(s) in {meta.sighter_name}",
+                        description=f"{entity_name_value(entity)} has been sighted {meta.count}{'+' if query_hits_dropped else ''} time(s) in {meta.sighter_name}",
                         allow_custom=True,
                         # The following are extensions:
                         severity=rule_level_to_severity(meta.max_rule_level),
@@ -880,7 +880,7 @@ class WazuhConnector:
                         **self.stix_common_attrs,
                         incident_type="alert",
                         name=incident_name,
-                        description=f"""Observable {entity_name_value(entity)} has been sighted {len(meta['alerts'])}{'+' if query_hits_dropped else ''} time(s) in alert rule {rule_id}: "{alerts_desc}\"""",
+                        description=f"""{entity_name_value(entity)} has been sighted {len(meta['alerts'])}{'+' if query_hits_dropped else ''} time(s) in alert rule {rule_id}: "{alerts_desc}\"""",
                         allow_custom=True,
                         # The following are extensions:
                         severity=rule_level_to_severity(alerts_level),
