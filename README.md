@@ -85,7 +85,7 @@ observable is part of an indicator. Incidents would typically create a
 notification of some sort for you to act on.
 
 You may choose how incidents are created. Either never, per sighting, per
-distinct alert rule ID, per alert or per query.
+distinct alert rule ID, or per query.
 
 An [incident response
 case](https://docs.opencti.io/latest/usage/exploring-cases/#incident-response-request-for-information-request-for-takedown)

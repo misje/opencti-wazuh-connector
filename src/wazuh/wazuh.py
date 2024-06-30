@@ -899,67 +899,6 @@ class WazuhConnector:
                     bundle += self.enricher.enrich_incident(
                         incident=incident, alerts=[alert for alert in meta["alerts"]]
                     )
-
-            case Config.IncidentCreateMode.PerAlert:
-                for sighter_id, meta in sightings_meta.alerts_by_sighter_meta().items():
-                    incident_name = f"Wazuh alert: {entity_name_value(entity)} sighted in {meta['sighter_name']}"
-                    incidents = [
-                        stix2.Incident(
-                            id=Incident.generate_id(incident_name, sighted_at),
-                            created=sighted_at,
-                            **self.stix_common_attrs,
-                            incident_type="alert",
-                            name=incident_name,
-                            description=f"""Observable {entity_name_value(entity)} has been sighted in alert rule {rule_id}: "{rule_desc}\"""",
-                            allow_custom=True,
-                            # The following are extensions:
-                            severity=rule_level_to_severity(rule_level),
-                            first_seen=sighted_at,
-                            last_seen=sighted_at,
-                            source=self.conf.system_name,
-                        )
-                        for alert in meta["alerts"]
-                        for sighted_at in (alert["_source"]["@timestamp"],)
-                        for rule_id in (alert["_source"]["rule"]["id"],)
-                        for rule_desc in (alert["_source"]["rule"]["description"],)
-                        for rule_level in (alert["_source"]["rule"]["level"],)
-                        if (
-                            rule_level >= self.conf.create_incident_threshold
-                            # Just a hack to log some info:
-                            or not log_skipped_due_to_rule_level(rule_level)
-                        )
-                        and not (
-                            self.conf.incident_rule_exclude_list
-                            and rule_id in self.conf.incident_rule_exclude_list
-                            and log_skipped_due_to_rule()
-                        )
-                    ]
-
-                    bundle += incidents
-
-                    for incident in incidents:
-                        bundle += self.create_incident_relationships(
-                            incident=incident,
-                            entity=entity,
-                            obs_indicators=obs_indicators,
-                            sighters=[sighter_id],
-                        )
-
-                    # TODO: Implement (this solution doesn't work) (#73):
-                    # bundle += [
-                    #    enrichment
-                    #    for filtered_alerts in [
-                    #        alert
-                    #        for alert in meta["alerts"]
-                    #        if alert["_source"]["rule"]["level"]
-                    #        >= self.conf.create_incident_threshold
-                    #    ]
-                    #    for pair in zip(incidents, filtered_alerts, strict=True)
-                    #    for incident, alerts in (pair,)
-                    #    for enrichment in self.enricher.enrich_incident(
-                    #        incident=incident, alerts=alerts
-                    #    )
-                    # ]
             case Config.IncidentCreateMode.Never:
                 return []
 

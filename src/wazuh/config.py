@@ -54,8 +54,7 @@ class Config(ConfigBase):
 
         The amount of incidents created for every option is roughly in the
         following order, from the least to the most: :attr:`Never`,
-        :attr:`PerQuery`, :attr:`PerSighting`, :attr:`PerAlertRule`,
-        :attr:`PerAlert`.
+        :attr:`PerQuery`, :attr:`PerSighting`, :attr:`PerAlertRule`.
         """
 
         PerQuery = "per-query"
@@ -71,15 +70,6 @@ class Config(ConfigBase):
         """
         Create one incident per distinct alert rule. If there are 4 alerts with
         rule ID 550 and 2 alerts with rule ID 80792, only two alerts are created.
-        """
-        PerAlert = "per-alert"
-        """
-        Create one incident for every alert.
-
-        .. warning:: Using this option is highly discouraged, as it will
-                    potentially create a lot of incidents.
-
-        .. note:: Enrichment is curently not implemented for this option.
         """
         Never = "never"
         """
