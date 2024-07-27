@@ -2,6 +2,7 @@ import json
 import stix2
 import ipaddress
 import logging
+import re
 import time
 from .config import Config
 from .opensearch import OpenSearchClient
@@ -19,14 +20,18 @@ from pycti import (
 )
 from typing import Any, Final
 from datetime import datetime
-from urllib.parse import urljoin
 from functools import reduce
+from .describer import Describer, DescriberConfig
 from .utils import (
     cvss3_severity_to_score,
     datetime_string,
+    escape_markdown,
     field_or_default,
+    field_or_empty,
     has,
     lists_or_empty,
+    md_table,
+    nonempty_field_or_default,
     rule_level_to_severity,
     priority_from_severity,
     max_severity,
@@ -177,6 +182,11 @@ class WazuhConnector:
             },
             True,
         )
+        self.describer = Describer(
+            # Describer's config is designed to copy all relevant settings by
+            # path from the main configuration:
+            config=DescriberConfig.model_validate(self.conf.model_dump())
+        )
 
         self.stix_common_attrs = {
             "object_marking_refs": self.conf.tlps,
@@ -204,6 +214,7 @@ class WazuhConnector:
             helper=self.helper,
             stix=self.stix,
             config=self.conf.enrich,
+            describer=self.describer,
         )
         self.siem_system = stix2.Identity(
             id=Identity.generate_id(self.conf.system_name, "system"),
@@ -211,7 +222,6 @@ class WazuhConnector:
             name=self.conf.system_name,
             identity_class="system",
         )
-        self.app_url = str(self.conf.app_url)
         self.alert_searcher = AlertSearcher(
             helper=self.helper,
             opensearch=OpenSearchClient(config=self.conf.opensearch),
@@ -242,13 +252,14 @@ class WazuhConnector:
             time.sleep(0.1)
             ind = self.helper.api.indicator.read(id=data["entity_id"])
             ind_obs = ind["observables"] if ind and "observables" in ind else []
+            log.debug(f"Ind. obs.: {ind_obs}")
             # TODO: In some distant feature, with a STIX shifter implementation
             # for Wazuh, look up the STIX pattern in the indicator and use that
             # in a search (#9).
             # TODO: alternatively, add OpenSearch DSL as a custom pattern_type_ov and use something like mitre/stix2patterns_translator to convert int o elastic_query
             if not ind_obs:
                 # FIXME: Not an error: just print as message. Throw a custom exception for messages?
-                raise ValueError("Indicator is not based on any observables")
+                return "Indicator is not based on any observables"
             elif (count := len(ind_obs)) > 1:
                 log.warning(
                     f"Indicator is based on several observables; using the first out of {count}"
@@ -543,7 +554,7 @@ class WazuhConnector:
         self, *, entity: dict, sighter_id: str, metadata: SightingsCollector.Meta
     ):
         alert_md_list = "\n".join(
-            f"- {self.alert_rule_md_link(rule_id)}: {rule_desc}"
+            f"- {self.describer.alert_rule_md_link(rule_id)}: {rule_desc}"
             for rule_id, alerts in metadata.alerts.items()
             for rule_desc in (
                 common_prefix_string(
@@ -585,8 +596,8 @@ class WazuhConnector:
     def create_alert_ext_ref(self, *, alert):
         return stix2.ExternalReference(
             source_name="Wazuh alert",
-            description=self.alert_md_table(alert),
-            url=self.alert_context_link(alert),
+            description=self.describer.alert_md_table(alert),
+            url=self.describer.alert_context_link(alert),
         )
 
     def create_alert_notes(
@@ -643,8 +654,9 @@ class WazuhConnector:
             created=sighted_at,
             **self.stix_common_attrs,
             abstract=f"""Wazuh alert "{s['rule']['description']}" for sighting at {sighted_at}""",
+            # TODO: Move into Describer, a generic md table creator with proper escaping:
             content="## Summary\n\n"
-            + self.alert_md_table(alert, capped_info)
+            + self.describer.alert_md_table(alert, capped_info)
             + (
                 "\n\n"
                 # These matches do not reflect how the query matched, but it is still useful:
@@ -653,11 +665,15 @@ class WazuhConnector:
                 "|Field|Match|\n"
                 "|-----|-----|\n"
                 + "".join(
-                    f"|{field}|{match_formatted}|\n"
+                    f"|{escape_markdown(field)}|{escape_markdown(match_formatted)}|\n"
                     for field, match in search_in_object_multi(
                         alert["_source"], *obs_values, exclude_fields=["full_log"]
                     ).items()
-                    for match_formatted in (truncate_string(match.replace("\n", "")),)
+                    # Remove all newline characters and limit the string to a
+                    # sensible length:
+                    for match_formatted in (
+                        truncate_string(re.sub("[\r\n]+", "", match)),
+                    )
                 )
                 + "\n\n"
                 "## Alert\n"
@@ -704,7 +720,7 @@ class WazuhConnector:
             "|Rule|Level|Count|Earliest|Latest|Description|\n"
             "|----|-----|-----|--------|------|-----------|\n"
         ) + "".join(
-            f"{self.alert_rule_md_link(rule_id)}|{level}|{len(alerts)}{'+' if total_hits > hits_returned else ''}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
+            f"{self.describer.alert_rule_md_link(rule_id)}|{level}|{len(alerts)}{'+' if total_hits > hits_returned else ''}|{sightings_meta.first_seen(rule_id)}|{sightings_meta.last_seen(rule_id)}|{rule_desc}|\n"
             for rule_id, alerts in sightings_meta.alerts_by_rule_id().items()
             for level in (alerts[0]["_source"]["rule"]["level"],)
             for rule_desc in (
@@ -754,8 +770,11 @@ class WazuhConnector:
         query_hits_dropped = (
             len(result["hits"]["hits"]) < result["hits"]["total"]["value"]
         )
-        # TODO: (#69(
+        # TODO: (#69)
         # severity = cvss3_score_to_severity(alert entity['entity_type'] == 'Vulnerability'
+        # TODO: use more info than just rule level to determine severity. And
+        # use a customiseable severity level as a minimum instead of ending up
+        # with a low level due to FIM etc.
         match self.conf.create_incident:
             case Config.IncidentCreateMode.PerQuery:
                 if (
@@ -994,7 +1013,10 @@ class WazuhConnector:
             CustomObjectCaseIncident(
                 id=CaseIncident.generate_id(name, timestamp),
                 name=name,
-                description=f"{entity_name_value(entity)} {ind_info} has been sighted {f'at least {sightings_count}' if hits_dropped else f'{sightings_count}'} times(s)",
+                # description=f"{entity_name_value(entity)} {ind_info} has been sighted {f'at least {sightings_count}' if hits_dropped else f'{sightings_count}'} times(s)",
+                description=self.describer.ir_case_desc(
+                    entity=entity, indicators=indicators, result=result, bundle=bundle
+                ),
                 # NOTE: this may break if user changes case_severity_ov. Make customisable from setting(?)
                 severity=severity,
                 priority=priority_from_severity(severity),
@@ -1113,42 +1135,3 @@ class WazuhConnector:
             bundle.append(rel)
 
         return bundle
-
-    def alert_rule_link(self, rule_id: str) -> str:
-        return urljoin(
-            self.app_url,  # type: ignore
-            # Wazuh < 4.8.0:
-            # f"app/wazuh#/manager/?tab=rules&redirectRule={rule_id}",
-            # Wazuh >= 4.8.0:
-            f"app/threat-hunting#/manager/?tab=rules&redirectRule={rule_id}",
-        )
-
-    def alert_rule_md_link(self, rule_id: str) -> str:
-        return f"[{rule_id}]({self.alert_rule_link(rule_id)})"
-
-    def alert_context_link(self, alert: dict) -> str:
-        return urljoin(
-            self.app_url,
-            f"app/discover#/context/{self.conf.opensearch.index}/{alert['_id']}?_g=(filters:!())&_a=(columns:!(agent.id,agent.name,rule.description,rule.level,rule.id),filters:!())",
-        )
-
-    def alert_md_table(
-        self, alert: dict, additional_rows: list[tuple[str, str]] | None = None
-    ):
-        """
-        Create a markdown table with key Wazuh alert information
-
-        Any additional rows can be appended to the table using additional_rows.
-        """
-        s = alert["_source"]
-        if additional_rows is None:
-            additional_rows = []
-
-        return (
-            "|Key|Value|\n"
-            "|---|-----|\n"
-            f"|Rule ID|{self.alert_rule_md_link(s['rule']['id'])}|\n"
-            f"|Rule desc.|{s['rule']['description']}|\n"
-            f"|Rule level|{s['rule']['level']}|\n"
-            f"|Alert ID|[{alert['_id']}]({self.alert_context_link(alert)})/{s['id']}|\n"
-        ) + "".join(f"|{key}|{value}|\n" for key, value in additional_rows)

@@ -169,6 +169,7 @@ def entity_value(entity: dict) -> str | None:
     Return an observable's (or vulnerability's) value
     """
     match entity["entity_type"]:
+        # TODO: hashes?
         case "StixFile" | "Artifact":
             name = oneof_nonempty("name", "x_opencti_additional_names", within=entity)
             if isinstance(name, list) and len(name):
@@ -235,6 +236,7 @@ def incident_entity_relation_type(entity: dict):
             return "targets"
         case _:
             return "related-to"
+
 
 def remove_unref_objs(bundle: STIXList) -> STIXList:
     """

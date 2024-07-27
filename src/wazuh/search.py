@@ -446,6 +446,7 @@ class AlertSearcher(BaseModel):
             ]
         )
 
+    # TODO: data.port (syscollector)
     def query_traffic(self, *, stix_entity: dict) -> dict | None:
         """
         Search for :stix:`network traffic <#_rgnc3w40xy>` :term:`SCOs <SCO>`
@@ -978,6 +979,7 @@ class AlertSearcher(BaseModel):
             else None
         )
 
+    # TODO: syearch syscollector alerts (custom events). look at group:syscollector (100326) for IDs.
     def query_process(self, *, stix_entity: dict) -> dict | None:
         """
         Search for :stix:`process <#_hpppnm86a1jm>` command lines
@@ -1021,7 +1023,6 @@ class AlertSearcher(BaseModel):
            disable regexp searches, disable process searching altogether by not
            specifying "Process" in the connector scope.
         """
-        # TODO: use wazuh API to list proceses too:
         # TODO: Create a guard against too simple search strings (one word?)
         if "command_line" not in stix_entity:
             log.info("Observable does not contain command_line")

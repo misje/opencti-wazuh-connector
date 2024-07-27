@@ -44,3 +44,5 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+          # https://github.com/manics/action-sphinx-linkcheck

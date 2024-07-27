@@ -400,6 +400,30 @@ def field_or_default(obj: Mapping, field: str, default: Any) -> Any:
     return result if (result := search_field(obj, field)) is not None else default
 
 
+def nonempty_field_or_default(obj: Mapping, fields: list[str], default: Any) -> Any:
+    """
+    Return the first result from search_field, otherwise a default value
+
+    Examples:
+
+    >>> nonempty_field_or_default({'a': {'b': 'foo'}}, ['baz', 'a.b'], 'bar')
+    'foo'
+    >>> nonempty_field_or_default({'a': {'b': 'foo'}}, ['b.c'], 'bar')
+    'bar'
+    >>> nonempty_field_or_default({'a': {'b': 'foo'}}, ['baz', 'b.a'], 'bar')
+    'bar'
+    """
+    return next(
+        (
+            res
+            for field in fields
+            for res in (search_field(obj, field),)
+            if res is not None
+        ),
+        default,
+    )
+
+
 def field_as_list(obj: Mapping, field: str) -> list[Any]:
     """
     Return the result from search_field as a single-element list, or [] if no
@@ -620,6 +644,10 @@ def truncate_string(string: str, *, limit: int = 80, elideString: str = "[…]")
     )
 
 
+# TODO: (to be used in match md table):
+# def truncate_string_around(string: str, *, around: str, limit: int = 80, elideString: str = "[…]") -> str:
+
+
 def list_or_empty(obj: dict, key: str):
     """
     Return list at the given key or an empty list if it does not exist.
@@ -704,6 +732,31 @@ def escape_lucene_regex(string: str):
     # Replace any unescaped single backslashes:
     string = re.sub(r"(?<!\\)\\(?!\\)", r"\\\\", string)
     return "".join("\\" + ch if ch in reg_chars else ch for ch in string)
+
+
+def escape_markdown(string: str) -> str:
+    md_chars = [
+        "`",
+        "*",
+        "_",
+        "{",
+        "}",
+        "[",
+        "]",
+        "<",
+        ">",
+        "(",
+        ")",
+        "#",
+        # "+",
+        # "-",
+        # ".",
+        "!",
+        "|",
+    ]
+    # Replace any unescaped single backslashes:
+    string = re.sub(r"(?<!\\)\\(?!\\)", r"\\\\", string)
+    return "".join("\\" + ch if ch in md_chars else ch for ch in string)
 
 
 def escape_path(path: str, *, count: int = 2):
@@ -1475,3 +1528,44 @@ def raises(func: Callable[[], Any]) -> bool:
         return False
     except Exception:
         return True
+
+
+# TODO: Require length of header tuple to match that of rows (waiting for Python 3.12):
+# TODO: not used yes, because the result is almost less readable than the
+# original:
+def md_table(
+    rows: Sequence[tuple[str, ...]], *, header: tuple[str, ...] | None = None
+) -> str:
+    """
+    Create a Markdown table from the list of tuples
+
+    A single-column table is not supported, as the string will interpreted as a list and result in single-character columns.
+
+    Examples:
+
+    >>> md_table([('foo', 'bar'), ('baz', 'qux')], header=('Foo', 'Bar'))
+    '|Foo|Bar|\\n|---|---|\\n|foo|bar|\\n|baz|qux|'
+    >>> md_table([('Foo', 'Bar'), ('baz', 'qux')])
+    '|Foo|Bar|\\n|---|---|\\n|baz|qux|'
+    >>> md_table([('foo', 'bar')])
+    '|foo|bar|\\n|---|---|\\n'
+    >>> md_table([])
+    ''
+    """
+    if not header and not rows:
+        return ""
+
+    return (
+        # |Header1|Header2|:
+        f"|{'|'.join((h for h in (header or rows[0])))}|\n"
+        # |---|---|:
+        + f"|{'|'.join(('---' for _ in range(len(header or rows[0]))))}|\n"
+        # |val1|val2|
+        # |val3|val4| etc.:
+        + "\n".join(
+            (
+                f"|{'|'.join((escape_markdown(col) for col in row))}|"
+                for row in (rows if header else rows[1:])
+            )
+        )
+    )

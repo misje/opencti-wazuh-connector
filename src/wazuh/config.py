@@ -1,5 +1,6 @@
 import re
 from pydantic import (
+    AliasChoices,
     AnyUrl,
     AnyHttpUrl,
     Field,
@@ -16,7 +17,7 @@ from .opensearch_config import OpenSearchConfig
 from .enrich_config import EnrichmentConfig
 from .stix_helper import TLPLiteral, tlp_marking_from_string, validate_stix_id
 from .utils import comma_string_to_set, verify_url
-from .config_base import ConfigBase, FuzzyEnum
+from .config_base import ConfigBase, FuzzyEnum, VersionEnum
 from enum import Enum
 
 
@@ -99,6 +100,30 @@ class Config(ConfigBase):
         Critical = 14
         """
         Critical severity
+        """
+
+    class WazuhVersion(VersionEnum):
+        """
+        Wazuh version range used for various purposes
+
+        As Wazuh evolves, things change. This version number (range) is used to
+        adapt logic depending on the version of Wazuh (and its corresponding
+        version of OpenSearch).
+        """
+
+        v47 = "4.7.x"
+        """
+        Lowest supported version of Wazuh
+
+        Older versions most likely work, but links may not work as expected if
+        Wazuh's version of OpenSearch dashboard differs significantly.
+        """
+        v48 = "4.8.x"
+        """
+        Latest and current version of Wazuh
+
+        In this version, Wazuh has renamed some of their endpoints in their
+        URLs.
         """
 
     opencti: OpenCTIConfig = Field(default_factory=OpenCTIConfig.from_env)
@@ -446,6 +471,28 @@ class Config(ConfigBase):
     app_url: AnyHttpUrl
     """
     URL used to create links to the Wazuh dashboard
+
+    .. note::
+
+        If you do not use the version of OpenSearch provided by Wazuh, or if
+        you use Elastic, links probably will not work at all. You still have to
+        prive a valid URL.
+    """
+    wazuh_version: WazuhVersion = Field(
+        validation_alias=AliasChoices("version", "wazuh_version"),
+        default=WazuhVersion.v48,
+    )
+    """
+    Version (range) of Wazuh
+
+    The connector may have to adapt its internal logic and availability of
+    features depending on the version of Wazuh. Currently, this information is
+    only used to adapt links to the Wazuh dashboard.
+
+    .. note::
+
+        If you do not use the version of OpenSearch provided by Wazuh, or if
+        you use Elastic, links probably will not work at all.
     """
     # TODO: include in doc everywhere that refers to create_obs_sightings and require_indicator_for_incidents
     require_indicator_detection: bool = False

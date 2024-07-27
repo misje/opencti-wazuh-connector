@@ -1,6 +1,7 @@
 #!/bin/python3
 import os
 import sys
+import pytest
 
 # import pytest
 from pydantic import AnyHttpUrl
@@ -8,7 +9,7 @@ from enum import Enum
 # from unittest import mock
 
 sys.path.insert(0, os.path.abspath("../../src"))
-from wazuh.config_base import ConfigBase, FuzzyEnum
+from wazuh.config_base import ConfigBase, FuzzyEnum, VersionEnum
 from wazuh.opensearch_dsl import (
     OrderBy,
     Match,
@@ -153,3 +154,17 @@ def test_fuzzyenum_set(monkeypatch):
     monkeypatch.setenv("WAZUH_ENUM", "foo, bar, BAR, qUX,b-az")
     conf = BarSettings.from_env()
     assert conf.enum == {BarEnum.Foo, BarEnum.Bar, BarEnum.Baz, BarEnum.Qux}
+
+
+class BazEnum(VersionEnum):
+    v12x = "1.2.x"
+    v2xx = "2.x.X"
+    v3x = "3.X.foo"
+
+
+def test_version_enum():
+    assert BazEnum.v12x == BazEnum("1.2.3")
+    assert BazEnum.v2xx == BazEnum("2.23.456")
+    assert BazEnum.v3x == BazEnum("3.bar.foo")
+    with pytest.raises(ValueError):
+        assert BazEnum.v3x != BazEnum("3.bar.baz")

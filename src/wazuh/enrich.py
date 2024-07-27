@@ -12,6 +12,7 @@ from pycti import (
     StixCoreRelationship,
     Vulnerability,
 )
+from wazuh.describer import Describer
 from .stix_helper import (
     STIXList,
     StixHelper,
@@ -56,7 +57,7 @@ log = logging.getLogger(__name__)
 EType = EnrichmentConfig.EntityType
 
 # TODO: Move a lot into stix_helper
-# TODO: set last_seen in related-to relationships
+# TODO: set stop_time in related-to relationships (tried this, no effect)
 
 # TODO: DO set/update descriptions (optionally?). As long as connector has
 # suitable confidence level, it will not overwrite existing descriptions.
@@ -121,6 +122,7 @@ class Enricher(BaseModel):
     )  # For OpenCTIConnectorHelper
     helper: OpenCTIConnectorHelper
     config: EnrichmentConfig
+    describer: Describer
     stix: StixHelper
     tools: list[stix2.Tool] = []
 
@@ -199,6 +201,7 @@ class Enricher(BaseModel):
                     id=StixCoreRelationship.generate_id(
                         "uses", incident.id, pattern.id
                     ),
+                    # TODO: description
                     created=alerts[0]["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="uses",
@@ -251,6 +254,7 @@ class Enricher(BaseModel):
             bundle += tools + [
                 stix2.Relationship(
                     id=StixCoreRelationship.generate_id("uses", incident.id, tool.id),
+                    # TODO: Description
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="uses",
@@ -496,7 +500,12 @@ class Enricher(BaseModel):
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
-                    description=f"StixFile {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
+                    description=self.describer.enrichment_relation_desc(
+                        entity_type="StixFile",
+                        name=match,
+                        field=meta["field"],
+                        alert=alert,
+                    ),
                     source_ref=incident.id,
                     target_ref=sco_bundle.sco.id,
                 ),
@@ -551,7 +560,12 @@ class Enricher(BaseModel):
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
-                    description=f"Windows-Registry-Key {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
+                    description=self.describer.enrichment_relation_desc(
+                        entity_type="Windows-Registry-Key",
+                        name=match,
+                        field=meta["field"],
+                        alert=alert,
+                    ),
                     source_ref=incident.id,
                     target_ref=sco_bundle.sco.id,
                 ),
@@ -793,7 +807,10 @@ class Enricher(BaseModel):
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
-                    description=f"Process found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
+                    description=self.describer.enrichment_relation_desc(
+                        entity_type="Process",
+                        alert=alert,
+                    ),
                     source_ref=incident.id,
                     target_ref=process.id,
                 ),
@@ -952,7 +969,10 @@ class Enricher(BaseModel):
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
-                    description=f"Network-Traffic found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
+                    description=self.describer.enrichment_relation_desc(
+                        entity_type="Network-Traffic",
+                        alert=alert,
+                    ),
                     source_ref=incident.id,
                     target_ref=sco.id,
                 ),
@@ -1035,7 +1055,7 @@ class Enricher(BaseModel):
             )
             bundle += [vuln]
 
-            # enrich_software() will create softeare SCOs (if enabled). Create
+            # enrich_software() will create software SCOs (if enabled). Create
             # a ref to a software object to be used in a "has"
             # relationship, and only include it if that softeware object has
             # previously been created (honour
@@ -1124,7 +1144,12 @@ class Enricher(BaseModel):
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
-                    description=f"{sco_type} {match} found in {meta['field']} in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
+                    description=self.describer.enrichment_relation_desc(
+                        entity_type=sco_type,
+                        name=match,
+                        field=meta["field"],
+                        alert=alert,
+                    ),
                     source_ref=incident.id,
                     target_ref=sco_bundle.sco.id,
                 ),
@@ -1181,7 +1206,10 @@ class Enricher(BaseModel):
                     created=alert["_source"]["@timestamp"],
                     **self.stix.common_properties,
                     relationship_type="related-to",
-                    description=f"{sco_type} found in alert (ID {alert['_id']}, rule ID {alert['_source']['rule']['id']}): {alert['_source']['rule']['description']}",
+                    description=self.describer.enrichment_relation_desc(
+                        entity_type=sco_type,
+                        alert=alert,
+                    ),
                     source_ref=incident.id,
                     target_ref=sco.id,
                 ),

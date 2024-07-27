@@ -63,6 +63,7 @@ def test_config_from_env(monkeypatch):
     monkeypatch.setenv("WAZUH_IGNORE_OWN_ENTITIES", "false")
     monkeypatch.setenv("WAZUH_LABEL_IGNORE_LIST", "hygiene,wazuh_ignore,foobar")
     monkeypatch.setenv("WAZUH_CREATE_INCIDENT_RESPONSE", "true")
+    monkeypatch.setenv("WAZUH_VERSION", "4.7.9")
 
     config = Config.model_validate({})
     expected = {
@@ -221,6 +222,7 @@ def test_config_from_env(monkeypatch):
             "marking-definition--826578e1-40ad-459f-bc73-ede076f81f37",
         },
         "vulnerability_incident_active_only": True,
+        "wazuh_version": Config.WazuhVersion.v47,
     }
 
     assert config.model_dump(exclude_none=True) == expected

@@ -33,6 +33,28 @@ class FuzzyEnum(Enum):
         )
 
 
+class VersionEnum(Enum):
+    """
+    An enumeration type that allows "x" as a placeholder i version numbers
+
+    The strings "1.2.3" and "1.2.30" will be accepted if the enum value is
+    "1.2.x" or "1.2.X".
+    """
+
+    @classmethod
+    def _missing_(cls, value: str):
+        t = value.lower()
+        return next(
+            (
+                member
+                for member in cls
+                for s in (member.value.lower(),)
+                if all(s == t or s == "x" for s, t in zip(s.split("."), t.split(".")))
+            ),
+            None,
+        )
+
+
 class EnvSource(EnvSettingsSource):
     """
     Source class with convenience methods for parsing certain complex types
