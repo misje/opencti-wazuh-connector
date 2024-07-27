@@ -100,12 +100,13 @@ class ProcessMeta(BaseModel):
 def infer_protos_from_alert(alert: dict) -> set[str]:
     protos = set()
 
-    if "sshd" in field_or_empty(alert, "rule.groups", list):
+    rule_groups = field_or_empty(alert, "rule.groups", str)
+    if "sshd" in rule_groups:
         protos.add("ssh")
-    if "smbd" in field_or_empty(alert, "rule.groups", []):
+    if "smbd" in rule_groups:
         protos.add("smb")
     if any(
-        keyword in field_or_empty(alert, "rule.groups", str)
+        keyword in rule_groups
         for keyword in ("ftpd", "msftp", "proftpd", "vsftpd", "pure-ftpd")
     ):
         protos.add("ftp")
