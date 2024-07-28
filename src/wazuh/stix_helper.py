@@ -169,13 +169,21 @@ def entity_value(entity: dict) -> str | None:
     Return an observable's (or vulnerability's) value
     """
     match entity["entity_type"]:
-        # TODO: hashes?
         case "StixFile" | "Artifact":
             name = oneof_nonempty("name", "x_opencti_additional_names", within=entity)
             if isinstance(name, list) and len(name):
                 return name[0]
+            elif name is not None:
+                return str(name)
             else:
-                return str(name) if name is not None else None
+                return next(
+                    (
+                        h["hash"]
+                        for h in entity.get("hashes", [])
+                        if h["algorithm"] in ["SHA-256", "SHA-1", "MD5"]
+                    ),
+                    "",
+                )
         case "Directory":
             return oneof("path", within=entity)
         case "Process":
