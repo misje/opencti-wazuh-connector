@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 from wazuh.stix_helper import STIXList
 
 from .config import Config
-from .config_base import ConfigBase, FuzzyEnum
+from .config_base import ConfigBase
 from .stix_helper import entity_value
 from .utils import escape_markdown, field_or_empty, md_table
 
