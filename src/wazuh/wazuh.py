@@ -32,6 +32,7 @@ from .utils import (
     lists_or_empty,
     md_table,
     nonempty_field_or_default,
+    obj_to_md_table,
     rule_level_to_severity,
     priority_from_severity,
     max_severity,
@@ -677,8 +678,7 @@ class WazuhConnector:
                 )
                 + "\n\n"
                 "## Alert\n"
-                "\n\n"
-                f"```json\n{alert_json}\n```"
+                "\n\n" + obj_to_md_table(s)
             ),
             object_refs=[entity["standard_id"]] + refs,
             external_references=[self.create_alert_ext_ref(alert=alert)],

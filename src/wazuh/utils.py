@@ -15,6 +15,8 @@ Number = TypeVar("Number", int, float)
 SimpleTypeType = TypeVar("SimpleTypeType", type(int), type(str), type(dict), type(list))
 # TODO: use typevars to assert correct dict/mapping in and out of functions
 Obj = TypeVar("Obj", bound=Mapping)
+SimpleType = str | int | float | bool | None
+SimpleObj = dict[str, SimpleType]
 
 REGISTRY_PATH_REGEX = r"^(?:HKEY_(?:LOCAL_MACHINE|CURRENT_USER|CLASSES_ROOT|USERS|CURRENT_CONFIG)|HK(?:LM|CU|CR|U|CC))"
 SID_REGEX = r"S-1-[0-59]-[0-9]{2}-[0-9]{8,10}-[0-9]{8,10}-[0-9]{8,10}-[1-9][0-9]{3,9}"
@@ -1531,8 +1533,6 @@ def raises(func: Callable[[], Any]) -> bool:
 
 
 # TODO: Require length of header tuple to match that of rows (waiting for Python 3.12):
-# TODO: not used yes, because the result is almost less readable than the
-# original:
 def md_table(
     rows: Sequence[tuple[str, ...]], *, header: tuple[str, ...] | None = None
 ) -> str:
@@ -1563,9 +1563,65 @@ def md_table(
         # |val1|val2|
         # |val3|val4| etc.:
         + "\n".join(
+            # OpenCTI's Markdown renderer does not support any kind of newline
+            # inside tables:
             (
-                f"|{'|'.join((escape_markdown(col) for col in row))}|"
+                f"|{'|'.join((escape_markdown(re.sub("[\r\n]+", "", col)) for col in row))}|"
                 for row in (rows if header else rows[1:])
             )
         )
+    )
+
+
+def unnest_obj(obj: Mapping[str, Any]) -> SimpleObj:
+    """
+    Unnest a dict recursively into a flat dict
+
+    The resulting keys are paths like 'foo.bar.baz', 'foo[0].bar' etc., and the
+    keys are either str, int, float, bool or None.
+
+    If a list only contains simple types, it will not be unnested. Instead the
+    resulting value will be ", "-joined string.
+    """
+
+    def unnest_list_(items: list[Any], parent_key: str) -> list[tuple[str, SimpleType]]:
+        if all(isinstance(item, SimpleType) for item in items):
+            return [(parent_key, ", ".join((str(item) for item in items)))]
+
+        kvs: list[tuple[str, SimpleType]] = []
+        for i, item in enumerate(items):
+            new_key = f"{parent_key}[{i}]"
+            if isinstance(item, list):
+                kvs.extend(unnest_list_(item, new_key))
+            elif isinstance(item, dict):
+                kvs.extend(unnest_obj_(item, new_key).items())
+            else:
+                kvs.append((new_key, item))
+
+        return kvs
+
+    def unnest_obj_(obj: Mapping[str, Any], parent_key: str = "") -> SimpleObj:
+        kvs: list[tuple[str, SimpleType]] = []
+        for k, v in obj.items():
+            new_key = f"{parent_key}.{k}" if parent_key else k
+            if isinstance(v, dict):
+                kvs.extend(unnest_obj_(v, new_key).items())
+            elif isinstance(v, list):
+                kvs.extend(unnest_list_(v, new_key))
+            elif not isinstance(v, SimpleType):
+                raise ValueError(
+                    f"The member {new_key} is a {type(v).__name__} and not a simple type"
+                )
+            else:
+                kvs.append((new_key, v))
+
+        return dict(kvs)
+
+    return unnest_obj_(obj)
+
+
+def obj_to_md_table(obj: Mapping[str, Any]) -> str:
+    return md_table(
+        [(k, "" if v is None else str(v)) for k, v in unnest_obj(obj).items()],
+        header=("Key", "Value"),
     )
