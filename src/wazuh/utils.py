@@ -1532,6 +1532,10 @@ def raises(func: Callable[[], Any]) -> bool:
         return True
 
 
+def remove_newlines(string: str) -> str:
+    return re.sub("[\r\n]+", "", string)
+
+
 # TODO: Require length of header tuple to match that of rows (waiting for Python 3.12):
 def md_table(
     rows: Sequence[tuple[str, ...]], *, header: tuple[str, ...] | None = None
@@ -1566,7 +1570,7 @@ def md_table(
             # OpenCTI's Markdown renderer does not support any kind of newline
             # inside tables:
             (
-                f"|{'|'.join((escape_markdown(re.sub("[\r\n]+", "", col)) for col in row))}|"
+                f"|{'|'.join((escape_markdown(remove_newlines(col)) for col in row))}|"
                 for row in (rows if header else rows[1:])
             )
         )

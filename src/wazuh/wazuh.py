@@ -33,6 +33,7 @@ from .utils import (
     md_table,
     nonempty_field_or_default,
     obj_to_md_table,
+    remove_newlines,
     rule_level_to_severity,
     priority_from_severity,
     max_severity,
@@ -672,9 +673,7 @@ class WazuhConnector:
                     ).items()
                     # Remove all newline characters and limit the string to a
                     # sensible length:
-                    for match_formatted in (
-                        truncate_string(re.sub("[\r\n]+", "", match)),
-                    )
+                    for match_formatted in (truncate_string(remove_newlines(match)),)
                 )
                 + "\n\n"
                 "## Alert\n"
