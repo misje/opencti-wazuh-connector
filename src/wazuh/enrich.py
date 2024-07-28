@@ -101,7 +101,7 @@ class ProcessMeta(BaseModel):
 def infer_protos_from_alert(alert: dict) -> set[str]:
     protos = set()
 
-    rule_groups = field_or_empty(alert, "rule.groups", str)
+    rule_groups = field_or_empty(alert, "rule.groups", list)
     if "sshd" in rule_groups:
         protos.add("ssh")
     if "smbd" in rule_groups:
