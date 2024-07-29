@@ -28,7 +28,7 @@ class SafeProxy:
     otherwise just returns None
 
     This utility is useful when manipulating objects that may be None without
-    having to catch exceptions or implemention guards.
+    having to catch exceptions or implementation guards.
 
     Examples:
 
@@ -159,6 +159,7 @@ def oneof_nonempty(*keys: str, within: dict, default=None) -> Any:
     )
 
 
+# TODO: use truthy like oneof_nonempty:
 def allof_nonempty(*keys: str, within: dict) -> list[Any]:
     """
     Return all non-empty values of keys found in dict.
@@ -670,8 +671,8 @@ def lists_or_empty(obj: Mapping, *keys: str):
     """
     Return a concatenated list of all lists at the given keys
 
-    If any of the keys do not exist, nothing happends. However, if the key
-    exist, it must be a list.
+    If any of the keys do not exist, nothing happens. However, if the key
+    exists, it must be a list.
 
     Examples:
 
@@ -883,7 +884,7 @@ def ip_proto(addr: str) -> Literal["ipv4", "ipv6"] | None:
 
 def ip_protos(*addrs: str) -> list[str]:
     """
-    Return a list of the literals, 'ipv4' or 'ipv6', for any valid IP addres
+    Return a list of the literals 'ipv4' or 'ipv6' for any valid IP address
 
     Examples:
 
@@ -933,7 +934,7 @@ def validate_mac(mac: str) -> bool:
     >>> validate_mac('0102.0304.abCD') # Cisco-style
     True
     """
-    # Allow hyphons, colons or no separators, but require the separators to be
+    # Allow hyphoes, colons or no separators, but require the separators to be
     # consistent. Or match a Cisco-style format:
     return bool(
         re.match(
@@ -945,9 +946,9 @@ def validate_mac(mac: str) -> bool:
 
 def normalise_mac(mac: str) -> str:
     """
-    Return a MAC with colons and loer-case characters
+    Return a MAC with colons and lower-case characters
 
-    The string must be a valid mac, otherwise an exception is possibly thrown.
+    The string must be a valid MAC, otherwise an exception is possibly thrown.
 
     Examples:
 
@@ -970,7 +971,6 @@ def mac_permutations(mac: str) -> list[str]:
     """
     Return MAC in different cases and styles (with or without colon, and
     Cisco-style)
-
 
     Examples:
 
