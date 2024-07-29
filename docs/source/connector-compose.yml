@@ -50,7 +50,7 @@ services:
       - "WAZUH_OPENSEARCH_TIMEOUT=20 seconds"
       - WAZUH_OPENSEARCH_INCLUDE_MATCH=
       - WAZUH_OPENSEARCH_INDEX=wazuh-alerts-*
-      - WAZUH_OPENSEARCH_LIMIT=50
+      - WAZUH_OPENSEARCH_LIMIT=200
       - WAZUH_OPENSEARCH_ORDER_BY=timestamp:desc
       - "WAZUH_OPENSEARCH_PASSWORD=SecretPassword" # Remember double-$ if password contains $:
       - "WAZUH_OPENSEARCH_SEARCH_AFTER=7 months ago" # No limit can cause search errors, especially with regexp queries (possibly mitigated by increasing indices.query.bool.max_clause_count)

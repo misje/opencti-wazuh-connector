@@ -84,7 +84,7 @@ opensearch:
   filter: []
   include_match: []
   index: wazuh-alerts-*
-  limit: 50
+  limit: 200
   order_by:
     - field: timestamp
       order: desc

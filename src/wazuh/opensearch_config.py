@@ -75,7 +75,7 @@ class OpenSearchConfig(ConfigBase):
     produced by the `wazuh-opencti <https://github.com/misje/wazuh-opencti>`_
     Wazuh integration.
     """
-    limit: int = Field(gt=0, default=50)
+    limit: int = Field(gt=0, default=200)
     """
     Maximum number of results to return from the OpenSearch alert query (after
     ordering by timestamp (or your custom order, if :attr:`order_by` is
