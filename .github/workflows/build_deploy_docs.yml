@@ -13,24 +13,54 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-docs:
+  configure:
     runs-on: ubuntu-22.04
+    outputs:
+      connector_release: ${{ steps.get_release.outputs.release }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # TODO: Whenever issues with "git describe" is resolved in
+          # actions/checkout, stop using fetch-depth:
+          #fetch-tags: true
+          fetch-depth: 0
+
+      - id: get_release
+        name: Get connector (latest/previous) release
+        run: |
+          echo release="$(git describe --tags --abbrev=0)" >> $GITHUB_OUTPUT
+
+  build-docs:
+    runs-on: ubuntu-22.04
+    needs: configure
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10.12"
           cache: pip
+
       - name: Install connector dependencies
-        run: pip install -r src/requirements.txt
+        run: |
+          # Use latest OpenCTI/pycti version (just any really – we just need
+          # sphinx to be able to parse/import the source files):
+          pip install -r <(sed -r "s/__PYCTI_VERSION__/$(jq -r '.opencti_version|sort|last' build_metadata.json)/" src/requirements.txt)
+
       - name: Install doc. dependencies
         run: pip install -r docs/requirements.txt
+
       - name: Build sphinx HTML
+        env:
+          CONNECTOR_RELEASE: ${{ needs.configure.outputs.connector_release }}
         run: sphinx-build -W -b html docs/source docs/build
+
       - uses: actions/configure-pages@v5
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: docs/build
+
   deploy:
     needs: [build-docs]
     runs-on: ubuntu-22.04
@@ -43,6 +73,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses:
+          actions/deploy-pages@v4
 
           # https://github.com/manics/action-sphinx-linkcheck

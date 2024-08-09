@@ -13,7 +13,7 @@ for docker-compose.
 Using the following as an example, add a *connector-wazuh* service to your
 OpenCTI docker-compose file:
 
-.. literalinclude:: connector-compose-simple.yml
+.. subst_literalinclude:: connector-compose-simple.yml
    :language: yaml
    :linenos:
 
@@ -40,18 +40,25 @@ The following tags are published to the docker registry:
 
    * - Tag
      - Description
-   * - x.y.z
+   * - x.y.z_æ
      - A connector (stable) release
-   * - dev
+   * - x.y_æ
+     - A connector (stable) release, auto-fetching the latest patch version
+   * - dev_æ
      - Latest development version (branch *dev*) of the connector
    * - latest
-     - The lastest release (à la tag |version|) of the connector
+     - (**There is no "latest" tag**)
 
-Use a version like "|version|" to reference a stable version of the connector,
-or *latest* if you want the latest stable version. There are no tags that
-reference the OpenCTI version, like connectors published by OpenCTI. See
-:ref:`versions and compatibility <versions>` for a connector–OpenCTI version
-compatibility list.
+Each tag has an OpenCTI version suffix, _æ, like "|latest_octi_ver|", requiring
+you to specify which OpenCTI version you are running. The connector is built
+against the versions listed in :ref:`this table <version_compat>`.
+
+Use a version like "|latest|" to reference a stable version of the connector.
+Note that this project does not use the common "latest" tag. You simply have to
+specify both the desired connector version and your OpenCTI version.
+
+See :ref:`versions and compatibilty <versions>` for how this project versions
+its releases.
 
 Creating users
 ~~~~~~~~~~~~~~

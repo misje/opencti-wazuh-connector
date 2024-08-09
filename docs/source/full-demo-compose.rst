@@ -10,7 +10,7 @@ the demo.
 
 TODO: example data + @timestamp script. See :github:`#10 <issues/10>`.
 
-.. literalinclude:: full-demo-compose.yml
+.. subst_literalinclude:: full-demo-compose.yml
    :language: yaml
    :linenos:
 

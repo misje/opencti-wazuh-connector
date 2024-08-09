@@ -20,46 +20,39 @@ in either the Wazuh or OpenCTI communities (search for their names).
 Versions and compatibility
 --------------------------
 
-The table below lists for what version of OpenCTI a connector version is
-built/tested against in a release, and when a known incompatibility is
-reported. Little effort is made testing older versions of the connector against
-newer version of OpenCTI or vice versa.
+opencti-wazuh-connector uses sematic versioning. In short, this means that
+effort is made to ensure that no breaking changes are introduced between small
+upgrades of the connector. New features and settings may be introduced, but
+these will be backwards-compatible and keep the old behaviour. In major
+releases, you ought to study the :ref:`changelog <changelog>` for important
+changes that may break or change the behaviour of the connector.
 
-.. list-table:: OpenCTI compatibility overview
-   :header-rows: 1
+.. note::
 
-   * - Connector v.
-     - OpenCTI v. from
-     - OpenCTI v. to
-   * - 0.1.0
-     - 6.0.10
-     - ?
-   * - 0.2.0
-     - 6.1.1
-     - ?
-   * - 0.2.1
-     - 6.1.4
-     - ?
-   * - 0.3.0
-     - 6.1.10
-     - ?
-   * - 0.3.1
-     - 6.1.12
-     - ?
+   As long as the connector's major version is 0, it is still considered
+   experimental, and changes to the **minor version number** indicates bigger,
+   breaking upgrades.
+
+Unfortunately, the OpenCTI API and SDK (pycti) does not follow semantic
+versioning for compatibilty. Therefore, the connector *may* **break** unless it
+is built against the **exact** same version as OpenCTI. Every docker image
+published by this project is built against a few hand-picked OpenCTI versions.
+There is nothing very special about these versions, but they have all received
+at least some testing.
+
+.. _version_compat:
+.. include:: current_opencti_versions.rst
 
 See :ref:`versioning <versioning>` for an overview of how version numbers and
 docker tags are used.
 
-The connector may work just fine on an older or newer OpenCTI instance. You may
-try to replace the pycti version in *src/requirements.txt* and build the image
-yourself, while waiting for a new release or if you want to keep a connector
-release version, but use an old pycti version.
-
-However, since the OpenCTI API and SDK does not follow semantic versioning for
-compatibilty, the connector may break at any time when even just the patch
-version does not match. This is why the compatibilty table above does not
-explicitly set a final supported OpenCTI version number unless an
-incompatibility is known.
+Although the table above is named "compatibility overview", this does not at
+all mean that the connector only works against these versions. The connector
+*may* work just fine against an older or newer OpenCTI instance, but you should
+build the connector against the correct version. Do this by replaing the pycti
+version in *src/requirements.txt* and build the image yourself. If you want to
+have docker images published for a particular OpenCTI version, please
+:ref:`file an issue <issue>`.
 
 .. _issue:
 

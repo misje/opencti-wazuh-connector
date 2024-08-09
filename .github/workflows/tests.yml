@@ -22,11 +22,14 @@ jobs:
           python-version: "3.10.12"
           cache: pip
       - name: Install connector dependencies
-        run: pip install -r src/requirements.txt
+        run: |
+          # Use latest OpenCTI/pycti version (just any really – we just need
+          # sphinx to be able to parse/import the source files):
+          pip install -r <(sed -r "s/__PYCTI_VERSION__/$(jq -r '.opencti_version|sort|last' build_metadata.json)/" src/requirements.txt)
       - name: Install test dependencies
         run: pip install -r tests/requirements.txt
       - name: Run unit tests and doctests
         env:
           PYTHONPATH: src
         # TODO: Coverage reports:
-        run: pytest --doctest-glob '*.py' --doctest-glob '*.rst' --doctest-modules
+        run: pytest --doctest-glob '*.py' --doctest-glob '*.rst' --doctest-modules --ignore-glob docs/source/conf.py --ignore-glob docs/source/extensions/*.py

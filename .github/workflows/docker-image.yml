@@ -17,13 +17,40 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push-image:
+  configure:
     runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set_matrix.outputs.matrix }}
+      connector_version_any: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # TODO: Whenever issues with "git describe" is resolved in
+          # actions/checkout, stop using fetch-depth:
+          #fetch-tags: true
+          fetch-depth: 0
+
+      - id: set_matrix
+        name: Set matrix data (OpenCTI versions to build for)
+        run: |
+          echo matrix="$(jq -c '{opencti_version}' build_metadata.json)" >> $GITHUB_OUTPUT
+
+      - id: get_version
+        name: Get connector version from git describe (including hash)
+        run: |
+          echo version="$(git describe --always --dirty)" >> $GITHUB_OUTPUT
+
+  build_and_push_image:
+    runs-on: ubuntu-22.04
+    needs: configure
     permissions:
       id-token: write
       contents: read
       packages: write
       attestations: write
+    strategy:
+      matrix: ${{ fromJson(needs.configure.outputs.matrix) }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -41,11 +68,18 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            suffix=_${{ matrix.opencti_version }}
+            latest=false
           tags: |
             type=ref,event=branch
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+          annotations: |
+            opencti_version=${{ matrix.opencti_version }}
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest,index
 
       - name: Build and push images
         id: push
@@ -55,8 +89,12 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            PYCTI_VERSION=${{ matrix.opencti_version }}
+            CONNECTOR_VERSION=${{ needs.configure.outputs.connector_version_any }}
 
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1

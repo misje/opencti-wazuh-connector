@@ -172,7 +172,7 @@ class WazuhConnector:
                 self.metric.inc("client_error_count")
 
     def __init__(self, config: Config):
-        self.CONNECTOR_VERSION: Final[str] = "0.3.0"
+        self.CONNECTOR_VERSION: Final[str] = "__CONNECTOR_VERSION__"
 
         self.conf = config
         self.helper = OpenCTIConnectorHelper(
@@ -301,6 +301,7 @@ class WazuhConnector:
         # Remove:
         log.debug(f"Indicators: {obs_indicators}")
 
+        # FIXME: if observable has label, but indicator not, this doesn't work. Look up labels before replacing obs. Look up lables in indicator too. Move logic into function and run on both obs and ind.
         if self.conf.label_ignore_list:
             matching_labels = [
                 label

@@ -14,7 +14,7 @@ replace:
 
 .. note:: See :ref:`configuration <config>` for details.
 
-.. literalinclude:: opencti-compose.yml
+.. subst_literalinclude:: opencti-compose.yml
    :language: yaml
    :linenos:
 

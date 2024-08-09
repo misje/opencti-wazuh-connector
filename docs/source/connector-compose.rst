@@ -15,7 +15,7 @@ more complete example.
 
 .. include:: alpha_warning.rst
 
-.. literalinclude:: connector-compose-simple.yml
+.. subst_literalinclude:: connector-compose-simple.yml
    :language: yaml
    :linenos:
 
@@ -24,7 +24,7 @@ more complete example.
 The following expands on the example above, with most or all available settings
 with their default values:
 
-.. literalinclude:: connector-compose.yml
+.. subst_literalinclude:: connector-compose.yml
    :language: yaml
    :linenos:
 
