@@ -589,9 +589,15 @@ class Enricher(BaseModel):
                 "data.dest_ip",
                 "data.dstip",
                 "data.gcp.protoPayload.requestMetadata.callerIp",
+                "data.ip",
+                "data.ipaddr",
+                "data.locip",
                 "data.office365.ClientIP",
+                "data.remip",
                 "data.src_ip",
                 "data.srcip",
+                "data.transip",
+                "data.tunnelip",
                 "data.win.eventdata.destinationIp",
                 "data.win.eventdata.sourceIp",
             ],
@@ -847,15 +853,17 @@ class Enricher(BaseModel):
     def enrich_traffic(self, *, incident: stix2.Incident, alerts: list[dict]):
         # TODO: Add mac addrs. and domainnames too if relevant in any fields
         from_addr_fields = [
+            "data.locip",
             "data.srcip",
             "data.src_ip",
             "data.win.eventdata.sourceIp",
         ]
         to_addr_fields = [
-            "data.dstip",
-            "data.dest_ip",
-            "data.win.eventdata.destinationIp",
             "agent.ip",
+            "data.dest_ip",
+            "data.dstip",
+            "data.remip",
+            "data.win.eventdata.destinationIp",
         ]
         addrs = {
             addr: sco
@@ -888,6 +896,7 @@ class Enricher(BaseModel):
                         search_fields(
                             alert["_source"],
                             [
+                                "data.locport",
                                 "data.src_port",
                                 "data.srcport",
                                 "data.win.eventdata.sourcePort",
@@ -904,6 +913,7 @@ class Enricher(BaseModel):
                             [
                                 "data.dest_port",
                                 "data.dstport",
+                                "data.remport",
                                 "data.win.eventdata.destinationPort",
                             ],
                         ).values()

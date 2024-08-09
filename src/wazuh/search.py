@@ -385,6 +385,7 @@ class AlertSearcher(BaseModel):
             "*.dstip",
             "*.ip",
             "*.ipAddress",
+            "*.ipaddr",
             "*.ipv*.address",
             "*.local_address",
             "*.nat_destination_ip",
@@ -397,8 +398,12 @@ class AlertSearcher(BaseModel):
             "*.source_ip_address",
             "*.src_ip",
             "*.srcip",
-            "data.win.eventdata.queryName",
+            "data.locip",
             "data.osquery.columns.address",
+            "data.remip",
+            "data.transip",
+            "data.tunnelip",
+            "data.win.eventdata.queryName",
         ]
         address = entity["observable_value"]
         # This throws if the value is not an IP address. Accept this:
