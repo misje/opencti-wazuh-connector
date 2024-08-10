@@ -20,7 +20,6 @@ LABEL org.opencontainers.image.source="https://github.com/misje/opencti-wazuh-co
 
 RUN apk --no-cache add libmagic
 COPY --from=build /app/wheels /wheels
-COPY --from=build /app/requirements.txt .
 RUN pip3 install --no-cache-dir /wheels/*
 COPY src .
 RUN sed -ri "s/__CONNECTOR_VERSION__/${CONNECTOR_VERSION}/" wazuh/wazuh.py
