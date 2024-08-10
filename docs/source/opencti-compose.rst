@@ -18,6 +18,13 @@ replace:
    :language: yaml
    :linenos:
 
+.. note::
+
+   If you intend to replace the OpenCTI version in any of the services, ensure
+   that the dependencies (redis, elasticsearch, minio, rabbitmq) are also
+   updated. Look for historical versions of :octigh:`OpenCTI's
+   docker-compose.yml file <docker/blob/master/docker-compose.yml>`.
+
 .. _opencti-env:
 
 In addition to the docker-compose.yml file above, you need an .env file for
