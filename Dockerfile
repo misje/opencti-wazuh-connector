@@ -1,10 +1,10 @@
 FROM python:3.12-alpine AS build
-ARG PYCTI_VERSION="6.2.7" # NOTE: If building locally, replace/update this!
+ARG PYCTI_VERSION=
 WORKDIR /app
 
 RUN apk --no-cache add build-base
 COPY src/requirements.txt .
-RUN sed -ri "s/__PYCTI_VERSION__/${PYCTI_VERSION}/" requirements.txt && \
+RUN if [ -n "${PYCTI_VERSION}" ]; then sed -ri "s/(pycti==).+/\1${PYCTI_VERSION}/" requirements.txt; fi && \
    pip3 wheel --no-cache-dir --no-deps --wheel-dir /app/wheels -r requirements.txt
 
 
