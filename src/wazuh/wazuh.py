@@ -260,7 +260,6 @@ class WazuhConnector:
             # in a search (#9).
             # TODO: alternatively, add OpenSearch DSL as a custom pattern_type_ov and use something like mitre/stix2patterns_translator to convert int o elastic_query
             if not ind_obs:
-                # FIXME: Not an error: just print as message. Throw a custom exception for messages?
                 return "Indicator is not based on any observables"
             elif (count := len(ind_obs)) > 1:
                 log.warning(
