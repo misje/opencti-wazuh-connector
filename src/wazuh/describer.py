@@ -141,7 +141,10 @@ class Describer(BaseModel):
         return md_table(
             [
                 ("Entity type", entity["entity_type"]),
-                ("Entity value", entity_value(entity)),
+                (
+                    "Entity value",
+                    val if (val := entity_value(entity)) is not None else "",
+                ),
                 ("Entity author", field_or_empty(entity, "createdBy.name", str)),
             ]
             + [
